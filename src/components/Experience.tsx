@@ -207,7 +207,7 @@ export default function Experience() {
       {/* Scroll container — height creates scroll distance, cards are fixed inside */}
       <div
         ref={scrollRef}
-        style={{ height: `${experiences.length * 100}vh` }}
+        style={{ height: `${experiences.length * 140}vh` }}
         className="relative"
       >
         <div className="sticky top-0 h-screen overflow-hidden">
@@ -223,9 +223,13 @@ export default function Experience() {
                     const isNext = i === activeIndex + 1; // the card currently rising up
                     const depth = activeIndex - i;
 
-                    // Next card rises from bottom based on scroll progress
-                    const riseAmount = isNext ? (1 - cardProgress) * 110 : 0; // 110% -> 0%
-                    const riseOpacity = isNext ? cardProgress : 0;
+                    // Hold current card for 55% of its scroll, then transition in the next 45%
+                    const HOLD = 0.55;
+                    const transitionProgress = cardProgress < HOLD ? 0 : (cardProgress - HOLD) / (1 - HOLD);
+
+                    // Next card rises from bottom during transition phase only
+                    const riseAmount = isNext ? (1 - transitionProgress) * 110 : 0; // 110% -> 0%
+                    const riseOpacity = isNext ? transitionProgress : 0;
 
                     return (
                       <div
@@ -243,7 +247,7 @@ export default function Experience() {
                             ? 0
                             : isTop
                             ? 1
-                            : Math.max(0.4, 1 - depth * 0.15),
+                            : 0,
                           transform: isNext
                             ? `translateY(${riseAmount}%) scale(0.96)`
                             : !isLanded
@@ -252,6 +256,7 @@ export default function Experience() {
                             ? "translateY(0) scale(1)"
                             : `translateY(${-depth * 6}px) scale(${1 - depth * 0.02})`,
                           pointerEvents: isTop ? "auto" : "none",
+                          visibility: isTop || isNext ? "visible" : "hidden",
                         }}
                       >
                         <FloatCard className="w-full">

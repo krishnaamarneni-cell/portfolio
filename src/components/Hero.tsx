@@ -120,11 +120,39 @@ export default function Hero() {
 
       {/* Main content */}
       <div className="relative z-10 w-full max-w-[1400px] mx-auto px-6 lg:px-10">
-        {/* KRISHNA [AVATAR] AMARNENI — all in one row */}
-        <div className="flex items-center justify-center">
+        {/* MOBILE layout: stacked vertically */}
+        <div className="flex flex-col items-center justify-center md:hidden">
+          <h1
+            className="text-5xl sm:text-6xl font-black leading-[0.85] tracking-tighter text-white uppercase select-none opacity-0 animate-[slideInLeft_1s_0.4s_forwards]"
+          >
+            KRISHNA
+          </h1>
+
+          <div className="shrink-0 -my-2 opacity-0 animate-[fadeIn_0.3s_0.2s_forwards]">
+            <Avatar3D mouseX={mousePos.x} mouseY={mousePos.y} onLanded={handleLanded} className="w-[280px] h-[360px]" />
+          </div>
+
+          <h1
+            className="text-5xl sm:text-6xl font-black leading-[0.85] tracking-tighter text-gradient uppercase select-none opacity-0 animate-[slideInRight_1s_0.4s_forwards]"
+          >
+            AMARNENI
+          </h1>
+
+          <div className="mt-6 text-center opacity-0 animate-[fadeIn_1s_0.8s_forwards]">
+            <p className="text-[#777] text-xs italic tracking-wider mb-1">SAP Expert &amp; AI Builder · Full-Stack Dev</p>
+            <div className="text-base font-light h-7">
+              <span className="text-[#999]">{text}</span>
+              <span className="text-[#ff6b00] animate-pulse">|</span>
+            </div>
+            <p className="text-[#777] text-xs mt-2">New Jersey, USA · {currentTime} EST</p>
+          </div>
+        </div>
+
+        {/* DESKTOP layout: KRISHNA [AVATAR] AMARNENI — all in one row */}
+        <div className="hidden md:flex items-center justify-center">
           {/* KRISHNA */}
           <h1
-            className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl xl:text-[90px] font-black leading-[0.85] tracking-tighter text-white uppercase select-none opacity-0 animate-[slideInLeft_1s_0.4s_forwards]"
+            className="text-6xl lg:text-7xl xl:text-[90px] font-black leading-[0.85] tracking-tighter text-white uppercase select-none opacity-0 animate-[slideInLeft_1s_0.4s_forwards]"
             style={{
               transform: `translate(${mousePos.x * -5}px, ${mousePos.y * -3}px)`,
               transition: "transform 0.4s ease-out",
@@ -134,13 +162,13 @@ export default function Hero() {
           </h1>
 
           {/* Avatar */}
-          <div className="shrink-0 mx-[-10px] md:mx-0 opacity-0 animate-[fadeIn_0.3s_0.2s_forwards]">
+          <div className="shrink-0 mx-0 opacity-0 animate-[fadeIn_0.3s_0.2s_forwards]">
             <Avatar3D mouseX={mousePos.x} mouseY={mousePos.y} onLanded={handleLanded} />
           </div>
 
           {/* AMARNENI */}
           <h1
-            className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl xl:text-[90px] font-black leading-[0.85] tracking-tighter text-gradient uppercase select-none opacity-0 animate-[slideInRight_1s_0.4s_forwards]"
+            className="text-6xl lg:text-7xl xl:text-[90px] font-black leading-[0.85] tracking-tighter text-gradient uppercase select-none opacity-0 animate-[slideInRight_1s_0.4s_forwards]"
             style={{
               transform: `translate(${mousePos.x * 5}px, ${mousePos.y * 3}px)`,
               transition: "transform 0.4s ease-out",
@@ -150,18 +178,18 @@ export default function Hero() {
           </h1>
         </div>
 
-        {/* Labels row below */}
-        <div className="flex justify-between items-start mt-4 opacity-0 animate-[fadeIn_1s_0.8s_forwards]">
+        {/* Labels row below (desktop only) */}
+        <div className="hidden md:flex justify-between items-start mt-4 opacity-0 animate-[fadeIn_1s_0.8s_forwards]">
           <div>
-            <p className="text-[#777] text-xs md:text-sm italic tracking-wider mb-1">SAP Expert &amp; AI Builder</p>
-            <div className="text-base md:text-lg font-light h-7">
+            <p className="text-[#777] text-sm italic tracking-wider mb-1">SAP Expert &amp; AI Builder</p>
+            <div className="text-lg font-light h-7">
               <span className="text-[#999]">{text}</span>
               <span className="text-[#ff6b00] animate-pulse">|</span>
             </div>
           </div>
-          <div className="text-right hidden md:block">
-            <p className="text-[#777] text-xs md:text-sm italic tracking-wider mb-1">Full-Stack Developer</p>
-            <p className="text-[#777] text-xs md:text-sm">New Jersey, USA · {currentTime} EST</p>
+          <div className="text-right">
+            <p className="text-[#777] text-sm italic tracking-wider mb-1">Full-Stack Developer</p>
+            <p className="text-[#777] text-sm">New Jersey, USA · {currentTime} EST</p>
           </div>
         </div>
       </div>

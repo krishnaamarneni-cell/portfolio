@@ -107,7 +107,7 @@ export default function Skills() {
 
       <div className="max-w-7xl mx-auto relative">
         {/* Header + Photo layout */}
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-start mb-20">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-start mb-20">
           {/* Left — heading */}
           <div>
             <ScrollReveal direction="rotate3d">
@@ -148,7 +148,7 @@ export default function Skills() {
           </div>
 
           {/* Right — 3D Skills Avatar */}
-          <div className="hidden lg:flex justify-center items-start -mt-36">
+          <div className="flex justify-center items-start lg:-mt-36 min-w-0 w-full overflow-hidden">
             <ScrollReveal direction="flipY" delay={0.2}>
               <div
                 className="relative"
@@ -160,7 +160,7 @@ export default function Skills() {
                 <SkillsAvatar
                   mouseX={mousePos.x}
                   mouseY={mousePos.y}
-                  className="w-[520px] h-[780px]"
+                  className="w-[300px] h-[440px] sm:w-[360px] sm:h-[520px] lg:w-[520px] lg:h-[780px]"
                 />
               </div>
             </ScrollReveal>
