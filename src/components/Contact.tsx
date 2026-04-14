@@ -3,7 +3,7 @@
 import { useState } from "react";
 import ScrollReveal from "./ScrollReveal";
 import TiltCard from "./TiltCard";
-import { FiMail, FiPhone, FiMapPin, FiSend, FiLinkedin, FiGithub, FiArrowUpRight, FiChevronDown, FiBriefcase, FiUsers } from "react-icons/fi";
+import { FiMail, FiMapPin, FiSend, FiLinkedin, FiGithub, FiArrowUpRight, FiChevronDown, FiBriefcase, FiUsers } from "react-icons/fi";
 
 const faqs = [
   {
@@ -98,10 +98,9 @@ export default function Contact() {
           <div className="lg:col-span-2 space-y-5">
             {[
               { icon: FiMail, label: "Email", value: "krishna.amarneni@gmail.com", href: "mailto:krishna.amarneni@gmail.com" },
-              { icon: FiPhone, label: "Phone", value: "203-804-9291", href: "tel:+12038049291" },
               { icon: FiMapPin, label: "Location", value: "New Jersey, USA", href: undefined },
             ].map((item, i) => {
-              const dirs = ["flipY", "rotate3d", "flipX"] as const;
+              const dirs = ["flipY", "rotate3d"] as const;
               return (
                 <ScrollReveal key={item.label} delay={i * 0.1} direction={dirs[i]}>
                   <TiltCard className="rounded-[20px]" intensity={15}>

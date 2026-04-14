@@ -137,7 +137,7 @@ export default function About() {
                   {copied ? "Copied!" : "Copy email"}
                 </button>
                 <a
-                  href="/Krishna_Amarneni_Resume.pdf"
+                  href="/Krishna_Amarneni_Resume.docx"
                   download
                   className="flex items-center gap-2 px-6 py-3 rounded-full border border-white/[0.1] text-[#ccc] text-sm font-medium hover:border-[#ff6b00]/30 hover:text-white active:scale-[0.97] transition-all"
                 >
