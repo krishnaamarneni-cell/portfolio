@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef, useEffect, useState } from "react";
+import { Suspense, useRef, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useGLTF, useAnimations } from "@react-three/drei";
 import * as THREE from "three";
@@ -75,61 +75,7 @@ function AvatarModel({
   );
 }
 
-/* ============ DROP MODEL — animation driven in useFrame, no React state ============ */
-function DropModel({ mouseX, mouseY, onDone }: { mouseX: number; mouseY: number; onDone: () => void }) {
-  const group = useRef<THREE.Group>(null);
-  const { scene, animations } = useGLTF("/avatar-drop.glb");
-  const { actions, mixer } = useAnimations(animations, group);
-  const startTime = useRef(0);
-  const done = useRef(false);
-
-  useEffect(() => {
-    startTime.current = performance.now() + 200;
-    if (actions) {
-      const keys = Object.keys(actions);
-      if (keys.length > 0) {
-        const action = actions[keys[0]];
-        if (action) {
-          action.reset().play();
-          action.setLoop(THREE.LoopOnce, 1);
-          action.clampWhenFinished = true;
-        }
-      }
-    }
-  }, [scene, actions]);
-
-  useFrame((_, delta) => {
-    if (!group.current) return;
-    if (mixer) mixer.update(delta);
-
-    const now = performance.now();
-    const elapsed = now - startTime.current;
-    const dropDistance = 3.5;
-
-    if (elapsed < 0) {
-      group.current.position.y = -1.35 + dropDistance;
-      return;
-    }
-
-    const duration = 1600;
-    const progress = Math.min(elapsed / duration, 1);
-    const eased = 1 - Math.pow(1 - progress, 3);
-    group.current.position.y = -1.35 + dropDistance * (1 - eased);
-
-    if (progress >= 1 && !done.current) {
-      done.current = true;
-      setTimeout(onDone, 300);
-    }
-  });
-
-  return (
-    <group ref={group} position={[0, -1.35 + 3.5, 0]} scale={1}>
-      <primitive object={scene} />
-    </group>
-  );
-}
-
-/* ============ HERO AVATAR (drop → standing transition) ============ */
+/* ============ HERO AVATAR (standing only) ============ */
 export function HeroAvatar({
   mouseX,
   mouseY,
@@ -141,12 +87,9 @@ export function HeroAvatar({
   className?: string;
   onLanded?: () => void;
 }) {
-  const [phase, setPhase] = useState<"drop" | "standing">("drop");
-
-  const handleDropDone = () => {
-    setPhase("standing");
+  useEffect(() => {
     onLanded?.();
-  };
+  }, [onLanded]);
 
   return (
     <div className={className || "w-[240px] h-[480px] sm:w-[280px] sm:h-[530px] md:w-[320px] md:h-[580px] lg:w-[360px] lg:h-[640px]"}>
@@ -161,18 +104,13 @@ export function HeroAvatar({
         <directionalLight position={[-3, 3, 3]} intensity={0.5} color="#ff6b00" />
 
         <Suspense fallback={null}>
-          {phase === "drop" && (
-            <DropModel mouseX={mouseX} mouseY={mouseY} onDone={handleDropDone} />
-          )}
-          {phase === "standing" && (
-            <AvatarModel
-              url="/avatar-standing.glb"
-              mouseX={mouseX}
-              mouseY={mouseY}
-              scale={1}
-              positionY={-1.35}
-            />
-          )}
+          <AvatarModel
+            url="/avatar-standing.glb"
+            mouseX={mouseX}
+            mouseY={mouseY}
+            scale={1}
+            positionY={-1.35}
+          />
         </Suspense>
       </Canvas>
     </div>
@@ -221,6 +159,5 @@ export default function Avatar3D({ mouseX, mouseY, className }: { mouseX: number
 }
 
 // Preload models
-useGLTF.preload("/avatar-drop.glb");
 useGLTF.preload("/avatar-standing.glb");
 useGLTF.preload("/avatar-skills.glb");
