@@ -168,8 +168,8 @@ export default function LinktreePage() {
     <main className="min-h-screen text-white relative overflow-hidden bg-[#050505]">
       {/* === BACKGROUND === pure solid black, no glows or textures leaking */}
 
-      {/* === FULL-BLEED ORANGE HERO (no card, edge-to-edge like Guy Raz) === */}
-      <div className="relative z-10 w-full opacity-0 animate-[fadeUp_0.7s_0.1s_forwards]">
+      {/* === ORANGE HERO (constrained max-width — desktop friendly) === */}
+      <div className="relative z-10 w-full max-w-md mx-auto opacity-0 animate-[fadeUp_0.7s_0.1s_forwards]">
         <div className="relative w-full h-[500px] sm:h-[560px] bg-[#cc3a00] overflow-hidden">
           {/* Inner gradient lighting */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(255,200,150,0.4),transparent_60%)]" />

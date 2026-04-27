@@ -24,41 +24,41 @@ export default function NewsletterFeatured() {
         {/* Content */}
         <div className="relative z-10 h-full flex flex-col items-center justify-center px-16 text-center">
           {/* Badge at top */}
-          <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/[0.06] border border-white/[0.12] backdrop-blur-xl mb-8">
-            <FiZap size={14} className="text-[#ff6b00]" />
-            <span className="text-white text-sm font-mono uppercase tracking-[0.25em]">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.12] backdrop-blur-xl mb-6">
+            <FiZap size={12} className="text-[#ff6b00]" />
+            <span className="text-white text-xs font-mono uppercase tracking-[0.25em]">
               Weekly · Free · No Spam
             </span>
           </div>
 
           {/* Big headline */}
-          <h1 className="text-[88px] font-black leading-[0.92] tracking-tight text-white mb-6 max-w-4xl">
+          <h1 className="text-[58px] font-black leading-[0.95] tracking-tight text-white mb-5 max-w-4xl">
             Smart insights on{" "}
             <span className="bg-gradient-to-r from-[#ff6b00] via-[#ff8c38] to-[#ffaa66] bg-clip-text text-transparent">
-              AI, SAP & Wealth.
+              AI, SAP & Wealth
             </span>
             <br />
             Straight to your inbox.
           </h1>
 
           {/* Sub */}
-          <p className="text-[#bbb] text-2xl leading-relaxed mb-10 max-w-3xl">
+          <p className="text-[#bbb] text-lg leading-relaxed mb-7 max-w-2xl">
             Join <span className="text-white font-bold">5,000+ builders & professionals</span>
             {" "}getting weekly insights on AI agents, SAP systems, and the future of finance.
           </p>
 
           {/* Email-style CTA */}
-          <div className="flex items-center gap-3 p-2 pl-6 rounded-full bg-white/[0.05] border border-white/[0.12] backdrop-blur-xl shadow-2xl">
-            <FiMail size={20} className="text-[#888]" />
-            <span className="text-[#666] text-lg font-mono pr-12">your@email.com</span>
-            <button className="px-7 py-3 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-white font-bold text-lg flex items-center gap-2 shadow-[0_8px_30px_rgba(255,107,0,0.5)]">
+          <div className="flex items-center gap-3 p-1.5 pl-5 rounded-full bg-white/[0.05] border border-white/[0.12] backdrop-blur-xl shadow-2xl">
+            <FiMail size={18} className="text-[#888]" />
+            <span className="text-[#666] text-base font-mono pr-10">your@email.com</span>
+            <button className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-white font-bold text-base flex items-center gap-2 shadow-[0_8px_30px_rgba(255,107,0,0.5)]">
               Subscribe Free
-              <FiArrowRight size={18} />
+              <FiArrowRight size={16} />
             </button>
           </div>
 
           {/* Trust line */}
-          <p className="text-[#666] text-sm mt-8 font-mono uppercase tracking-[0.25em]">
+          <p className="text-[#666] text-xs mt-6 font-mono uppercase tracking-[0.25em]">
             ✦ KRISHNA AMARNENI · krishna.amarneni.com ✦
           </p>
         </div>
