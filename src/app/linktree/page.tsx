@@ -1,7 +1,7 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
 import {
   FiExternalLink,
   FiBookOpen,
@@ -23,11 +23,6 @@ import {
   FiActivity,
 } from "react-icons/fi";
 import { FaXTwitter } from "react-icons/fa6";
-
-const HeroAvatar = dynamic(
-  () => import("@/components/Avatar3D").then((m) => ({ default: m.HeroAvatar })),
-  { ssr: false }
-);
 
 type Link = {
   title: string;
@@ -170,61 +165,16 @@ export default function LinktreePage() {
   const sections = tab === "Links" ? linksTab : toolsTab;
 
   return (
-    <main className="min-h-screen bg-[#040404] text-white relative overflow-hidden">
-      {/* === BACKGROUND === */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-[#ff6b00]/[0.18] rounded-full blur-[160px] animate-[blob1_18s_ease-in-out_infinite]" />
-        <div className="absolute bottom-[-10%] right-0 w-[500px] h-[500px] bg-[#ff3d00]/[0.1] rounded-full blur-[140px] animate-[blob2_22s_ease-in-out_infinite]" />
-        <div className="absolute top-1/2 left-[-10%] w-[400px] h-[400px] bg-[#ffaa00]/[0.06] rounded-full blur-[120px] animate-[blob3_26s_ease-in-out_infinite]" />
-        <div
-          className="absolute inset-0 opacity-[0.03] mix-blend-overlay"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")`,
-          }}
-        />
-        <div
-          className="absolute inset-0 opacity-[0.025]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='80' height='92' viewBox='0 0 80 92' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M40 4 L72 22 L72 58 L40 76 L8 58 L8 22 Z' fill='none' stroke='%23ff6b00' stroke-width='0.6'/%3E%3C/svg%3E")`,
-            backgroundSize: "80px 70px",
-          }}
-        />
-      </div>
+    <main className="min-h-screen text-white relative overflow-hidden bg-[#050505]">
+      {/* === BACKGROUND === pure solid black, no glows or textures leaking */}
 
-      {/* === MAIN CARD WRAPPER === */}
-      <div className="relative z-10 max-w-md mx-auto px-4 sm:px-5 pt-4 pb-12">
-        {/* === TOP ACTION BAR (glassmorphism) === */}
-        <div className="flex items-center justify-between mb-3">
-          <button
-            className="w-10 h-10 rounded-full backdrop-blur-xl bg-white/[0.06] border border-white/[0.1] flex items-center justify-center hover:bg-white/[0.1] transition-all"
-            aria-label="Logo"
-          >
-            <span className="text-[#ff6b00] text-lg font-bold">✦</span>
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              className="w-10 h-10 rounded-full backdrop-blur-xl bg-white/[0.06] border border-white/[0.1] flex items-center justify-center hover:bg-white/[0.1] transition-all"
-              aria-label="Notifications"
-            >
-              <FiBell size={16} className="text-white" />
-            </button>
-            <button
-              onClick={sharePage}
-              className="w-10 h-10 rounded-full backdrop-blur-xl bg-white/[0.06] border border-white/[0.1] flex items-center justify-center hover:bg-white/[0.1] transition-all"
-              aria-label="Share"
-            >
-              <FiShare2 size={16} className="text-white" />
-            </button>
-          </div>
-        </div>
-
-        {/* === HERO CARD (orange bleed with 3D avatar) === */}
-        <div className="relative rounded-[32px] overflow-hidden h-[360px] sm:h-[400px] bg-gradient-to-b from-[#ff6b00] via-[#ff5500] to-[#cc3a00] shadow-[0_30px_80px_rgba(255,107,0,0.35)] opacity-0 animate-[fadeUp_0.7s_0.1s_forwards]">
+      {/* === FULL-BLEED ORANGE HERO (no card, edge-to-edge like Guy Raz) === */}
+      <div className="relative z-10 w-full opacity-0 animate-[fadeUp_0.7s_0.1s_forwards]">
+        <div className="relative w-full h-[500px] sm:h-[560px] bg-[#cc3a00] overflow-hidden">
           {/* Inner gradient lighting */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(255,200,150,0.4),transparent_60%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_120%,rgba(0,0,0,0.4),transparent_50%)]" />
-
-          {/* Grain on top of orange */}
+          {/* Grain texture */}
           <div
             className="absolute inset-0 opacity-[0.12] mix-blend-overlay"
             style={{
@@ -232,57 +182,114 @@ export default function LinktreePage() {
             }}
           />
 
-          {/* 3D Avatar */}
-          <div className="absolute inset-0 flex items-end justify-center">
-            <div className="w-full h-full" style={{ transform: `translate(${mouse.x * -4}px, ${mouse.y * -3}px)` }}>
-              <HeroAvatar mouseX={mouse.x} mouseY={mouse.y} className="w-full h-full" />
+          {/* Top action buttons FLOATING ON TOP of orange */}
+          <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between">
+            <button
+              className="w-10 h-10 rounded-full backdrop-blur-xl bg-white/20 border border-white/30 flex items-center justify-center hover:bg-white/30 transition-all"
+              aria-label="Logo"
+            >
+              <span className="text-white text-lg font-bold">✦</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="w-10 h-10 rounded-full backdrop-blur-xl bg-white/20 border border-white/30 flex items-center justify-center hover:bg-white/30 transition-all"
+                aria-label="Notifications"
+              >
+                <FiBell size={16} className="text-white" />
+              </button>
+              <button
+                onClick={sharePage}
+                className="w-10 h-10 rounded-full backdrop-blur-xl bg-white/20 border border-white/30 flex items-center justify-center hover:bg-white/30 transition-all"
+                aria-label="Share"
+              >
+                <FiShare2 size={16} className="text-white" />
+              </button>
             </div>
           </div>
 
-          {/* Bottom name plate (glassmorphism) */}
-          <div className="absolute bottom-4 left-4 right-4">
-            <div className="rounded-2xl backdrop-blur-2xl bg-black/30 border border-white/[0.12] p-4 shadow-2xl">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-xl font-bold text-white tracking-tight">
-                      Krishna Amarneni
-                    </h1>
-                    <div className="w-5 h-5 rounded-full bg-[#ff6b00] flex items-center justify-center shrink-0 shadow-md">
-                      <FiCheck size={11} className="text-white" strokeWidth={3} />
-                    </div>
-                  </div>
-                  <p className="text-white/70 text-[11px] font-mono uppercase tracking-[0.2em] mt-0.5">
-                    Builder · SAP · AI · Web
-                  </p>
-                </div>
-                <button
-                  onClick={copyEmail}
-                  className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 border border-white/20 flex items-center justify-center transition-all shrink-0"
-                  aria-label="Copy email"
-                >
-                  {copied ? (
-                    <FiCheck size={15} className="text-emerald-300" />
-                  ) : (
-                    <FiCopy size={14} className="text-white" />
-                  )}
-                </button>
-              </div>
-            </div>
+          {/*
+            ===== EASY-TO-EDIT IMAGE POSITION =====
+            Adjust these values to move/scale the photo:
+              IMG_SCALE     — zoom level (1.0 = normal, 1.4 = bigger crop)
+              IMG_OFFSET_Y  — vertical position in % (0 = top, 50 = center, 100 = bottom)
+              IMG_OFFSET_X  — horizontal position in % (50 = center)
+              IMG_FADE_HEIGHT — height of bottom fade overlay (e.g. "180px")
+          */}
+          <div className="absolute inset-0 overflow-hidden">
+            <Image
+              src="/Krishna.amarneni_ai-removebg-preview.png"
+              alt="Krishna Amarneni"
+              fill
+              priority
+              className="object-cover"
+              style={{
+                objectPosition: "50% 25%", // X% Y% — change these to reposition
+                transform: `scale(1.15) translate(${mouse.x * -4}px, ${mouse.y * -3}px)`,
+                transformOrigin: "center top",
+              }}
+            />
+          </div>
+
+          {/* Bottom fade — strong dark band, fully solid black before hero ends */}
+          <div
+            className="absolute inset-x-0 bottom-0 h-[300px] pointer-events-none z-[5]"
+            style={{
+              background:
+                "linear-gradient(to bottom, transparent 0%, rgba(5,5,5,0.1) 20%, rgba(5,5,5,0.5) 40%, rgba(5,5,5,0.9) 55%, #050505 70%)",
+            }}
+          />
+
+          {/* Name + Twitter-Premium-style verified at bottom */}
+          <div className="absolute bottom-[68px] left-0 right-0 flex items-center justify-center gap-2 pointer-events-none z-10">
+            <h1 className="text-2xl font-bold text-white tracking-tight drop-shadow-lg">
+              Krishna Amarneni
+            </h1>
+            {/* Twitter Premium gold verified badge (scalloped SVG) */}
+            <svg
+              viewBox="0 0 22 22"
+              className="w-6 h-6 shrink-0 drop-shadow"
+              aria-label="Verified"
+            >
+              <defs>
+                <linearGradient id="goldVerified" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#ffd95a" />
+                  <stop offset="50%" stopColor="#f7b733" />
+                  <stop offset="100%" stopColor="#d18a00" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"
+                fill="url(#goldVerified)"
+              />
+            </svg>
+          </div>
+
+          {/* Tagline directly under name */}
+          <div className="absolute bottom-[28px] left-0 right-0 px-6 text-center pointer-events-none z-10">
+            <p className="text-white/95 text-[13px] font-medium drop-shadow leading-snug">
+              Builder of AI agents, SAP systems & beautiful web experiences
+            </p>
           </div>
         </div>
+      </div>
 
-        {/* === BIO === */}
-        <div className="text-center mt-6 px-2 opacity-0 animate-[fadeUp_0.7s_0.3s_forwards]">
-          <p className="text-[#bbb] text-[14px] leading-relaxed">
-            I help businesses ship enterprise software, AI agents, and beautiful
-            web experiences. Currently building at{" "}
-            <span className="text-white font-medium">Coca-Cola</span>.
+      {/* === BELOW-HERO CONTENT (constrained max-width) === */}
+      <div className="relative z-10 max-w-md mx-auto px-5 -mt-2 pb-12">
+        {/* About me */}
+        <div className="text-center px-2 mb-6 opacity-0 animate-[fadeUp_0.7s_0.25s_forwards]">
+          <p className="text-[#cfc0b8] text-[13.5px] leading-relaxed">
+            Hey, I&apos;m Krishna 👋 — a Full-Stack Developer & SAP Business Analyst based in
+            New Jersey. I build AI agents at <span className="text-white font-semibold">WealthClaude</span>,
+            ship enterprise systems at <span className="text-white font-semibold">Coca-Cola</span>, and
+            craft modern web experiences in my free time.
+          </p>
+          <p className="text-[#ff8c38] text-[11px] font-mono uppercase tracking-[0.25em] mt-3">
+            ✦ Available for collaborations
           </p>
         </div>
 
-        {/* === SOCIAL ICON ROW === */}
-        <div className="flex items-center justify-center gap-3 mt-5 opacity-0 animate-[fadeUp_0.7s_0.4s_forwards]">
+        {/* === SOCIAL ICON ROW (directly below the card) === */}
+        <div className="flex items-center justify-center gap-3 mt-5 opacity-0 animate-[fadeUp_0.7s_0.3s_forwards]">
           {socials.map(({ name, href, Icon }) => (
             <a
               key={name}
@@ -298,7 +305,7 @@ export default function LinktreePage() {
         </div>
 
         {/* === GLASSMORPHISM TAB SWITCHER === */}
-        <div className="mt-6 flex items-center justify-center opacity-0 animate-[fadeUp_0.7s_0.5s_forwards]">
+        <div className="mt-6 flex items-center justify-center opacity-0 animate-[fadeUp_0.7s_0.4s_forwards]">
           <div className="relative inline-flex p-1 rounded-full backdrop-blur-2xl bg-white/[0.05] border border-white/[0.08]">
             {/* Sliding pill */}
             <div
