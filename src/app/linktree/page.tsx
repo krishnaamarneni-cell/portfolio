@@ -16,6 +16,11 @@ import {
   FiBell,
   FiShare2,
   FiX,
+  FiTrendingUp,
+  FiTarget,
+  FiDownload,
+  FiBriefcase,
+  FiActivity,
 } from "react-icons/fi";
 import { FaXTwitter } from "react-icons/fa6";
 
@@ -41,8 +46,50 @@ const linksTab: { label: string; items: Link[] }[] = [
     label: "Featured",
     items: [
       {
-        title: "WealthClaude — Free Courses",
-        subtitle: "AI · SAP · Finance · Web Dev",
+        title: "Krishna.amarneni.com",
+        subtitle: "My personal portfolio site",
+        href: "https://krishna.amarneni.com",
+        Icon: FiGlobe,
+        accent: "from-[#ff6b00] via-[#ff8c38] to-[#ffaa66]",
+      },
+    ],
+  },
+  {
+    label: "Projects I've built",
+    items: [
+      {
+        title: "WealthClaude",
+        subtitle: "AI-powered finance & wealth platform",
+        href: "https://www.wealthclaude.com",
+        Icon: FiTrendingUp,
+        accent: "from-[#ff6b00] to-[#ff8c38]",
+        badge: "LIVE",
+      },
+      {
+        title: "WealthClaude Portfolio",
+        subtitle: "View my showcased work",
+        href: "https://www.wealthclaude.com/u/krishna-amarneni/portfolio",
+        Icon: FiBriefcase,
+        accent: "from-[#ff6b00]/90 to-[#ff8c38]/90",
+      },
+      {
+        title: "North Falmouth Pharmacy",
+        subtitle: "E-commerce & booking website",
+        href: "https://www.northfalmouthpharmacy.com",
+        Icon: FiActivity,
+        accent: "from-[#0a8fe2] to-[#0a66c2]",
+      },
+    ],
+  },
+];
+
+const toolsTab: { label: string; items: Link[] }[] = [
+  {
+    label: "Featured",
+    items: [
+      {
+        title: "Free Finance Course",
+        subtitle: "Master FIRE, investing & wealth",
         href: "https://www.wealthclaude.com/learn",
         Icon: FiBookOpen,
         accent: "from-[#ff6b00] via-[#ff8c38] to-[#ffaa66]",
@@ -51,29 +98,29 @@ const linksTab: { label: string; items: Link[] }[] = [
     ],
   },
   {
-    label: "Build with me",
+    label: "Free resources",
     items: [
       {
-        title: "Portfolio",
-        subtitle: "krishna.amarneni.com",
-        href: "https://krishna.amarneni.com",
-        Icon: FiGlobe,
-        accent: "from-[#ff6b00] to-[#ff8c38]",
-      },
-    ],
-  },
-];
-
-const toolsTab: { label: string; items: Link[] }[] = [
-  {
-    label: "Free Tools",
-    items: [
-      {
-        title: "WealthClaude Free Tools",
+        title: "Free Tools",
         subtitle: "Productivity & finance utilities",
-        href: "https://www.wealthclaude.com/freetools",
+        href: "https://www.wealthclaude.com/tools",
         Icon: FiTool,
         accent: "from-[#ff6b00] to-[#ff8c38]",
+        badge: "FREE",
+      },
+      {
+        title: "Check Your FIRE Score",
+        subtitle: "How close are you to financial freedom?",
+        href: "https://www.wealthclaude.com/fire-score",
+        Icon: FiTarget,
+        accent: "from-[#ff6b00]/90 to-[#ff8c38]/90",
+      },
+      {
+        title: "Download Free Book",
+        subtitle: "Your starter guide to wealth building",
+        href: "https://www.wealthclaude.com/start",
+        Icon: FiDownload,
+        accent: "from-[#ff6b00]/90 to-[#ff8c38]/90",
         badge: "FREE",
       },
     ],
