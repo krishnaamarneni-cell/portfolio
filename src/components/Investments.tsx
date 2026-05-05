@@ -11,6 +11,7 @@ import {
   FiChevronLeft,
   FiChevronRight,
 } from "react-icons/fi";
+import HoverSpotlight from "./HoverSpotlight";
 
 type Holding = {
   ticker: string;
@@ -318,9 +319,9 @@ export default function Investments() {
         </ScrollReveal>
 
         <ScrollReveal direction="flipX" delay={0.1}>
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
+          <HoverSpotlight as="h2" className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6 cursor-default">
             Where my <span className="text-gradient">money</span> lives
-          </h2>
+          </HoverSpotlight>
         </ScrollReveal>
 
         <ScrollReveal direction="zoom3d" delay={0.15}>

@@ -387,6 +387,33 @@ body {
   animation: float3d 6s ease-in-out infinite;
 }
 
+/* ============ HOVER LINK — UNDERLINE SWEEP ============
+   Apply class="hover-link" to any <a> for an animated orange underline
+   that draws left-to-right on hover, plus subtle text color shift. */
+.hover-link {
+  position: relative;
+  display: inline-block;
+  transition: color 0.3s ease;
+}
+.hover-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(to right, #ff6b00, #ff8c38);
+  border-radius: 999px;
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 12px rgba(255, 107, 0, 0.5);
+}
+.hover-link:hover {
+  color: #ff8c38;
+}
+.hover-link:hover::after {
+  width: 100%;
+}
+
 /* ============ DEPTH SHADOW ============ */
 .shadow-3d {
   box-shadow:

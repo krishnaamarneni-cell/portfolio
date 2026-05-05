@@ -6,6 +6,7 @@ import ScrollReveal from "./ScrollReveal";
 import TiltCard from "./TiltCard";
 import Parallax3D from "./Parallax3D";
 import { FiExternalLink, FiArrowUpRight, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import HoverSpotlight from "./HoverSpotlight";
 
 type Project = {
   title: string;
@@ -216,9 +217,9 @@ export default function Projects() {
             </ScrollReveal>
 
             <ScrollReveal direction="flipX" delay={0.1}>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
+              <HoverSpotlight as="h2" className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6 cursor-default">
                 Things I&apos;ve <span className="text-gradient">Built</span>
-              </h2>
+              </HoverSpotlight>
             </ScrollReveal>
 
             <ScrollReveal direction="zoom3d" delay={0.15}>

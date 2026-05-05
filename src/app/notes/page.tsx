@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { fieldNotes, tags } from "@/lib/field-notes";
 import { FiArrowUpRight, FiClock, FiCalendar, FiArrowLeft } from "react-icons/fi";
+import HoverSpotlight from "@/components/HoverSpotlight";
 
 const tagColors: Record<string, string> = {
   AI: "from-[#a855f7] to-[#7c3aed]",
@@ -64,12 +65,12 @@ export default function NotesPage() {
           <p className="text-[#ff6b00] text-sm font-mono mb-4 tracking-[0.3em] uppercase">
             ✦ Field Notes
           </p>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-white mb-4">
+          <HoverSpotlight as="h1" className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-white mb-4 cursor-default">
             Things I&apos;m{" "}
             <span className="bg-gradient-to-r from-[#ff6b00] via-[#ff8c38] to-[#ffaa66] bg-clip-text text-transparent">
               thinking about.
             </span>
-          </h1>
+          </HoverSpotlight>
           <p className="text-[#888] text-lg leading-relaxed max-w-2xl">
             Raw takes on AI, enterprise software, finance, geopolitics, and
             whatever&apos;s rattling around my head this week. Written for builders.
