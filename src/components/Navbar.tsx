@@ -6,10 +6,11 @@ import { FiHome } from "react-icons/fi";
 
 // Order matches the actual section flow on the page
 const navLinks = [
-  { name: "About", href: "#about", id: "about" },
-  { name: "Experience", href: "#experience", id: "experience" },
-  { name: "Skills", href: "#skills", id: "skills" },
-  { name: "Projects", href: "#projects", id: "projects" },
+  { name: "About", href: "/#about", id: "about" },
+  { name: "Experience", href: "/#experience", id: "experience" },
+  { name: "Skills", href: "/#skills", id: "skills" },
+  { name: "Projects", href: "/#projects", id: "projects" },
+  { name: "Notes", href: "/notes", id: "notes" },
 ];
 
 export default function Navbar() {
