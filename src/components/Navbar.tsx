@@ -5,7 +5,6 @@ import { HiMenuAlt3, HiX } from "react-icons/hi";
 import { FiHome } from "react-icons/fi";
 import { RxDragHandleDots2 } from "react-icons/rx";
 
-// Order matches the actual section flow on the page
 const navLinks = [
   { name: "About", href: "/#about", id: "about" },
   { name: "Experience", href: "/#experience", id: "experience" },
@@ -15,33 +14,39 @@ const navLinks = [
 ];
 
 const STORAGE_KEY = "navbar-position";
+const EDGE_THRESHOLD = 80; // px from left/right edge to trigger vertical mode
+
+type Orientation = "horizontal" | "vertical";
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [active, setActive] = useState("home");
   const [visible, setVisible] = useState(true);
 
-  // Drag state
   const navRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
-  const [pill, setPill] = useState<{ left: number; width: number } | null>(null);
+  const [pill, setPill] = useState<{ start: number; size: number } | null>(null);
 
-  // Position state (null = use default bottom-center anchor)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [orientation, setOrientation] = useState<Orientation>("horizontal");
   const [isDragging, setIsDragging] = useState(false);
   const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const justDragged = useRef(false);
 
-  // Restore saved position on mount
+  // Restore saved state
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setPos(JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.x !== undefined) setPos({ x: parsed.x, y: parsed.y });
+        if (parsed.orientation) setOrientation(parsed.orientation);
+      }
     } catch {}
   }, []);
 
-  // Track active section based on scroll
+  // Track active section
   useEffect(() => {
     const onScroll = () => {
       setVisible(true);
@@ -64,7 +69,7 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Reposition the orange pill when active changes
+  // Reposition pill based on orientation
   useLayoutEffect(() => {
     const reposition = () => {
       const container = containerRef.current;
@@ -75,22 +80,23 @@ export default function Navbar() {
       }
       const cRect = container.getBoundingClientRect();
       const tRect = target.getBoundingClientRect();
-      setPill({ left: tRect.left - cRect.left, width: tRect.width });
+      if (orientation === "horizontal") {
+        setPill({ start: tRect.left - cRect.left, size: tRect.width });
+      } else {
+        setPill({ start: tRect.top - cRect.top, size: tRect.height });
+      }
     };
     reposition();
     window.addEventListener("resize", reposition);
     return () => window.removeEventListener("resize", reposition);
-  }, [active, pos]);
+  }, [active, pos, orientation]);
 
   // === DRAG HANDLERS ===
   const startDrag = (clientX: number, clientY: number) => {
     const nav = navRef.current;
     if (!nav) return;
     const rect = nav.getBoundingClientRect();
-    dragOffset.current = {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-    };
+    dragOffset.current = { x: clientX - rect.left, y: clientY - rect.top };
     setIsDragging(true);
     justDragged.current = false;
   };
@@ -103,11 +109,17 @@ export default function Navbar() {
     const rect = nav.getBoundingClientRect();
     let x = clientX - dragOffset.current.x;
     let y = clientY - dragOffset.current.y;
-    // Clamp to viewport
     const maxX = window.innerWidth - rect.width;
     const maxY = window.innerHeight - rect.height;
     x = Math.max(0, Math.min(maxX, x));
     y = Math.max(0, Math.min(maxY, y));
+
+    // Auto-detect orientation: vertical if near left or right edge
+    const nearLeft = x < EDGE_THRESHOLD;
+    const nearRight = x + rect.width > window.innerWidth - EDGE_THRESHOLD;
+    const newOrientation: Orientation = nearLeft || nearRight ? "vertical" : "horizontal";
+    if (newOrientation !== orientation) setOrientation(newOrientation);
+
     setPos({ x, y });
   };
 
@@ -116,7 +128,7 @@ export default function Navbar() {
     setIsDragging(false);
     if (pos) {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(pos));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...pos, orientation }));
       } catch {}
     }
   };
@@ -141,24 +153,24 @@ export default function Navbar() {
       window.removeEventListener("touchend", onTouchEnd);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDragging]);
+  }, [isDragging, orientation, pos]);
 
-  // Reset position to default
   const resetPosition = () => {
     setPos(null);
+    setOrientation("horizontal");
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
   };
 
-  // Position styles
   const navStyle: React.CSSProperties = pos
     ? { left: `${pos.x}px`, top: `${pos.y}px`, bottom: "auto" }
     : {};
 
+  const isVertical = orientation === "vertical";
+
   return (
     <>
-      {/* Bottom fixed nav — DRAGGABLE */}
       <nav
         ref={navRef}
         className={`fixed z-50 transition-opacity duration-500 hidden lg:block ${
@@ -168,16 +180,17 @@ export default function Navbar() {
         }`}
         style={{
           ...navStyle,
-          transition: isDragging
-            ? "none"
-            : "opacity 0.5s, transform 0.2s ease-out",
+          transition: isDragging ? "none" : "opacity 0.5s, transform 0.2s ease-out",
         }}
       >
         <div
           ref={containerRef}
-          className="relative flex items-center gap-1 px-2 py-2.5 rounded-full bg-[#1a1a1a]/95 backdrop-blur-2xl border border-white/[0.06] shadow-[0_10px_40px_rgba(0,0,0,0.5)] group"
+          className={`relative flex items-center gap-1 rounded-[28px] bg-[#1a1a1a]/95 backdrop-blur-2xl border border-white/[0.06] shadow-[0_10px_40px_rgba(0,0,0,0.5)] group ${
+            isVertical ? "flex-col py-2 px-2.5" : "flex-row px-2 py-2.5"
+          }`}
+          style={{ transition: isDragging ? "none" : "all 0.3s ease-out" }}
         >
-          {/* === DRAG HANDLE === */}
+          {/* Drag handle */}
           <button
             onMouseDown={(e) => {
               e.preventDefault();
@@ -187,19 +200,29 @@ export default function Navbar() {
               if (e.touches[0]) startDrag(e.touches[0].clientX, e.touches[0].clientY);
             }}
             onDoubleClick={resetPosition}
-            title="Drag to move · Double-click to reset position"
-            className={`relative z-10 w-7 h-10 flex items-center justify-center text-[#555] hover:text-[#ff6b00] transition-colors ${
+            title="Drag to move · Touch left/right edge for vertical · Double-click to reset"
+            className={`relative z-10 flex items-center justify-center text-[#555] hover:text-[#ff6b00] transition-colors ${
               isDragging ? "cursor-grabbing text-[#ff6b00]" : "cursor-grab"
-            }`}
+            } ${isVertical ? "w-10 h-7" : "w-7 h-10"}`}
           >
-            <RxDragHandleDots2 size={18} />
+            <RxDragHandleDots2
+              size={18}
+              style={{
+                transform: isVertical ? "rotate(90deg)" : "rotate(0deg)",
+                transition: "transform 0.3s ease-out",
+              }}
+            />
           </button>
 
           {/* Sliding ORANGE highlight pill */}
           {pill && (
             <div
-              className="absolute top-1.5 bottom-1.5 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] shadow-[0_4px_20px_rgba(255,107,0,0.5)] transition-all duration-500 ease-out -z-0"
-              style={{ left: pill.left, width: pill.width }}
+              className="absolute rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] shadow-[0_4px_20px_rgba(255,107,0,0.5)] transition-all duration-500 ease-out -z-0"
+              style={
+                isVertical
+                  ? { left: 6, right: 6, top: pill.start, height: pill.size }
+                  : { top: 6, bottom: 6, left: pill.start, width: pill.size }
+              }
             />
           )}
 
@@ -213,7 +236,7 @@ export default function Navbar() {
                 justDragged.current = false;
               }
             }}
-            className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center transition-colors duration-300 ${
+            className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center transition-colors duration-300 shrink-0 ${
               active === "home" ? "text-black" : "text-[#999] hover:text-white"
             }`}
           >
@@ -232,8 +255,12 @@ export default function Navbar() {
                   justDragged.current = false;
                 }
               }}
-              className={`relative z-10 px-5 py-2 text-sm rounded-full transition-colors duration-300 font-medium whitespace-nowrap ${
+              className={`relative z-10 text-sm rounded-full transition-colors duration-300 font-medium whitespace-nowrap shrink-0 ${
                 active === link.id ? "text-black" : "text-[#888] hover:text-white"
+              } ${
+                isVertical
+                  ? "px-4 py-2 w-full text-center"
+                  : "px-5 py-2"
               }`}
             >
               {link.name}
@@ -249,19 +276,25 @@ export default function Navbar() {
                 justDragged.current = false;
               }
             }}
-            className="relative z-10 ml-1 px-5 py-2 text-sm rounded-full font-semibold whitespace-nowrap text-[#ff6b00] border border-[#ff6b00]/50 bg-[#ff6b00]/[0.06] hover:bg-[#ff6b00] hover:text-black hover:border-[#ff6b00] hover:shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.03] active:scale-95 transition-all duration-200"
+            className={`relative z-10 text-sm rounded-full font-semibold whitespace-nowrap text-[#ff6b00] border border-[#ff6b00]/50 bg-[#ff6b00]/[0.06] hover:bg-[#ff6b00] hover:text-black hover:border-[#ff6b00] hover:shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.03] active:scale-95 transition-all duration-200 shrink-0 ${
+              isVertical ? "mt-1 px-4 py-2 w-full text-center" : "ml-1 px-5 py-2"
+            }`}
           >
             Contact me
           </a>
         </div>
 
-        {/* "Drag me" hint — appears briefly on first hover */}
-        <div className="absolute -top-9 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-[#ff6b00] text-black text-[10px] font-mono uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-lg">
-          ✦ Drag the dots to move · Double-click to reset
+        {/* Tooltip */}
+        <div
+          className={`absolute px-3 py-1.5 rounded-full bg-[#ff6b00] text-black text-[10px] font-mono uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-lg ${
+            isVertical ? "top-1/2 -translate-y-1/2 -right-3 translate-x-full" : "-top-9 left-1/2 -translate-x-1/2"
+          }`}
+        >
+          ✦ Drag · Edge = vertical · 2× click = reset
         </div>
       </nav>
 
-      {/* Mobile bottom nav (header bar) */}
+      {/* Mobile bottom nav */}
       <div className="fixed bottom-4 left-4 right-4 z-50 lg:hidden">
         <div
           className={`flex items-center justify-between px-4 py-3 rounded-2xl bg-[#1a1a1a]/95 backdrop-blur-2xl border border-white/[0.06] shadow-[0_10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 ${
