@@ -90,52 +90,54 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
       >
         <TiltCard className="h-full rounded-[20px]" intensity={10}>
           <div className="h-full rounded-2xl bg-[#1a1a1a] border border-white/[0.06] hover:border-[#ff6b00]/30 transition-all duration-500 overflow-hidden shadow-3d card-3d-shine">
-            {/* === LIVE SCREENSHOT PREVIEW === */}
-            <div className="relative aspect-[16/10] overflow-hidden bg-[#0a0a0a] border-b border-white/[0.06]">
-              {/* Browser top bar */}
-              <div className="absolute top-0 inset-x-0 h-7 bg-[#0d0d0d]/95 backdrop-blur-sm border-b border-white/[0.05] z-10 flex items-center px-3 gap-1.5">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 rounded-full bg-red-400/70" />
-                  <div className="w-2 h-2 rounded-full bg-yellow-400/70" />
-                  <div className="w-2 h-2 rounded-full bg-green-400/70" />
+            {/* === BROWSER FRAME WITH SCREENSHOT === */}
+            <div className="bg-[#0a0a0a] border-b border-white/[0.06] flex flex-col">
+              {/* Browser top bar (sits ABOVE screenshot, doesn't overlay it) */}
+              <div className="h-8 bg-[#1a1a1a] border-b border-white/[0.06] flex items-center px-3 gap-2 shrink-0">
+                <div className="flex gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
                 </div>
-                <div className="flex-1 mx-2 h-4 rounded bg-[#1a1a1a] flex items-center justify-center">
-                  <span className="text-[#666] text-[9px] font-mono truncate px-2">
-                    {project.link.replace(/^https?:\/\//, "")}
+                <div className="flex-1 mx-2 h-5 rounded bg-[#0a0a0a] border border-white/[0.04] flex items-center justify-center">
+                  <span className="text-[#777] text-[10px] font-mono truncate px-2">
+                    🔒 {project.link.replace(/^https?:\/\//, "")}
                   </span>
                 </div>
               </div>
 
-              {/* Screenshot */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={screenshot}
-                alt={`${project.title} preview`}
-                loading="lazy"
-                className="w-full h-full object-cover object-top pt-7 transition-transform duration-700 group-hover:scale-[1.04]"
-                onError={(e) => {
-                  // Hide broken image — fallback gradient bg shows through
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                }}
-              />
+              {/* Screenshot — separate, no overlay clipping */}
+              <div className="relative aspect-[16/10] overflow-hidden bg-white/[0.02]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={screenshot}
+                  alt={`${project.title} preview`}
+                  loading="lazy"
+                  className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-[1.04]"
+                  style={{ imageRendering: "auto" }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                  }}
+                />
 
-              {/* Fallback gradient (visible if image fails) */}
-              <div
-                className={`absolute inset-x-0 bottom-0 top-7 -z-0 bg-gradient-to-br ${project.gradient} opacity-30`}
-              />
+                {/* Fallback gradient */}
+                <div
+                  className={`absolute inset-0 -z-0 bg-gradient-to-br ${project.gradient} opacity-30`}
+                />
 
-              {/* Hover overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                {/* Hover dim overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-              {/* External link badge on hover */}
-              <div className="absolute top-10 right-3 w-9 h-9 rounded-full bg-[#ff6b00] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:scale-110 shadow-[0_4px_20px_rgba(255,107,0,0.5)]">
-                <FiArrowUpRight size={16} className="text-white" strokeWidth={2.5} />
+                {/* External link badge on hover */}
+                <div className="absolute top-3 right-3 w-9 h-9 rounded-full bg-[#ff6b00] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:scale-110 shadow-[0_4px_20px_rgba(255,107,0,0.5)]">
+                  <FiArrowUpRight size={16} className="text-white" strokeWidth={2.5} />
+                </div>
+
+                {/* Project number watermark */}
+                <span className="absolute bottom-2 right-3 text-3xl font-black text-white/20 select-none drop-shadow-lg">
+                  {project.number}
+                </span>
               </div>
-
-              {/* Project number watermark */}
-              <span className="absolute bottom-2 right-3 text-3xl font-black text-white/15 select-none">
-                {project.number}
-              </span>
             </div>
 
             {/* === CONTENT === */}
