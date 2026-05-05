@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { fieldNotes, getNoteBySlug } from "@/lib/field-notes";
 import { FiArrowLeft, FiClock, FiCalendar, FiArrowUpRight, FiLinkedin } from "react-icons/fi";
 import { FaXTwitter } from "react-icons/fa6";
+import HoverSpotlight from "@/components/HoverSpotlight";
 
 const tagColors: Record<string, string> = {
   AI: "from-[#a855f7] to-[#7c3aed]",
@@ -154,7 +155,7 @@ export default function NotePage({ params }: { params: Promise<{ slug: string }>
         {/* Back link */}
         <Link
           href="/notes"
-          className="inline-flex items-center gap-2 text-[#777] hover:text-[#ff6b00] text-sm mb-10 transition-colors"
+          className="hover-link inline-flex items-center gap-2 text-[#777] text-sm mb-10"
         >
           <FiArrowLeft size={14} />
           All notes
@@ -177,10 +178,10 @@ export default function NotePage({ params }: { params: Promise<{ slug: string }>
           </span>
         </div>
 
-        {/* Title */}
-        <h1 className="text-3xl md:text-4xl lg:text-5xl font-black text-white leading-[1.1] tracking-tight mb-6">
+        {/* Title with hover spotlight */}
+        <HoverSpotlight as="h1" className="text-3xl md:text-4xl lg:text-5xl font-black text-white leading-[1.1] tracking-tight mb-6 cursor-default" glowSize={320} glowOpacity={0.55}>
           {note.title}
-        </h1>
+        </HoverSpotlight>
 
         {/* Summary */}
         <p className="text-[#999] text-lg leading-relaxed mb-10 italic border-l-4 border-[#ff6b00]/40 pl-5">
@@ -235,9 +236,9 @@ export default function NotePage({ params }: { params: Promise<{ slug: string }>
               <p className="text-[#666] text-[10px] font-mono uppercase tracking-[0.2em] mb-2">
                 ← Previous
               </p>
-              <p className="text-white text-sm font-semibold line-clamp-2 group-hover:text-[#ff6b00] transition-colors">
+              <HoverSpotlight as="p" className="text-white text-sm font-semibold line-clamp-2 group-hover:text-[#ff6b00] transition-colors" glowSize={180} glowOpacity={0.4}>
                 {prev.title}
-              </p>
+              </HoverSpotlight>
             </Link>
           ) : (
             <div />
@@ -250,9 +251,9 @@ export default function NotePage({ params }: { params: Promise<{ slug: string }>
               <p className="text-[#666] text-[10px] font-mono uppercase tracking-[0.2em] mb-2">
                 Next →
               </p>
-              <p className="text-white text-sm font-semibold line-clamp-2 group-hover:text-[#ff6b00] transition-colors">
+              <HoverSpotlight as="p" className="text-white text-sm font-semibold line-clamp-2 group-hover:text-[#ff6b00] transition-colors" glowSize={180} glowOpacity={0.4}>
                 {next.title}
-              </p>
+              </HoverSpotlight>
             </Link>
           ) : (
             <div />

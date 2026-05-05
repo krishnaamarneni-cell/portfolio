@@ -54,7 +54,7 @@ export default function NotesPage() {
         {/* Back link */}
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-[#777] hover:text-[#ff6b00] text-sm mb-10 transition-colors"
+          className="hover-link inline-flex items-center gap-2 text-[#777] text-sm mb-10"
         >
           <FiArrowLeft size={14} />
           Back to portfolio
@@ -123,9 +123,9 @@ export default function NotesPage() {
                 </span>
               </div>
 
-              <h2 className="text-3xl md:text-4xl font-black text-white leading-tight mb-4 group-hover:text-[#ff6b00] transition-colors">
+              <HoverSpotlight as="h2" className="text-3xl md:text-4xl font-black text-white leading-tight mb-4 group-hover:text-[#ff6b00] transition-colors cursor-pointer">
                 {featured.title}
-              </h2>
+              </HoverSpotlight>
               <p className="text-[#bbb] text-lg leading-relaxed mb-6 max-w-3xl">
                 {featured.summary}
               </p>
@@ -172,9 +172,9 @@ export default function NotesPage() {
                       </span>
                     </div>
 
-                    <h3 className="text-xl font-bold text-white leading-snug mb-2 group-hover:text-[#ff6b00] transition-colors">
+                    <HoverSpotlight as="h3" className="text-xl font-bold text-white leading-snug mb-2 group-hover:text-[#ff6b00] transition-colors cursor-pointer" glowSize={200} glowOpacity={0.45}>
                       {note.title}
-                    </h3>
+                    </HoverSpotlight>
                     <p className="text-[#888] text-sm leading-relaxed line-clamp-2">
                       {note.summary}
                     </p>

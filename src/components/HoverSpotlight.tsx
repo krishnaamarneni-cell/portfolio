@@ -13,8 +13,8 @@ export default function HoverSpotlight({
   children,
   as = "span",
   className = "",
-  glowSize = 240,
-  glowOpacity = 0.35,
+  glowSize = 280,
+  glowOpacity = 0.6,
 }: {
   children: ReactNode;
   as?: Tag;
