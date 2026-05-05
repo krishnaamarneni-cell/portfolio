@@ -118,10 +118,10 @@ export default function Navbar() {
             </a>
           ))}
 
-          {/* Contact Me CTA — ALWAYS orange, separate from sliding pill */}
+          {/* Contact Me CTA — orange outline (won't compete with active pill) */}
           <a
             href="#contact"
-            className="relative z-10 ml-1 px-5 py-2 text-sm rounded-full font-semibold whitespace-nowrap text-black bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] hover:shadow-[0_4px_20px_rgba(255,107,0,0.5)] hover:scale-[1.03] active:scale-95 transition-all duration-200"
+            className="relative z-10 ml-1 px-5 py-2 text-sm rounded-full font-semibold whitespace-nowrap text-[#ff6b00] border border-[#ff6b00]/50 bg-[#ff6b00]/[0.06] hover:bg-[#ff6b00] hover:text-black hover:border-[#ff6b00] hover:shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.03] active:scale-95 transition-all duration-200"
           >
             Contact me
           </a>
