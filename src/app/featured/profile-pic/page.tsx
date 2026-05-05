@@ -6,13 +6,9 @@ import DownloadCard from "@/components/DownloadCard";
 /* LinkedIn profile pic — 400x400 (displayed as a circle) */
 export default function ProfilePic() {
   return (
-    <main className="min-h-screen bg-[#050505] flex items-center justify-center p-8 gap-12">
+    <main className="min-h-screen bg-[#050505] flex items-center justify-center p-8 gap-12 flex-wrap">
       {/* Square version (upload this to LinkedIn — they auto-circle it) */}
       <DownloadCard filename="krishna-profile-pic" width={400} height={400} label="Download Profile Pic">
-      <div className="flex flex-col items-center gap-4">
-        <p className="text-white text-sm font-mono tracking-[0.2em] uppercase">
-          Square upload — 400 × 400
-        </p>
         <div className="relative w-[400px] h-[400px] overflow-hidden bg-gradient-to-br from-[#ff6b00] via-[#ff5500] to-[#cc3a00]">
           {/* Lighting */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(255,200,150,0.5),transparent_60%)]" />
@@ -34,7 +30,7 @@ export default function ProfilePic() {
             style={{ transform: "scale(1.18)" }}
           />
         </div>
-      </div>
+      </DownloadCard>
 
       {/* Circle preview (how it'll look on LinkedIn) */}
       <div className="flex flex-col items-center gap-4">
