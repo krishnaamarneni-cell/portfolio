@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { usePathname } from "next/navigation";
 import { HiMenuAlt3, HiX } from "react-icons/hi";
 import { FiHome } from "react-icons/fi";
 import { RxDragHandleDots2 } from "react-icons/rx";
@@ -19,6 +20,7 @@ const EDGE_THRESHOLD = 80; // px from left/right edge to trigger vertical mode
 type Orientation = "horizontal" | "vertical";
 
 export default function Navbar() {
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [active, setActive] = useState("home");
   const [visible, setVisible] = useState(true);
@@ -46,8 +48,15 @@ export default function Navbar() {
     } catch {}
   }, []);
 
-  // Track active section
+  // Track active section — handles both scroll on home page AND route-based (notes etc)
   useEffect(() => {
+    // If on a non-home route, set active based on path
+    if (pathname?.startsWith("/notes")) {
+      setActive("notes");
+      setVisible(true);
+      return;
+    }
+
     const onScroll = () => {
       setVisible(true);
       if (window.scrollY < 100) {
@@ -67,7 +76,7 @@ export default function Navbar() {
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [pathname]);
 
   // Reposition pill based on orientation
   useLayoutEffect(() => {
