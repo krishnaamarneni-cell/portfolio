@@ -1,203 +1,186 @@
 "use client";
 
-import { useState } from "react";
 import ScrollReveal from "./ScrollReveal";
 import TiltCard from "./TiltCard";
 import Parallax3D from "./Parallax3D";
-import { FiExternalLink, FiArrowRight } from "react-icons/fi";
-import {
-  SiNextdotjs, SiReact, SiTypescript, SiTailwindcss, SiSupabase,
-  SiStripe, SiPython, SiVercel, SiThreedotjs,
-} from "react-icons/si";
-import { FiCpu, FiDatabase } from "react-icons/fi";
+import { FiExternalLink, FiArrowUpRight } from "react-icons/fi";
 
-const techIcons: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
-  "Next.js": SiNextdotjs, React: SiReact, TypeScript: SiTypescript,
-  "Tailwind CSS": SiTailwindcss, Supabase: SiSupabase, Stripe: SiStripe,
-  Python: SiPython, Vercel: SiVercel, "Three.js": SiThreedotjs,
-  "Groq AI": FiCpu, PostgreSQL: FiDatabase, "Claude AI": FiCpu,
-  Recharts: SiReact, Resend: FiCpu,
+type Project = {
+  title: string;
+  subtitle: string;
+  number: string;
+  description: string;
+  link: string;
+  tags: string[];
+  gradient: string;
+  // Live screenshot via thum.io (free, no API key)
+  // Falls back gracefully if blocked
 };
 
-const projects = [
+const projects: Project[] = [
   {
     title: "WealthClaude",
     subtitle: "AI Finance Tracking Platform",
     number: "01",
     description:
-      "Full-featured portfolio tracker with 3D interactive globe tracking 51 global stock markets. AI-powered market intelligence, dividend tracking, 15+ financial calculators, and real-time analytics with 7-layer security.",
+      "Full portfolio tracker with 3D globe across 51 markets, AI market intelligence, dividend analytics, 15+ calculators, and 7-layer security.",
     link: "https://www.wealthclaude.com",
-    features: [
-      "3D globe tracking 51 global markets",
-      "AI market news & portfolio summaries",
-      "50+ brokerage import support",
-      "7-layer security system",
-      "Stripe subscription payments",
-      "15+ financial calculators",
-    ],
-    tech: ["Next.js", "TypeScript", "Supabase", "Three.js", "Stripe", "Groq AI", "Tailwind CSS", "Python", "Recharts", "Resend"],
-    gradient: "from-orange-500 to-amber-500",
+    tags: ["Next.js", "Supabase", "Three.js", "Stripe", "Groq AI"],
+    gradient: "from-[#22c55e] to-[#16a34a]",
   },
   {
     title: "Lucy AI",
-    subtitle: "Autonomous AI Agent — 50+ Tasks",
+    subtitle: "Autonomous AI Agent",
     number: "02",
     description:
-      "An autonomous AI agent handling 50+ tasks: Gmail, Calendar, social media, job applications, writing & deploying code, building websites, daily briefings, finance research, and news aggregation. Lucy can write her own code.",
+      "An autonomous agent handling 50+ tasks: Gmail, Calendar, social media, job applications, writes & deploys her own code, daily briefings.",
     link: "https://www.lucyaiagent.com",
-    features: [
-      "Gmail, Calendar & task management",
-      "Social media automation",
-      "Auto-apply to job applications",
-      "Write, build & deploy code autonomously",
-      "Daily briefings & news aggregation",
-      "Finance research & analysis",
-    ],
-    tech: ["Python", "Next.js", "TypeScript", "Claude AI", "Supabase", "Vercel"],
-    gradient: "from-orange-600 to-red-500",
+    tags: ["Python", "Claude AI", "Next.js", "Supabase", "Vercel"],
+    gradient: "from-[#ff6b00] to-[#ff3d00]",
+  },
+  {
+    title: "Auburn RX Pharmacy",
+    subtitle: "Independent Retail Pharmacy",
+    number: "03",
+    description:
+      "Modern pharmacy website featuring online refill requests, immunization booking, prescription transfer, and local healthcare resources.",
+    link: "https://auburnrx.vercel.app",
+    tags: ["Next.js", "TypeScript", "Tailwind CSS", "Vercel"],
+    gradient: "from-[#0ea5e9] to-[#0284c7]",
+  },
+  {
+    title: "Saint Francis Medical",
+    subtitle: "Healthcare & Medical Practice",
+    number: "04",
+    description:
+      "Patient-focused medical practice website with appointment booking, services overview, provider profiles, and HIPAA-conscious contact forms.",
+    link: "https://saint-francis-medical.vercel.app",
+    tags: ["Next.js", "React", "Tailwind CSS", "Vercel"],
+    gradient: "from-[#8b5cf6] to-[#6d28d9]",
   },
   {
     title: "North Falmouth Pharmacy",
-    subtitle: "Healthcare Website — Full Build",
-    number: "03",
+    subtitle: "LTC Pharmacy · Cape Cod",
+    number: "05",
     description:
-      "Complete website for an independent long-term care pharmacy serving Cape Cod. 10+ service pages, eMAR integration, compliance packaging, immunization services, enrollment forms, and local SEO optimization.",
+      "Long-term care pharmacy website serving Cape Cod facilities — eMAR integration, compliance packaging, immunizations, enrollment forms.",
     link: "https://www.nfpltc.com",
-    features: [
-      "10+ detailed service pages",
-      "Responsive healthcare design",
-      "Enrollment & consent forms",
-      "FAQ & contact system",
-      "Local SEO optimization",
-      "24/7 pharmacist access info",
-    ],
-    tech: ["Next.js", "React", "TypeScript", "Tailwind CSS", "Vercel"],
-    gradient: "from-amber-500 to-orange-500",
+    tags: ["Next.js", "React", "TypeScript", "Tailwind CSS"],
+    gradient: "from-[#f59e0b] to-[#ea580c]",
   },
 ];
 
-function ProjectCard({ project, index }: { project: typeof projects[0]; index: number }) {
-  const [flipped, setFlipped] = useState(false);
-  const dirs = ["flipY", "rotate3d", "zoom3d"] as const;
+
+function getScreenshotUrl(url: string) {
+  // thum.io free, no auth, public endpoint — generates a live screenshot
+  const cleaned = url.replace(/^https?:\/\//, "");
+  return `https://image.thum.io/get/width/1200/crop/750/noanimate/${cleaned}`;
+}
+
+function ProjectCard({ project, index }: { project: Project; index: number }) {
+  const dirs = ["flipY", "rotate3d", "zoom3d", "flipX", "rotate3d"] as const;
+  const screenshot = getScreenshotUrl(project.link);
 
   return (
-    <ScrollReveal delay={index * 0.15} direction={dirs[index]}>
-      <div className="perspective-1200 w-full" style={{ perspective: "1200px" }}>
-        <div
-          className={`relative w-full min-h-[580px] transition-transform duration-700 preserve-3d cursor-pointer ${
-            flipped ? "rotate-y-180" : ""
-          }`}
-          onClick={() => setFlipped(!flipped)}
-          style={{ transformStyle: "preserve-3d" }}
-        >
-          {/* FRONT */}
-          <div className="absolute inset-0 backface-hidden" style={{ backfaceVisibility: "hidden" }}>
-            <TiltCard className="h-full rounded-[20px]" intensity={15}>
-              <div className="h-full rounded-2xl bg-[#1a1a1a] border border-white/[0.06] p-8 lg:p-10 flex flex-col hover:border-[#ff6b00]/20 transition-all duration-500 group overflow-hidden relative card-3d-shine shadow-3d">
-                <span className="absolute top-6 right-8 text-8xl font-bold text-white/[0.03] select-none">
-                  {project.number}
-                </span>
-
-                <div className={`h-1.5 w-16 rounded-full bg-gradient-to-r ${project.gradient} mb-8`} />
-
-                <h3 className="text-2xl lg:text-3xl font-bold text-white mb-2 group-hover:text-[#ff6b00] transition-colors duration-300">
-                  {project.title}
-                </h3>
-                <p className="text-[#ff6b00] text-sm font-mono mb-5">{project.subtitle}</p>
-                <p className="text-[#888] text-sm leading-relaxed mb-8 flex-grow">
-                  {project.description}
-                </p>
-
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {project.tech.slice(0, 5).map((t) => {
-                    const Icon = techIcons[t];
-                    return (
-                      <span
-                        key={t}
-                        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.04] text-[#999] hover:border-[#ff6b00]/20 hover:text-[#ff6b00] transition-all"
-                      >
-                        {Icon && <Icon size={13} />}
-                        {t}
-                      </span>
-                    );
-                  })}
-                  {project.tech.length > 5 && (
-                    <span className="text-xs px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.04] text-[#555]">
-                      +{project.tech.length - 5}
-                    </span>
-                  )}
+    <ScrollReveal delay={index * 0.1} direction={dirs[index % dirs.length]}>
+      <a
+        href={project.link}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group block w-full"
+      >
+        <TiltCard className="h-full rounded-[20px]" intensity={10}>
+          <div className="h-full rounded-2xl bg-[#1a1a1a] border border-white/[0.06] hover:border-[#ff6b00]/30 transition-all duration-500 overflow-hidden shadow-3d card-3d-shine">
+            {/* === LIVE SCREENSHOT PREVIEW === */}
+            <div className="relative aspect-[16/10] overflow-hidden bg-[#0a0a0a] border-b border-white/[0.06]">
+              {/* Browser top bar */}
+              <div className="absolute top-0 inset-x-0 h-7 bg-[#0d0d0d]/95 backdrop-blur-sm border-b border-white/[0.05] z-10 flex items-center px-3 gap-1.5">
+                <div className="flex gap-1">
+                  <div className="w-2 h-2 rounded-full bg-red-400/70" />
+                  <div className="w-2 h-2 rounded-full bg-yellow-400/70" />
+                  <div className="w-2 h-2 rounded-full bg-green-400/70" />
                 </div>
-
-                <div className="flex items-center justify-between">
-                  <a
-                    href={project.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-2 text-sm text-[#ff6b00] hover:gap-3 transition-all font-medium"
-                  >
-                    <FiExternalLink size={15} />
-                    Visit Live Site
-                  </a>
-                  <span className="text-xs text-[#444] flex items-center gap-1 group-hover:text-[#666] transition-colors">
-                    Flip for features <FiArrowRight size={12} />
+                <div className="flex-1 mx-2 h-4 rounded bg-[#1a1a1a] flex items-center justify-center">
+                  <span className="text-[#666] text-[9px] font-mono truncate px-2">
+                    {project.link.replace(/^https?:\/\//, "")}
                   </span>
                 </div>
               </div>
-            </TiltCard>
-          </div>
 
-          {/* BACK */}
-          <div className="absolute inset-0 backface-hidden rotate-y-180" style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}>
-            <div className="h-full rounded-2xl bg-[#1a1a1a] border border-[#ff6b00]/20 p-8 lg:p-10 flex flex-col overflow-hidden relative shadow-3d">
-              <span className="absolute top-6 right-8 text-8xl font-bold text-[#ff6b00]/[0.05] select-none">
-                {project.number}
-              </span>
+              {/* Screenshot */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={screenshot}
+                alt={`${project.title} preview`}
+                loading="lazy"
+                className="w-full h-full object-cover object-top pt-7 transition-transform duration-700 group-hover:scale-[1.04]"
+                onError={(e) => {
+                  // Hide broken image — fallback gradient bg shows through
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
+                }}
+              />
 
-              <div className={`h-1.5 w-16 rounded-full bg-gradient-to-r ${project.gradient} mb-6`} />
-              <h3 className="text-xl font-bold text-white mb-1">Key Features</h3>
-              <p className="text-[#ff6b00] text-sm font-mono mb-6">{project.title}</p>
+              {/* Fallback gradient (visible if image fails) */}
+              <div
+                className={`absolute inset-x-0 bottom-0 top-7 -z-0 bg-gradient-to-br ${project.gradient} opacity-30`}
+              />
 
-              <ul className="space-y-4 flex-grow">
-                {project.features.map((f, i) => (
-                  <li key={i} className="flex items-start gap-3 text-[#ccc] text-sm">
-                    <span className="mt-1 w-2 h-2 rounded-full bg-[#ff6b00] shrink-0" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
+              {/* Hover overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-              <div className="mt-6 pt-5 border-t border-white/[0.06]">
-                <p className="text-xs text-[#555] mb-3 uppercase tracking-wider">Full Tech Stack</p>
-                <div className="flex flex-wrap gap-2">
-                  {project.tech.map((t) => (
-                    <span
-                      key={t}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-[#ff6b00]/[0.06] border border-[#ff6b00]/10 text-[#ff8c38]"
-                    >
-                      {t}
-                    </span>
-                  ))}
-                </div>
+              {/* External link badge on hover */}
+              <div className="absolute top-10 right-3 w-9 h-9 rounded-full bg-[#ff6b00] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:scale-110 shadow-[0_4px_20px_rgba(255,107,0,0.5)]">
+                <FiArrowUpRight size={16} className="text-white" strokeWidth={2.5} />
               </div>
 
-              <div className="flex items-center justify-between mt-5">
-                <a
-                  href={project.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-2 text-sm text-[#ff6b00] font-medium"
-                >
-                  <FiExternalLink size={15} />
-                  Visit Site
-                </a>
-                <span className="text-xs text-[#444]">Click to flip back</span>
+              {/* Project number watermark */}
+              <span className="absolute bottom-2 right-3 text-3xl font-black text-white/15 select-none">
+                {project.number}
+              </span>
+            </div>
+
+            {/* === CONTENT === */}
+            <div className="p-6 lg:p-7">
+              <div className={`h-1 w-12 rounded-full bg-gradient-to-r ${project.gradient} mb-4`} />
+
+              <h3 className="text-xl font-bold text-white mb-1 group-hover:text-[#ff6b00] transition-colors">
+                {project.title}
+              </h3>
+              <p className="text-[#ff6b00] text-xs font-mono mb-3">{project.subtitle}</p>
+              <p className="text-[#888] text-sm leading-relaxed mb-5 line-clamp-3">
+                {project.description}
+              </p>
+
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {project.tags.slice(0, 4).map((t) => (
+                  <span
+                    key={t}
+                    className="text-[10px] px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06] text-[#999] font-mono"
+                  >
+                    {t}
+                  </span>
+                ))}
+                {project.tags.length > 4 && (
+                  <span className="text-[10px] px-2 py-1 rounded-md text-[#555] font-mono">
+                    +{project.tags.length - 4}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-white/[0.05]">
+                <span className="flex items-center gap-1.5 text-xs text-[#ff6b00] font-medium">
+                  <FiExternalLink size={12} />
+                  Visit Live Site
+                </span>
+                <FiArrowUpRight
+                  size={16}
+                  className="text-[#666] group-hover:text-[#ff6b00] group-hover:rotate-45 transition-all"
+                />
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        </TiltCard>
+      </a>
     </ScrollReveal>
   );
 }
@@ -226,12 +209,11 @@ export default function Projects() {
 
         <ScrollReveal direction="zoom3d" delay={0.15}>
           <p className="text-[#666] text-lg mb-16 max-w-xl">
-            Each project was designed, developed, and deployed by me.
-            Click any card to flip and explore features.
+            Real products, shipped to real users. Click any card to visit the live site.
           </p>
         </ScrollReveal>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((p, i) => (
             <ProjectCard key={p.title} project={p} index={i} />
           ))}

@@ -8,6 +8,7 @@ import About from "@/components/About";
 import Skills from "@/components/Skills";
 import Experience from "@/components/Experience";
 import Projects from "@/components/Projects";
+import Investments from "@/components/Investments";
 import Contact from "@/components/Contact";
 import Footer from "@/components/Footer";
 
@@ -27,6 +28,8 @@ export default function Home() {
         <Skills />
         <div className="section-divider" />
         <Projects />
+        <div className="section-divider" />
+        <Investments />
         <div className="section-divider" />
         <Contact />
       </main>
