@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import ScrollReveal from "./ScrollReveal";
 import TiltCard from "./TiltCard";
 import Parallax3D from "./Parallax3D";
@@ -106,18 +107,15 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
                 </div>
               </div>
 
-              {/* Screenshot — separate, no overlay clipping */}
+              {/* Screenshot — Next/Image optimized (WebP, sharp at any size) */}
               <div className="relative aspect-[16/10] overflow-hidden bg-white/[0.02]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={screenshot}
                   alt={`${project.title} preview`}
-                  loading="lazy"
-                  className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-[1.04]"
-                  style={{ imageRendering: "auto" }}
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = "none";
-                  }}
+                  fill
+                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  quality={95}
+                  className="object-cover object-top transition-transform duration-700 group-hover:scale-[1.04]"
                 />
 
                 {/* Fallback gradient */}
