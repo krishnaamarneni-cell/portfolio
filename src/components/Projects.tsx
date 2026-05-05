@@ -107,14 +107,15 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
                 </div>
               </div>
 
-              {/* Screenshot — Next/Image optimized (WebP, sharp at any size) */}
+              {/* Screenshot — raw 4K PNG, browser handles retina downscale crisply */}
               <div className="relative aspect-[16/10] overflow-hidden bg-white/[0.02]">
                 <Image
                   src={screenshot}
                   alt={`${project.title} preview`}
                   fill
-                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                  quality={95}
+                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 600px"
+                  quality={100}
+                  unoptimized
                   className="object-cover object-top transition-transform duration-700 group-hover:scale-[1.04]"
                 />
 
