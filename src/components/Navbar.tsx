@@ -91,6 +91,22 @@ export default function Navbar() {
     return () => window.removeEventListener("resize", reposition);
   }, [active, pos, orientation]);
 
+  // Re-clamp position whenever orientation changes (so the resized nav doesn't go off-screen)
+  useLayoutEffect(() => {
+    if (!pos) return;
+    const nav = navRef.current;
+    if (!nav) return;
+    const rect = nav.getBoundingClientRect();
+    const maxX = window.innerWidth - rect.width;
+    const maxY = window.innerHeight - rect.height;
+    const clampedX = Math.max(0, Math.min(maxX, pos.x));
+    const clampedY = Math.max(0, Math.min(maxY, pos.y));
+    if (clampedX !== pos.x || clampedY !== pos.y) {
+      setPos({ x: clampedX, y: clampedY });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orientation]);
+
   // === DRAG HANDLERS ===
   const startDrag = (clientX: number, clientY: number) => {
     const nav = navRef.current;
@@ -106,6 +122,18 @@ export default function Navbar() {
     justDragged.current = true;
     const nav = navRef.current;
     if (!nav) return;
+
+    // Auto-detect orientation based on CURSOR position (not nav width — which changes!)
+    // Hysteresis: enter vertical at < THRESHOLD, exit only at > THRESHOLD + 40 (no flicker)
+    const enterEdge = EDGE_THRESHOLD;
+    const exitEdge = EDGE_THRESHOLD + 50;
+    const cursorNearLeft = clientX < (orientation === "vertical" ? exitEdge : enterEdge);
+    const cursorNearRight = clientX > window.innerWidth - (orientation === "vertical" ? exitEdge : enterEdge);
+    const newOrientation: Orientation = cursorNearLeft || cursorNearRight ? "vertical" : "horizontal";
+    if (newOrientation !== orientation) setOrientation(newOrientation);
+
+    // Re-measure rect AFTER potential orientation change (next frame)
+    // We use the CURRENT rect for clamping, which is fine — re-clamps on next move
     const rect = nav.getBoundingClientRect();
     let x = clientX - dragOffset.current.x;
     let y = clientY - dragOffset.current.y;
@@ -113,12 +141,6 @@ export default function Navbar() {
     const maxY = window.innerHeight - rect.height;
     x = Math.max(0, Math.min(maxX, x));
     y = Math.max(0, Math.min(maxY, y));
-
-    // Auto-detect orientation: vertical if near left or right edge
-    const nearLeft = x < EDGE_THRESHOLD;
-    const nearRight = x + rect.width > window.innerWidth - EDGE_THRESHOLD;
-    const newOrientation: Orientation = nearLeft || nearRight ? "vertical" : "horizontal";
-    if (newOrientation !== orientation) setOrientation(newOrientation);
 
     setPos({ x, y });
   };
