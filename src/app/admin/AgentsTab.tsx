@@ -234,7 +234,7 @@ export default function AgentsTab({
             <ContextChips context={newsState.context} />
             <Markdown text={newsState.markdown} />
           </div>
-        ) : !newsState && !newsBusy ? (
+        ) : !newsState && !newsBusy && !newsError ? (
           <EmptyHint icon={FiTrendingUp} text="No run yet — hit Run." />
         ) : null}
       </div>
@@ -297,7 +297,7 @@ export default function AgentsTab({
             <ContextChips context={jobsState.context} />
             <Markdown text={jobsState.markdown} />
           </div>
-        ) : !jobsState && !jobsBusy ? (
+        ) : !jobsState && !jobsBusy && !jobsError ? (
           <EmptyHint icon={FiBriefcase} text="No run yet — set companies and hit Run." />
         ) : null}
       </div>
@@ -360,7 +360,16 @@ function ContextChips({
   if (Array.isArray(context.companies) && context.companies.length > 0) {
     chips.push(`${context.companies.length} companies`);
   }
-  if (typeof context.model === "string") chips.push(context.model);
+  if (typeof context.model === "string") {
+    const requested = typeof context.modelRequested === "string"
+      ? context.modelRequested
+      : null;
+    chips.push(
+      requested && requested !== context.model
+        ? `${context.model} (fell back from ${requested})`
+        : context.model
+    );
+  }
   if (chips.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1.5 mb-3">

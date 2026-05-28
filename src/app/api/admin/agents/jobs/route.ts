@@ -100,6 +100,11 @@ Find roles open right now that match. Be picky — only post things he could act
   }
   return NextResponse.json({
     markdown: result.content,
-    context: { companies, model, jobs: jobs.length },
+    context: {
+      companies,
+      model: result.modelUsed ?? model,
+      modelRequested: model,
+      jobs: jobs.length,
+    },
   });
 }

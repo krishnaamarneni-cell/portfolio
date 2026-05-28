@@ -84,7 +84,8 @@ Output rules:
       symbols: holdingsResult.symbols,
       symbolSource: holdingsResult.source,
       roles,
-      model,
+      model: result.modelUsed ?? model,
+      modelRequested: model,
     },
   });
 }

@@ -117,27 +117,48 @@ function extractSymbols(parsed: unknown): string[] {
   return Array.from(symbols).slice(0, 40);
 }
 
-/** Run a one-shot agent. */
-export async function runAgent(opts: {
+type SingleResult = { ok: boolean; content?: string; error?: string };
+
+async function runOnce(opts: {
   apiKey: string;
   model: string;
   systemPrompt: string;
   userPrompt: string;
-  maxTokens?: number;
-}): Promise<{ ok: boolean; content?: string; error?: string }> {
+  maxTokens: number;
+}): Promise<SingleResult> {
   try {
     const { default: Groq } = await import("groq-sdk");
     const groq = new Groq({ apiKey: opts.apiKey });
     const completion = await groq.chat.completions.create({
       model: opts.model,
       temperature: 0.4,
-      max_tokens: opts.maxTokens ?? 2200,
+      max_tokens: opts.maxTokens,
       messages: [
         { role: "system", content: opts.systemPrompt },
         { role: "user", content: opts.userPrompt },
       ],
     });
-    const content = completion.choices[0]?.message?.content ?? "";
+    const msg = completion.choices[0]?.message as
+      | (typeof completion.choices[0]["message"] & {
+          executed_tools?: Array<Record<string, unknown>>;
+        })
+      | undefined;
+    let content = msg?.content ?? "";
+    // Compound systems sometimes synthesize the answer into `executed_tools`
+    // instead of `content` (especially mini). Fold those in as a fallback.
+    if (!content && Array.isArray(msg?.executed_tools)) {
+      const fromTools = msg!.executed_tools
+        .map((t) => {
+          const r = t as unknown as Record<string, unknown>;
+          if (typeof r.output === "string") return r.output;
+          if (typeof r.result === "string") return r.result;
+          return "";
+        })
+        .filter(Boolean)
+        .join("\n\n")
+        .trim();
+      if (fromTools) content = fromTools;
+    }
     if (!content) return { ok: false, error: "Empty response" };
     return { ok: true, content };
   } catch (err) {
@@ -146,4 +167,52 @@ export async function runAgent(opts: {
       error: err instanceof Error ? err.message : "Agent failed",
     };
   }
+}
+
+/** Run an agent with an automatic fallback chain. If the requested model
+ *  returns empty content or errors, we retry on the next model down until one
+ *  produces something. The model that actually answered is returned. */
+export async function runAgent(opts: {
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  maxTokens?: number;
+}): Promise<{ ok: boolean; content?: string; error?: string; modelUsed?: string }> {
+  const tried: Array<{ model: string; error: string }> = [];
+  const fallbacks = buildFallbackChain(opts.model);
+  for (const m of fallbacks) {
+    const res = await runOnce({
+      apiKey: opts.apiKey,
+      model: m,
+      systemPrompt: opts.systemPrompt,
+      userPrompt: opts.userPrompt,
+      // Compound systems eat tokens on tool calls — give them more room.
+      maxTokens:
+        opts.maxTokens && opts.maxTokens > 0 ? opts.maxTokens : m.startsWith("compound") ? 4096 : 2400,
+    });
+    if (res.ok && res.content) {
+      return { ok: true, content: res.content, modelUsed: m };
+    }
+    tried.push({ model: m, error: res.error ?? "unknown" });
+  }
+  return {
+    ok: false,
+    error:
+      "All models failed. " +
+      tried.map((t) => `${t.model}: ${t.error}`).join(" · "),
+  };
+}
+
+function buildFallbackChain(requested: string): string[] {
+  const chain: string[] = [requested];
+  // If the user picked a compound model, fall back to compound-mini, then 70B.
+  if (requested === "compound-beta" && !chain.includes("compound-beta-mini")) {
+    chain.push("compound-beta-mini");
+  }
+  if (!chain.includes("llama-3.3-70b-versatile")) {
+    chain.push("llama-3.3-70b-versatile");
+  }
+  // De-dupe while preserving order.
+  return Array.from(new Set(chain));
 }
