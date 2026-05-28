@@ -8,6 +8,9 @@ import {
   FiAlertCircle,
   FiEdit2,
   FiPlus,
+  FiMail,
+  FiExternalLink,
+  FiLogOut,
 } from "react-icons/fi";
 import type { Connector } from "@/lib/content-types";
 
@@ -170,6 +173,9 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
           the Chat tab can pull live data into its answers.
         </p>
       </div>
+
+      {/* Gmail — handled separately because it uses OAuth, not a static bearer token */}
+      <GmailCard onSuccess={onSuccess} onError={onError} />
 
       {/* Existing connectors */}
       {loading ? (
@@ -497,6 +503,194 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
         </>
       )}
     </section>
+  );
+}
+
+/* ─────────────────────────── Gmail OAuth card ─────────────────────────── */
+
+type GmailStatus = {
+  configured: boolean;
+  connected: boolean;
+  email: string | null;
+  expiresAt: string | null;
+  redirectUri: string | null;
+};
+
+function GmailCard({
+  onSuccess,
+  onError,
+}: {
+  onSuccess: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [status, setStatus] = useState<GmailStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showSetup, setShowSetup] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/gmail/status")
+      .then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
+      .then(({ data }) => {
+        setStatus(data as GmailStatus);
+        setLoading(false);
+      });
+
+    // Surface the redirect-back result from Google so the user sees what happened.
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("gmail") === "connected") {
+        onSuccess(
+          `Gmail connected${params.get("gmail_email") ? ` as ${params.get("gmail_email")}` : ""}`
+        );
+        const url = new URL(window.location.href);
+        url.searchParams.delete("gmail");
+        url.searchParams.delete("gmail_email");
+        window.history.replaceState({}, "", url.toString());
+      } else if (params.get("gmail_error")) {
+        onError(`Gmail: ${params.get("gmail_error")}`);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("gmail_error");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
+  }, [onSuccess, onError]);
+
+  async function disconnect() {
+    if (!confirm("Disconnect Gmail?")) return;
+    const r = await fetch("/api/admin/gmail/status", { method: "DELETE" });
+    if (r.ok) {
+      onSuccess("Gmail disconnected");
+      setStatus((s) => (s ? { ...s, connected: false, email: null, expiresAt: null } : s));
+    } else {
+      onError("Failed to disconnect Gmail");
+    }
+  }
+
+  function connect() {
+    window.location.href = "/api/admin/gmail/auth";
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5">
+      <div className="flex items-start gap-4 flex-wrap">
+        <div className="w-11 h-11 rounded-xl bg-red-500/15 text-red-300 flex items-center justify-center shrink-0">
+          <FiMail size={18} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-bold text-white">Gmail</h3>
+            <span className="text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md bg-white/[0.04] text-[#999] border border-white/10 uppercase font-mono">
+              OAuth
+            </span>
+            {status?.connected && (
+              <span className="text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">
+                Connected
+              </span>
+            )}
+            {!status?.configured && (
+              <span className="text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20 uppercase">
+                Needs setup
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-[#888] mt-1">
+            Read-only access to your inbox so the Chat tab and News scout can
+            cite newsletter content + recruiter emails.
+          </p>
+          {status?.connected && status.email && (
+            <p className="text-[10px] text-[#666] font-mono mt-1">
+              {status.email}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {status?.configured && !status.connected && (
+            <button
+              type="button"
+              onClick={connect}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black text-xs font-bold shadow-[0_4px_15px_rgba(255,107,0,0.35)] hover:scale-[1.03]"
+            >
+              <FiExternalLink size={11} />
+              Connect Gmail
+            </button>
+          )}
+          {status?.connected && (
+            <button
+              type="button"
+              onClick={disconnect}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs hover:border-red-500/40 hover:text-red-400"
+            >
+              <FiLogOut size={11} />
+              Disconnect
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowSetup((s) => !s)}
+            className="text-[10px] uppercase tracking-widest text-[#888] hover:text-white px-2 py-1"
+          >
+            {showSetup ? "Hide setup" : "Setup"}
+          </button>
+        </div>
+      </div>
+
+      {showSetup && (
+        <div className="mt-4 pt-4 border-t border-white/[0.06] text-[12px] text-[#bbb] space-y-2 leading-relaxed">
+          <p className="font-semibold text-white">First-time setup (one-time):</p>
+          <ol className="list-decimal pl-5 space-y-1 text-[#bbb]">
+            <li>
+              Go to{" "}
+              <a
+                href="https://console.cloud.google.com/apis/credentials"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#ff8c38] hover:underline"
+              >
+                Google Cloud Console → Credentials
+              </a>
+              , create an <strong>OAuth client ID</strong> of type{" "}
+              <em>Web application</em>.
+            </li>
+            <li>
+              Add this exact <strong>Authorized redirect URI</strong>:
+              <code className="block mt-1 p-2 rounded bg-[#0a0a0a] text-[#ff8c38] font-mono break-all">
+                {status?.redirectUri ||
+                  "(set GOOGLE_OAUTH_CLIENT_ID + run schema.sql first, then refresh this page)"}
+              </code>
+            </li>
+            <li>
+              Enable the <strong>Gmail API</strong> for the project at{" "}
+              <a
+                href="https://console.cloud.google.com/apis/library/gmail.googleapis.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#ff8c38] hover:underline"
+              >
+                APIs &amp; Services → Library
+              </a>
+              .
+            </li>
+            <li>
+              Paste the client ID + secret into Vercel env (and{" "}
+              <code>.env.local</code>) as{" "}
+              <code className="text-[#ff8c38]">GOOGLE_OAUTH_CLIENT_ID</code> and{" "}
+              <code className="text-[#ff8c38]">GOOGLE_OAUTH_CLIENT_SECRET</code>.
+            </li>
+            <li>
+              Run the latest <code className="text-[#ff8c38]">supabase/schema.sql</code> so the
+              new <code>gmail_tokens</code> table exists.
+            </li>
+            <li>Redeploy, refresh this page, click <strong>Connect Gmail</strong>.</li>
+          </ol>
+          <p className="text-[10px] text-[#666] mt-3">
+            Scopes requested: <code>gmail.readonly</code> + email. Token is
+            stored in Supabase (service-role only), refreshed automatically.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 

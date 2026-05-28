@@ -107,3 +107,17 @@ alter table public.thoughts enable row level security;
 drop policy if exists "Public can read published thoughts" on public.thoughts;
 create policy "Public can read published thoughts" on public.thoughts
   for select to anon, authenticated using (published = true);
+
+-- ============ Gmail OAuth tokens (singleton row) ============
+create table if not exists public.gmail_tokens (
+  id text primary key default 'singleton',
+  email text,
+  access_token text,
+  refresh_token text,
+  expires_at timestamptz,
+  scope text,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.gmail_tokens enable row level security;
+-- No public read policy. Service-role key only.
