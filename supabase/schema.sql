@@ -131,6 +131,19 @@ create index if not exists personal_notes_event_idx
 alter table public.personal_notes enable row level security;
 -- Service-role only. No public policy.
 
+-- ============ Admin settings (singleton, includes Morning Briefing config) ============
+create table if not exists public.admin_settings (
+  id text primary key default 'singleton',
+  morning_briefing_enabled boolean not null default false,
+  morning_briefing_to text,
+  morning_briefing_last_run_at timestamptz,
+  morning_briefing_last_status text,
+  morning_briefing_last_subject text,
+  updated_at timestamptz not null default now()
+);
+alter table public.admin_settings enable row level security;
+-- Service-role only.
+
 -- ============ Gmail OAuth tokens (singleton row) ============
 create table if not exists public.gmail_tokens (
   id text primary key default 'singleton',

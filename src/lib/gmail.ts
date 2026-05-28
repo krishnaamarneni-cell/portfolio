@@ -1,9 +1,10 @@
 import "server-only";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 
-/** Scopes we request — read-only mailbox + profile (email address). */
+/** Scopes we request — read-only mailbox, send (for Morning Briefing), profile. */
 export const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.send",
   "https://www.googleapis.com/auth/userinfo.email",
   "openid",
 ];
@@ -183,6 +184,71 @@ export type GmailMessageSummary = {
   snippet?: string;
   date?: string;
 };
+
+/** Encode a string into base64url for Gmail's raw-message API. */
+function toBase64Url(s: string): string {
+  return Buffer.from(s, "utf-8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+export async function sendEmail(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const access = await getAccessToken();
+  if (!access) return { ok: false, error: "Gmail not connected" };
+  const row = await getStoredTokens();
+  const from = row?.email || "me";
+  // Build a minimal RFC 2822 MIME message with both text and HTML parts.
+  const boundary = `bnd_${Math.random().toString(36).slice(2)}`;
+  const textPart = opts.text || opts.html.replace(/<[^>]+>/g, "").trim();
+  const mime = [
+    `From: ${from}`,
+    `To: ${opts.to}`,
+    `Subject: ${opts.subject}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: 7bit",
+    "",
+    textPart,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: 7bit",
+    "",
+    opts.html,
+    "",
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
+  const raw = toBase64Url(mime);
+  const r = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${access}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ raw }),
+      cache: "no-store",
+    }
+  );
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    return { ok: false, error: `Gmail send ${r.status}: ${body.slice(0, 200)}` };
+  }
+  const j = (await r.json()) as { id?: string };
+  return { ok: true, id: j.id };
+}
 
 export async function listRecentMessages(opts: {
   query?: string;
