@@ -66,30 +66,49 @@ export default async function NotesPage() {
             {notes.map((n) => (
               <article
                 key={n.id}
-                className="group rounded-2xl bg-[#1a1a1a] border border-white/[0.06] hover:border-[#ff6b00]/30 transition-all duration-300 p-7 lg:p-8"
+                className="group rounded-2xl bg-[#1a1a1a] border border-white/[0.06] hover:border-[#ff6b00]/30 transition-all duration-300 overflow-hidden"
               >
-                <div className="flex items-center gap-3 mb-3 flex-wrap">
-                  <span className="text-[#666] text-xs flex items-center gap-1.5">
-                    <FiCalendar size={11} />
-                    {formatDate(n.published_at || n.created_at)}
-                  </span>
-                  {n.tags.length > 0 && (
-                    <span className="text-[#666] text-xs flex items-center gap-1.5">
-                      <FiTag size={11} />
-                      {n.tags.join(" · ")}
-                    </span>
-                  )}
-                </div>
-                {n.title && (
-                  <h2 className="text-2xl font-bold text-white mb-4 leading-tight group-hover:text-[#ff6b00] transition-colors">
-                    {n.title}
-                  </h2>
+                {n.cover_image_url && (
+                  <div className="relative w-full aspect-[16/7] overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={n.cover_image_url}
+                      alt={n.title || "Note cover"}
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-700"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#1a1a1a] to-transparent pointer-events-none" />
+                    {n.cover_image_credit && (
+                      <p className="absolute bottom-2 right-3 text-[10px] text-white/70 bg-black/40 px-2 py-0.5 rounded font-mono">
+                        {n.cover_image_credit}
+                      </p>
+                    )}
+                  </div>
                 )}
-                <div
-                  className="text-[#ccc] leading-relaxed"
-                  style={{ whiteSpace: "pre-wrap" }}
-                >
-                  {n.body}
+                <div className="p-7 lg:p-8">
+                  <div className="flex items-center gap-3 mb-3 flex-wrap">
+                    <span className="text-[#666] text-xs flex items-center gap-1.5">
+                      <FiCalendar size={11} />
+                      {formatDate(n.published_at || n.created_at)}
+                    </span>
+                    {n.tags.length > 0 && (
+                      <span className="text-[#666] text-xs flex items-center gap-1.5">
+                        <FiTag size={11} />
+                        {n.tags.join(" · ")}
+                      </span>
+                    )}
+                  </div>
+                  {n.title && (
+                    <h2 className="text-2xl font-bold text-white mb-4 leading-tight group-hover:text-[#ff6b00] transition-colors">
+                      {n.title}
+                    </h2>
+                  )}
+                  <div
+                    className="text-[#ccc] leading-relaxed"
+                    style={{ whiteSpace: "pre-wrap" }}
+                  >
+                    {n.body}
+                  </div>
                 </div>
               </article>
             ))}

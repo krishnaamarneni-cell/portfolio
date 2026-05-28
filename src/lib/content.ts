@@ -2,6 +2,8 @@ import { supabasePublic, supabaseAdmin } from "./supabase";
 import { FALLBACK_JOBS, FALLBACK_PROJECTS } from "./content-fallback";
 import { SITE_CONTENT_FALLBACK } from "./site-content-fallback";
 import type {
+  Connector,
+  ConnectorInput,
   Job,
   JobInput,
   Project,
@@ -15,6 +17,7 @@ const JOBS_TABLE = "jobs";
 const PROJECTS_TABLE = "projects";
 const SITE_CONTENT_TABLE = "site_content";
 const THOUGHTS_TABLE = "thoughts";
+const CONNECTORS_TABLE = "connectors";
 
 function deepMerge<T>(base: T, override: unknown): T {
   if (
@@ -230,5 +233,55 @@ export async function updateThought(
 export async function deleteThought(id: string): Promise<void> {
   const client = requireAdminClient();
   const { error } = await client.from(THOUGHTS_TABLE).delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/* ───────────────────────── connectors ─────────────────────────
+ * Server-only. Never exposed to anon — the bearer tokens stored here
+ * are read-only access tokens for external services like WealthClaude.
+ */
+
+export async function fetchConnectors(): Promise<Connector[]> {
+  const client = requireAdminClient();
+  const { data, error } = await client
+    .from(CONNECTORS_TABLE)
+    .select("*")
+    .order("id");
+  if (error) {
+    console.error("[content] fetchConnectors error:", error.message);
+    return [];
+  }
+  return (data ?? []) as Connector[];
+}
+
+export async function fetchConnector(id: string): Promise<Connector | null> {
+  const client = requireAdminClient();
+  const { data, error } = await client
+    .from(CONNECTORS_TABLE)
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    console.error("[content] fetchConnector error:", error.message);
+    return null;
+  }
+  return (data as Connector) ?? null;
+}
+
+export async function upsertConnector(input: ConnectorInput): Promise<Connector> {
+  const client = requireAdminClient();
+  const payload = { ...input, updated_at: new Date().toISOString() };
+  const { data, error } = await client
+    .from(CONNECTORS_TABLE)
+    .upsert(payload)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Connector;
+}
+
+export async function deleteConnector(id: string): Promise<void> {
+  const client = requireAdminClient();
+  const { error } = await client.from(CONNECTORS_TABLE).delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

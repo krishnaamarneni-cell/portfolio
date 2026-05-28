@@ -77,6 +77,8 @@ export default function ThoughtsEditor({ onSuccess, onError }: Props) {
         body: t.body,
         raw_text: t.raw_text,
         tags: t.tags,
+        cover_image_url: t.cover_image_url,
+        cover_image_credit: t.cover_image_credit,
         published: !t.published,
         published_at: t.published_at,
       },
@@ -292,6 +294,10 @@ function ThoughtModal({
       patch("title", data.title || form.title);
       patch("body", data.body || form.body);
       patch("tags", Array.isArray(data.tags) ? data.tags : form.tags);
+      if (data.cover_image_url) {
+        patch("cover_image_url", data.cover_image_url);
+        patch("cover_image_credit", data.cover_image_credit ?? null);
+      }
       patch("raw_text", raw);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Network error");
@@ -318,9 +324,17 @@ function ThoughtModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 overflow-y-auto">
-      <div className="w-full max-w-3xl bg-[#0f0f0f] border border-white/[0.08] rounded-3xl shadow-[0_30px_80px_rgba(0,0,0,0.7)] my-8">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] sticky top-0 bg-[#0f0f0f]/95 backdrop-blur-xl rounded-t-3xl">
+    <div
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-3xl bg-[#0f0f0f] border border-white/[0.08] rounded-3xl shadow-[0_30px_80px_rgba(0,0,0,0.7)] flex flex-col"
+        style={{ maxHeight: "calc(100vh - 32px)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header — fixed at top of the modal box */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] bg-[#0f0f0f]/95 rounded-t-3xl shrink-0">
           <h2 className="font-bold text-lg">
             {initial ? "Edit Note" : "New Note"}
           </h2>
@@ -333,7 +347,8 @@ function ThoughtModal({
           </button>
         </div>
 
-        <form onSubmit={submit} className="p-6 space-y-5">
+        {/* Scrolling form body */}
+        <form onSubmit={submit} className="p-6 space-y-5 overflow-y-auto">
           <div className="rounded-2xl border border-[#ff6b00]/20 bg-gradient-to-br from-[#ff6b00]/[0.05] to-transparent p-4">
             <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38] mb-2">
               Raw note — write freely
@@ -386,6 +401,52 @@ function ThoughtModal({
               onChange={(e) => patch("body", e.target.value)}
               className={textareaClass}
               placeholder="Cleaned-up post body. Edit freely after Format with AI."
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#888] mb-2">
+              Cover image
+            </label>
+            {form.cover_image_url ? (
+              <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-[#1a1a1a] mb-2 relative group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={form.cover_image_url}
+                  alt="Cover"
+                  className="w-full h-40 object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    patch("cover_image_url", null);
+                    patch("cover_image_credit", null);
+                  }}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 border border-white/10 text-white text-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Remove image"
+                >
+                  <FiX size={13} />
+                </button>
+                {form.cover_image_credit && (
+                  <p className="absolute bottom-2 left-3 text-[10px] text-white/80 bg-black/40 px-2 py-0.5 rounded">
+                    {form.cover_image_credit}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-[#666] mb-2">
+                Click <span className="text-[#ff8c38]">Format with AI</span> and we&apos;ll
+                search Unsplash for a matching photo. Or paste a URL below.
+              </p>
+            )}
+            <input
+              type="url"
+              value={form.cover_image_url ?? ""}
+              onChange={(e) =>
+                patch("cover_image_url", e.target.value || null)
+              }
+              className={inputClass}
+              placeholder="https://images.unsplash.com/..."
             />
           </div>
 

@@ -19,6 +19,8 @@ import {
   FiLayout,
   FiZap,
   FiActivity,
+  FiLink,
+  FiMessageSquare,
 } from "react-icons/fi";
 import {
   EMPTY_JOB,
@@ -31,8 +33,10 @@ import {
 import type { SiteContent } from "@/lib/site-content-types";
 import SiteContentEditor from "./SiteContentEditor";
 import ThoughtsEditor from "./ThoughtsEditor";
+import ConnectorsEditor from "./ConnectorsEditor";
+import AdminChat from "./AdminChat";
 
-type Tab = "content" | "thoughts" | "jobs" | "projects";
+type Tab = "content" | "thoughts" | "jobs" | "projects" | "connectors" | "chat";
 
 type Props = {
   session: { email: string };
@@ -164,6 +168,8 @@ export default function AdminDashboard({
     { id: "thoughts" as const, label: "Notes", icon: FiZap, hint: "Quick takes + AI formatting" },
     { id: "jobs" as const, label: "Jobs", icon: FiBriefcase, count: jobs.length, hint: "Experience timeline" },
     { id: "projects" as const, label: "Projects", icon: FiFolder, count: projects.length, hint: "Featured work" },
+    { id: "connectors" as const, label: "Connectors", icon: FiLink, hint: "WealthClaude + other APIs" },
+    { id: "chat" as const, label: "Chat", icon: FiMessageSquare, hint: "Talk to your data with Groq" },
   ];
 
   return (
@@ -307,6 +313,13 @@ export default function AdminDashboard({
                 onSuccess={(m) => flash("ok", m)}
                 onError={(m) => flash("err", m)}
               />
+            ) : tab === "connectors" ? (
+              <ConnectorsEditor
+                onSuccess={(m) => flash("ok", m)}
+                onError={(m) => flash("err", m)}
+              />
+            ) : tab === "chat" ? (
+              <AdminChat onError={(m) => flash("err", m)} />
             ) : tab === "jobs" ? (
           <section>
             <div className="flex items-center justify-between mb-5">

@@ -38,6 +38,8 @@ export type Thought = {
   body: string;
   raw_text: string | null;
   tags: string[];
+  cover_image_url: string | null;
+  cover_image_credit: string | null;
   published: boolean;
   published_at: string | null;
   created_at?: string;
@@ -51,9 +53,22 @@ export const EMPTY_THOUGHT: ThoughtInput = {
   body: "",
   raw_text: null,
   tags: [],
+  cover_image_url: null,
+  cover_image_credit: null,
   published: false,
   published_at: null,
 };
+
+export type Connector = {
+  id: string;
+  label: string;
+  base_url: string;
+  bearer_token: string | null;
+  enabled: boolean;
+  updated_at?: string;
+};
+
+export type ConnectorInput = Omit<Connector, "updated_at">;
 
 export const EMPTY_JOB: JobInput = {
   title: "",

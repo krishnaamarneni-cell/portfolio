@@ -71,11 +71,33 @@ create table if not exists public.thoughts (
   body text not null default '',
   raw_text text,
   tags text[] not null default '{}',
+  cover_image_url text,
+  cover_image_credit text,
   published boolean not null default false,
   published_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Add cover_image columns to existing installs.
+alter table public.thoughts
+  add column if not exists cover_image_url text,
+  add column if not exists cover_image_credit text;
+
+-- ============ Connectors (admin-only — secrets, never exposed to anon) ============
+create table if not exists public.connectors (
+  id text primary key,        -- e.g. 'wealthclaude'
+  label text not null default '',
+  base_url text not null default '',
+  bearer_token text,           -- READ-only token from the target service
+  enabled boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.connectors enable row level security;
+
+-- No public read policy. Service-role key (server-side admin code) is the
+-- only thing that can read or write this table.
 
 create index if not exists thoughts_published_idx
   on public.thoughts (published, published_at desc);
