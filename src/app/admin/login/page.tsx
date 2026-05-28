@@ -3,7 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FiLock, FiMail, FiArrowRight, FiArrowLeft } from "react-icons/fi";
+import {
+  FiLock,
+  FiMail,
+  FiArrowRight,
+  FiArrowLeft,
+  FiEye,
+  FiEyeOff,
+  FiHelpCircle,
+} from "react-icons/fi";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -11,16 +19,21 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
+    // Trim accidental whitespace from autofill / copy-paste.
+    const cleanedEmail = email.trim();
+    const cleanedPassword = password.replace(/^\s+|\s+$/g, "");
     try {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: cleanedEmail, password: cleanedPassword }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -101,20 +114,59 @@ export default function AdminLoginPage() {
                 />
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none transition-colors text-white placeholder:text-[#555]"
+                  className="w-full pl-11 pr-12 py-3 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none transition-colors text-white placeholder:text-[#555]"
                   placeholder="••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-md text-[#777] hover:text-white hover:bg-white/[0.04]"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <FiEyeOff size={14} /> : <FiEye size={14} />}
+                </button>
               </div>
             </div>
 
             {error && (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                 {error}
+                <button
+                  type="button"
+                  onClick={() => setShowHelp(true)}
+                  className="block text-xs underline mt-1 text-red-300/80 hover:text-red-200"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
+            {showHelp && (
+              <div className="rounded-xl border border-[#ff6b00]/30 bg-[#ff6b00]/[0.06] p-4 text-xs leading-relaxed text-[#ccc] space-y-2">
+                <div className="flex items-start gap-2">
+                  <FiHelpCircle className="text-[#ff8c38] mt-0.5 shrink-0" size={14} />
+                  <p className="font-bold text-[#ff8c38]">How to reset your password</p>
+                </div>
+                <p>
+                  Open a terminal in the project folder and run:
+                </p>
+                <pre className="bg-black/40 rounded-md p-2 font-mono text-[11px] text-[#ffaa66] overflow-x-auto">
+                  node scripts/set-admin-password.mjs &quot;YourNewPassword&quot;
+                </pre>
+                <p>
+                  Then restart <code className="text-[#ff8c38]">npm run dev</code> and sign in
+                  with the new password.
+                </p>
+                <p className="text-[#888]">
+                  Common typos: the password is case-sensitive. Special characters like{" "}
+                  <code className="text-[#ff8c38]">#</code> count. Avoid browser autofill — try an
+                  incognito window if a saved password is interfering.
+                </p>
               </div>
             )}
 

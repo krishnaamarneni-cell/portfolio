@@ -14,106 +14,221 @@ function BookCover({ book }: { book: BookSection }) {
       viewBox="0 0 400 600"
       className="w-full h-full"
       xmlns="http://www.w3.org/2000/svg"
+      preserveAspectRatio="xMidYMid slice"
       aria-label={`${book.title} book cover`}
     >
       <defs>
-        <linearGradient id="bookBg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#0a0a0a" />
-          <stop offset="55%" stopColor="#1a0a02" />
-          <stop offset="100%" stopColor="#2a0f02" />
+        {/* Sky → horizon → asphalt vertical gradient */}
+        <linearGradient id="bkSky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#050505" />
+          <stop offset="45%" stopColor="#1f0f04" />
+          <stop offset="62%" stopColor="#5a2906" />
+          <stop offset="68%" stopColor="#ff7a1f" />
+          <stop offset="72%" stopColor="#3a1505" />
+          <stop offset="100%" stopColor="#0a0604" />
         </linearGradient>
-        <linearGradient id="orange" x1="0" y1="0" x2="1" y2="0">
+
+        <linearGradient id="bkOrange" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="#ff6b00" />
-          <stop offset="100%" stopColor="#ff8c38" />
+          <stop offset="100%" stopColor="#ffb066" />
         </linearGradient>
-        <linearGradient id="roadFade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ff6b00" stopOpacity="0" />
-          <stop offset="40%" stopColor="#ff6b00" stopOpacity="0.15" />
-          <stop offset="100%" stopColor="#ff6b00" stopOpacity="0.6" />
-        </linearGradient>
-        <radialGradient id="sunGlow" cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0%" stopColor="#ffaa66" stopOpacity="0.6" />
-          <stop offset="60%" stopColor="#ff6b00" stopOpacity="0.25" />
+
+        {/* Sun disc at horizon */}
+        <radialGradient id="bkSun" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stopColor="#fff2d6" />
+          <stop offset="35%" stopColor="#ffb766" />
+          <stop offset="65%" stopColor="#ff7a1f" stopOpacity="0.7" />
           <stop offset="100%" stopColor="#ff6b00" stopOpacity="0" />
         </radialGradient>
-        <filter id="grain">
-          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" />
-          <feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.04 0" />
+
+        {/* Subtle road darkening */}
+        <linearGradient id="bkRoad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0a0604" stopOpacity="0" />
+          <stop offset="30%" stopColor="#0a0604" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.95" />
+        </linearGradient>
+
+        {/* Faint paper grain */}
+        <filter id="bkGrain">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="5" />
+          <feColorMatrix values="0 0 0 0 1  0 0 0 0 0.85  0 0 0 0 0.6  0 0 0 0.045 0" />
         </filter>
+
+        {/* Title text shadow */}
+        <filter id="bkTitleShadow" x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+          <feOffset dx="0" dy="2" />
+          <feComponentTransfer><feFuncA type="linear" slope="0.55" /></feComponentTransfer>
+          <feMerge>
+            <feMergeNode />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+
+        <clipPath id="bkRoadClip">
+          <path d="M 200 372 L 30 600 L 370 600 Z" />
+        </clipPath>
       </defs>
 
-      <rect width="400" height="600" fill="url(#bookBg)" />
-      <circle cx="200" cy="360" r="180" fill="url(#sunGlow)" />
+      {/* Background sky + horizon */}
+      <rect width="400" height="600" fill="url(#bkSky)" />
 
-      <g opacity="0.85">
-        <path d="M 200 360 L 60 600 L 340 600 Z" fill="url(#roadFade)" />
-        <g stroke="#ff8c38" strokeLinecap="round" opacity="0.9">
-          <line x1="200" y1="378" x2="200" y2="390" strokeWidth="1.2" />
-          <line x1="200" y1="408" x2="200" y2="426" strokeWidth="1.6" />
-          <line x1="200" y1="446" x2="200" y2="470" strokeWidth="2.2" />
-          <line x1="200" y1="494" x2="200" y2="524" strokeWidth="2.8" />
-          <line x1="200" y1="552" x2="200" y2="588" strokeWidth="3.5" />
+      {/* Distant mountains layer 1 */}
+      <path
+        d="M 0 372 L 30 360 L 60 366 L 95 350 L 130 362 L 165 348 L 200 360 L 235 350 L 270 364 L 310 354 L 345 366 L 400 358 L 400 372 Z"
+        fill="#1a0b04"
+        opacity="0.85"
+      />
+      {/* Distant mountains layer 2 (closer, slightly lighter) */}
+      <path
+        d="M 0 374 L 40 368 L 85 374 L 130 366 L 175 376 L 220 368 L 270 378 L 320 370 L 370 376 L 400 372 L 400 380 L 0 380 Z"
+        fill="#2a1206"
+        opacity="0.7"
+      />
+
+      {/* Sun glow at horizon center */}
+      <ellipse cx="200" cy="372" rx="120" ry="60" fill="url(#bkSun)" />
+      {/* Sun disc */}
+      <circle cx="200" cy="372" r="22" fill="#fff2d6" opacity="0.95" />
+      <circle cx="200" cy="372" r="22" fill="url(#bkSun)" />
+
+      {/* Horizon line */}
+      <line x1="0" y1="372" x2="400" y2="372" stroke="#ff8c38" strokeOpacity="0.4" strokeWidth="0.6" />
+
+      {/* Road surface (clipped to triangle) */}
+      <g clipPath="url(#bkRoadClip)">
+        <rect x="0" y="372" width="400" height="228" fill="#1a0e06" />
+        <rect x="0" y="372" width="400" height="228" fill="url(#bkRoad)" />
+
+        {/* Center dashed lane line */}
+        <g stroke="#ffd9a8" strokeLinecap="round" opacity="0.95">
+          <line x1="200" y1="385" x2="200" y2="395" strokeWidth="1.4" />
+          <line x1="200" y1="410" x2="200" y2="425" strokeWidth="1.8" />
+          <line x1="200" y1="445" x2="200" y2="465" strokeWidth="2.4" />
+          <line x1="200" y1="488" x2="200" y2="512" strokeWidth="3.2" />
+          <line x1="200" y1="540" x2="200" y2="572" strokeWidth="4.2" />
         </g>
+
+        {/* Subtle warm wash bouncing off road */}
+        <ellipse cx="200" cy="500" rx="220" ry="120" fill="#ff7a1f" opacity="0.08" />
       </g>
 
-      <line x1="40" y1="360" x2="360" y2="360" stroke="#ff6b00" strokeOpacity="0.35" strokeWidth="1" />
-
-      <g transform="translate(170, 340)" fill="#0a0a0a" stroke="#ff6b00" strokeWidth="1.2">
-        <path d="M 0 18 Q 4 6 14 4 L 38 4 Q 50 4 56 12 L 60 18 Z" />
-        <circle cx="14" cy="20" r="3" fill="#ff6b00" />
-        <circle cx="48" cy="20" r="3" fill="#ff6b00" />
+      {/* Header — publisher mark */}
+      <g>
+        <line x1="80" y1="50" x2="160" y2="50" stroke="#ff8c38" strokeOpacity="0.5" strokeWidth="0.8" />
+        <line x1="240" y1="50" x2="320" y2="50" stroke="#ff8c38" strokeOpacity="0.5" strokeWidth="0.8" />
+        <text x="200" y="54" textAnchor="middle" fill="#ffaa66" fontFamily="ui-monospace, SFMono-Regular, monospace" fontSize="8" letterSpacing="3.5">
+          {book.cover_publisher_text}
+        </text>
       </g>
-      <path d="M 175 360 L 140 420 L 195 420 Z" fill="#ff8c38" opacity="0.18" />
-      <path d="M 225 360 L 205 420 L 260 420 Z" fill="#ff8c38" opacity="0.18" />
 
-      <text x="200" y="60" textAnchor="middle" fill="#ff6b00" fontFamily="ui-monospace, SFMono-Regular, monospace" fontSize="9" letterSpacing="4">
-        {book.cover_publisher_text}
-      </text>
-      <line x1="160" y1="74" x2="240" y2="74" stroke="#ff6b00" strokeOpacity="0.4" strokeWidth="0.8" />
-
-      <text x="200" y="160" textAnchor="middle" fill="url(#orange)" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="48" fontWeight="900" letterSpacing="-1">
+      {/* Title — DRIVE TO (smaller) */}
+      <text
+        x="200"
+        y="148"
+        textAnchor="middle"
+        fill="#ffd9a8"
+        fontFamily="Georgia, 'Times New Roman', serif"
+        fontSize="22"
+        fontWeight="400"
+        letterSpacing="14"
+        filter="url(#bkTitleShadow)"
+      >
         {book.cover_title_line_1}
       </text>
-      <text x="200" y="212" textAnchor="middle" fill="#ffffff" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="48" fontWeight="900" letterSpacing="-1">
+
+      {/* Title — FREEDOM (huge, dramatic) */}
+      <text
+        x="200"
+        y="232"
+        textAnchor="middle"
+        fill="url(#bkOrange)"
+        fontFamily="Georgia, 'Times New Roman', serif"
+        fontSize="68"
+        fontWeight="700"
+        letterSpacing="2"
+        filter="url(#bkTitleShadow)"
+      >
         {book.cover_title_line_2}
       </text>
 
-      <g transform="translate(200, 240)">
-        <line x1="-50" y1="0" x2="-10" y2="0" stroke="#ff6b00" strokeWidth="1" />
-        <circle cx="0" cy="0" r="2.5" fill="#ff6b00" />
-        <line x1="10" y1="0" x2="50" y2="0" stroke="#ff6b00" strokeWidth="1" />
+      {/* Ornament divider */}
+      <g transform="translate(200, 268)">
+        <line x1="-70" y1="0" x2="-12" y2="0" stroke="#ff8c38" strokeWidth="0.6" />
+        <circle cx="-6" cy="0" r="1.2" fill="#ff8c38" />
+        <circle cx="0" cy="0" r="2" fill="#ff8c38" />
+        <circle cx="6" cy="0" r="1.2" fill="#ff8c38" />
+        <line x1="12" y1="0" x2="70" y2="0" stroke="#ff8c38" strokeWidth="0.6" />
       </g>
 
-      {splitSubtitle(book.cover_subtitle).map((line, i) => (
+      {/* Subtitle */}
+      {splitSubtitleLines(book.cover_subtitle).map((line, i, arr) => (
         <text
           key={i}
           x="200"
-          y={272 + i * 20}
+          y={296 + i * 22}
           textAnchor="middle"
-          fill="#cccccc"
-          fontFamily="Georgia, serif"
-          fontSize="14"
+          fill="#ede1d0"
+          fontFamily="Georgia, 'Times New Roman', serif"
+          fontSize={arr.length > 2 ? 13 : 15}
           fontStyle="italic"
+          letterSpacing="0.5"
         >
           {line}
         </text>
       ))}
 
-      <text x="200" y="558" textAnchor="middle" fill="#ffffff" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="16" fontWeight="700" letterSpacing="3">
-        {book.cover_author}
-      </text>
+      {/* Author block at bottom */}
+      <g>
+        <line x1="120" y1="546" x2="180" y2="546" stroke="#ff8c38" strokeOpacity="0.5" strokeWidth="0.6" />
+        <line x1="220" y1="546" x2="280" y2="546" stroke="#ff8c38" strokeOpacity="0.5" strokeWidth="0.6" />
+        <text x="200" y="550" textAnchor="middle" fill="#ffaa66" fontFamily="ui-monospace, SFMono-Regular, monospace" fontSize="8" letterSpacing="3">
+          FIRST EDITION
+        </text>
+        <text
+          x="200"
+          y="578"
+          textAnchor="middle"
+          fill="#ffffff"
+          fontFamily="Georgia, 'Times New Roman', serif"
+          fontSize="17"
+          fontWeight="700"
+          letterSpacing="4"
+        >
+          {book.cover_author}
+        </text>
+      </g>
 
-      <rect x="10" y="10" width="380" height="580" fill="none" stroke="#ff6b00" strokeOpacity="0.25" strokeWidth="1" rx="4" />
-      <rect width="400" height="600" filter="url(#grain)" opacity="0.5" />
+      {/* Paper grain */}
+      <rect width="400" height="600" filter="url(#bkGrain)" opacity="0.6" pointerEvents="none" />
+
+      {/* Vignette */}
+      <rect width="400" height="600" fill="url(#bkVignette)" />
+      <defs>
+        <radialGradient id="bkVignette" cx="0.5" cy="0.5" r="0.7">
+          <stop offset="60%" stopColor="#000000" stopOpacity="0" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.55" />
+        </radialGradient>
+      </defs>
     </svg>
   );
 }
 
-function splitSubtitle(s: string): string[] {
-  if (s.length <= 30) return [s];
+function splitSubtitleLines(s: string): string[] {
+  if (s.length <= 28) return [s];
   const words = s.split(" ");
-  const half = Math.ceil(words.length / 2);
-  return [words.slice(0, half).join(" "), words.slice(half).join(" ")];
+  // Try to find a natural breakpoint near the middle.
+  const targetLen = Math.ceil(s.length / 2);
+  let acc = 0;
+  let breakAt = words.length;
+  for (let i = 0; i < words.length; i++) {
+    acc += words[i].length + 1;
+    if (acc >= targetLen) {
+      breakAt = i + 1;
+      break;
+    }
+  }
+  return [words.slice(0, breakAt).join(" "), words.slice(breakAt).join(" ")];
 }
 
 export default function Book() {
