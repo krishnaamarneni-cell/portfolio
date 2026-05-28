@@ -17,6 +17,7 @@ import {
   mcpToolsToGroqTools,
   type McpTool,
 } from "@/lib/mcp";
+import { resolveModel } from "@/lib/groq-models";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -81,12 +82,13 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { messages?: ChatMessage[] };
+  let body: { messages?: ChatMessage[]; model?: string };
   try {
-    body = (await request.json()) as { messages?: ChatMessage[] };
+    body = (await request.json()) as { messages?: ChatMessage[]; model?: string };
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  const chosenModel = resolveModel("chat", body.model);
   const messages = (body.messages ?? []).filter(
     (m) => m && (m.role === "user" || m.role === "assistant") && m.content
   );
@@ -211,7 +213,7 @@ ${restBlob ? `# Connected services (snapshots)\n${restBlob}\n` : ""}${mcpBlob ? 
   try {
     for (let i = 0; i < MAX_ROUNDS; i++) {
       const completion = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
+        model: chosenModel,
         temperature: 0.3,
         max_tokens: 1500,
         messages: loop as never,

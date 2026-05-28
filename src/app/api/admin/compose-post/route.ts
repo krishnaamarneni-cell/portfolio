@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { resolveModel } from "@/lib/groq-models";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,6 +9,7 @@ type ComposeRequest = {
   topic?: string;
   hint?: string;
   voice?: string;
+  model?: string;
 };
 
 const SYSTEM_PROMPT = `You are Krishna Amarneni's social media writer. Krishna is a SAP consultant turned full-stack builder, author of "Drive to Freedom" (a wealth-building book), creator of WealthClaude (AI portfolio platform), Lucy AI agent, and lives in New Jersey. His voice is candid, smart, direct, and a little contrarian.
@@ -86,7 +88,7 @@ export async function POST(request: Request) {
     const { default: Groq } = await import("groq-sdk");
     const groq = new Groq({ apiKey });
     const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: resolveModel("writing", body.model),
       temperature: 0.55,
       max_tokens: 2200,
       response_format: { type: "json_object" },

@@ -17,6 +17,10 @@ import {
   FiTrash2,
 } from "react-icons/fi";
 import { FaXTwitter, FaLinkedinIn, FaInstagram } from "react-icons/fa6";
+import {
+  modelsFor,
+  DEFAULT_WRITING_MODEL,
+} from "@/lib/groq-models";
 
 type PlatformKey = "linkedin" | "x" | "instagram";
 
@@ -139,6 +143,22 @@ export default function SocialEditor({
   const [hint, setHint] = useState("");
   const [composing, setComposing] = useState(false);
   const [composition, setComposition] = useState<Composition>(EMPTY);
+  const [writeModel, setWriteModel] = useState<string>(DEFAULT_WRITING_MODEL);
+
+  // Hydrate persisted writing-model choice once on mount.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("krishna_admin_social_model");
+      if (saved) setWriteModel(saved);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("krishna_admin_social_model", writeModel);
+    } catch {}
+  }, [writeModel]);
+
+  const writingOptions = modelsFor("writing");
 
   const [imageUrl, setImageUrl] = useState("");
   const [imageCredit, setImageCredit] = useState<string | null>(null);
@@ -215,7 +235,7 @@ export default function SocialEditor({
       const res = await fetch("/api/admin/compose-post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, hint }),
+        body: JSON.stringify({ topic, hint, model: writeModel }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -510,9 +530,30 @@ export default function SocialEditor({
 
       {/* Topic + compose */}
       <div className="rounded-2xl border border-[#ff6b00]/20 bg-gradient-to-br from-[#ff6b00]/[0.05] to-transparent p-5 space-y-3">
-        <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
-          Topic
-        </label>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
+            Topic
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
+              Model
+            </span>
+            <select
+              value={writeModel}
+              onChange={(e) => setWriteModel(e.target.value)}
+              className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs text-[#ccc] focus:outline-none max-w-[260px]"
+              title={
+                writingOptions.find((m) => m.id === writeModel)?.blurb ?? ""
+              }
+            >
+              {writingOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} · ${m.inputPerM}/${m.outputPerM}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         <textarea
           rows={3}
           value={topic}
@@ -526,7 +567,10 @@ export default function SocialEditor({
           className={inputClass}
           placeholder="Optional voice hint (e.g. 'punchier', 'frame as a lesson', 'tell a quick story')"
         />
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-[10px] text-[#666] font-mono">
+            {writingOptions.find((m) => m.id === writeModel)?.blurb}
+          </p>
           <button
             type="button"
             onClick={compose}

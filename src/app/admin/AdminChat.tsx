@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { FiSend, FiZap, FiTrash2 } from "react-icons/fi";
+import { modelsFor, DEFAULT_CHAT_MODEL } from "@/lib/groq-models";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -20,7 +21,23 @@ export default function AdminChat({
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [model, setModel] = useState<string>(DEFAULT_CHAT_MODEL);
   const scrollerRef = useRef<HTMLDivElement>(null);
+
+  const chatOptions = modelsFor("chat");
+
+  // Persist model choice across reloads.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("krishna_admin_chat_model");
+      if (saved) setModel(saved);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("krishna_admin_chat_model", model);
+    } catch {}
+  }, [model]);
 
   useEffect(() => {
     scrollerRef.current?.scrollTo({
@@ -40,7 +57,7 @@ export default function AdminChat({
       const res = await fetch("/api/admin/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next }),
+        body: JSON.stringify({ messages: next, model }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -69,7 +86,7 @@ export default function AdminChat({
 
   return (
     <section className="flex flex-col" style={{ height: "calc(100vh - 240px)", minHeight: 500 }}>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h2 className="text-xl font-bold">Chat</h2>
           <p className="text-xs text-[#666] mt-1">
@@ -77,16 +94,34 @@ export default function AdminChat({
             portfolio (via connected services).
           </p>
         </div>
-        {messages.length > 0 && (
-          <button
-            type="button"
-            onClick={clear}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs hover:border-red-500/40 hover:text-red-400 transition-colors"
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
+            Model
+          </span>
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            disabled={sending}
+            className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs text-[#ccc] focus:outline-none max-w-[280px] disabled:opacity-60"
+            title={chatOptions.find((m) => m.id === model)?.blurb ?? ""}
           >
-            <FiTrash2 size={11} />
-            Clear
-          </button>
-        )}
+            {chatOptions.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label} · ${m.inputPerM}/${m.outputPerM}
+              </option>
+            ))}
+          </select>
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={clear}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs hover:border-red-500/40 hover:text-red-400 transition-colors"
+            >
+              <FiTrash2 size={11} />
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       <div

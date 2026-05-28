@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { resolveModel } from "@/lib/groq-models";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type FormatRequest = { raw?: string; hint?: string; skipImage?: boolean };
+type FormatRequest = { raw?: string; hint?: string; skipImage?: boolean; model?: string };
 
 type FormatResponse = {
   title: string;
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
     const { default: Groq } = await import("groq-sdk");
     const groq = new Groq({ apiKey });
     const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: resolveModel("writing", body.model),
       temperature: 0.4,
       max_tokens: 1500,
       response_format: { type: "json_object" },
