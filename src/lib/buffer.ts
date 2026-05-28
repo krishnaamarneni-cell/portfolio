@@ -110,46 +110,230 @@ export type BufferSentPost = {
   metrics: BufferPostMetrics;
 };
 
+/** Normalize a Buffer metric field name → our canonical key. */
+const METRIC_ALIASES: Record<string, keyof BufferPostMetrics> = {
+  // direct
+  reach: "reach",
+  impressions: "impressions",
+  clicks: "clicks",
+  likes: "likes",
+  comments: "comments",
+  shares: "shares",
+  reactions: "reactions",
+  replies: "replies",
+  retweets: "retweets",
+  saves: "saves",
+  videoViews: "videoViews",
+  engagementRate: "engagementRate",
+  // common Buffer variants
+  likeCount: "likes",
+  commentCount: "comments",
+  shareCount: "shares",
+  impressionCount: "impressions",
+  reachCount: "reach",
+  clickCount: "clicks",
+  videoViewCount: "videoViews",
+  videoPlays: "videoViews",
+  retweetCount: "retweets",
+  replyCount: "replies",
+  saveCount: "saves",
+  reactionCount: "reactions",
+  engagement: "reactions",
+  engagements: "reactions",
+};
+
+type IntrospectField = {
+  name: string;
+  type: {
+    name?: string;
+    kind?: string;
+    ofType?: { name?: string; kind?: string; ofType?: { name?: string } };
+  };
+};
+
+type SchemaInfo = {
+  /** scalar field names actually present on Post */
+  postFields: Set<string>;
+  /** input field names PostsInput accepts */
+  postsInputFields: Set<string>;
+  /** if PostMetric is a concrete object: its scalar field names */
+  metricScalarFields: string[];
+  /** if PostMetric is a union/interface: variant types + their scalar fields */
+  metricVariants: Array<{ typeName: string; scalarFields: string[] }>;
+};
+
+let cachedSchema: SchemaInfo | null = null;
+
+/** Returns the unwrapped scalar type name, or null if the field isn't a scalar. */
+function unwrapScalar(t: IntrospectField["type"]): string | null {
+  let cur: { kind?: string; name?: string; ofType?: { name?: string; kind?: string; ofType?: { name?: string } } } = t;
+  while (cur && cur.kind && (cur.kind === "NON_NULL" || cur.kind === "LIST")) {
+    cur = cur.ofType || {};
+  }
+  if (!cur) return null;
+  if (cur.kind === "SCALAR" || cur.kind === "ENUM") return cur.name ?? null;
+  return null;
+}
+
+async function discoverSchema(
+  token: string
+): Promise<SchemaInfo | { error: string }> {
+  if (cachedSchema) return cachedSchema;
+  const QUERY = `query {
+    postsInput: __type(name: "PostsInput") {
+      inputFields { name }
+    }
+    post: __type(name: "Post") {
+      kind
+      fields { name type { name kind ofType { name kind ofType { name } } } }
+    }
+    postMetric: __type(name: "PostMetric") {
+      kind
+      fields { name type { name kind ofType { name kind ofType { name } } } }
+      possibleTypes {
+        name
+        fields { name type { name kind ofType { name kind ofType { name } } } }
+      }
+    }
+  }`;
+  const j = await bufferGraphQL<{
+    postsInput?: { inputFields?: Array<{ name: string }> };
+    post?: { fields?: IntrospectField[] };
+    postMetric?: {
+      kind?: string;
+      fields?: IntrospectField[];
+      possibleTypes?: Array<{ name: string; fields?: IntrospectField[] }>;
+    };
+  }>(token, QUERY);
+  if (j.errors && j.errors.length) {
+    return { error: j.errors.map((e) => e.message).join("; ") };
+  }
+  const postFields = new Set<string>(
+    (j.data?.post?.fields ?? []).map((f) => f.name)
+  );
+  const postsInputFields = new Set<string>(
+    (j.data?.postsInput?.inputFields ?? []).map((f) => f.name)
+  );
+
+  const metric = j.data?.postMetric;
+  const metricScalarFields: string[] = [];
+  const metricVariants: SchemaInfo["metricVariants"] = [];
+  if (metric) {
+    for (const f of metric.fields ?? []) {
+      if (unwrapScalar(f.type)) metricScalarFields.push(f.name);
+    }
+    for (const v of metric.possibleTypes ?? []) {
+      const scalars: string[] = [];
+      for (const f of v.fields ?? []) {
+        if (unwrapScalar(f.type)) scalars.push(f.name);
+      }
+      if (scalars.length > 0) {
+        metricVariants.push({ typeName: v.name, scalarFields: scalars });
+      }
+    }
+  }
+
+  const info: SchemaInfo = {
+    postFields,
+    postsInputFields,
+    metricScalarFields,
+    metricVariants,
+  };
+  cachedSchema = info;
+  return info;
+}
+
+/** Build the metrics { ... } sub-selection from discovered schema. */
+function buildMetricsSelection(info: SchemaInfo): string {
+  // Always include __typename so we can dispatch unions client-side.
+  const parts: string[] = ["__typename"];
+  for (const f of info.metricScalarFields) parts.push(f);
+  for (const v of info.metricVariants) {
+    parts.push(
+      `... on ${v.typeName} { ${v.scalarFields.join(" ")} }`
+    );
+  }
+  return parts.join(" ");
+}
+
+/** Build the Post { ... } sub-selection from discovered schema, asking only
+ *  for fields we know how to consume. */
+function buildPostSelection(info: SchemaInfo, metricsBody: string): string {
+  const wanted = ["id", "text", "status", "sentAt", "dueAt"];
+  const scalarParts = wanted.filter((f) => info.postFields.has(f));
+  const parts: string[] = [...scalarParts];
+  if (info.postFields.has("channel")) {
+    parts.push(`channel { id name service }`);
+  }
+  if (info.postFields.has("metrics")) {
+    parts.push(`metrics { ${metricsBody} }`);
+  } else if (info.postFields.has("analytics")) {
+    parts.push(`analytics { ${metricsBody} }`);
+  }
+  return parts.join(" ");
+}
+
+/** Lower-case + sum the canonical metrics out of whatever shape Buffer returned. */
+function normalizeMetrics(raw: Record<string, unknown> | null | undefined): BufferPostMetrics {
+  if (!raw || typeof raw !== "object") return {};
+  const out: BufferPostMetrics = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (k === "__typename") continue;
+    if (typeof v !== "number" || !Number.isFinite(v)) continue;
+    const canonical = METRIC_ALIASES[k];
+    if (canonical) {
+      out[canonical] = (out[canonical] ?? 0) + v;
+    }
+  }
+  return out;
+}
+
 /**
- * Try to fetch recent sent posts + analytics for one channel.
+ * Fetch recent sent posts + analytics for one channel.
  *
- * Buffer's GraphQL schema has shifted around the analytics field a few times
- * (Buffer Classic Analyze → "Buffer Analyze" → today's `metrics`/`analytics`
- * field on Post), so we try the most likely query first and degrade
- * gracefully — if Buffer rejects a sub-selection we drop it and return whatever
- * came back.
+ * Buffer's GraphQL `PostsInput` only takes `organizationId` — there are no
+ * channelIds / status / first filters — so we pull everything for the org once
+ * and filter client-side. Schema for Post + PostMetric is discovered via
+ * introspection on first call and cached for the life of the process.
  */
 export async function getSentPostsForChannel(
   token: string,
   channelId: string,
   first: number = 20
 ): Promise<{ posts: BufferSentPost[]; error?: string }> {
-  // Primary attempt: assume the modern PostsConnection + flat metrics shape.
-  const QUERY = `query($channelId: ChannelId!, $first: Int!) {
-    posts(input: { channelIds: [$channelId], status: sent, first: $first }) {
+  const all = await getAllSentPosts(token);
+  if ("error" in all) return { posts: [], error: all.error };
+  const filtered = all.posts
+    .filter((p) => p.channel?.id === channelId)
+    .slice(0, first);
+  return { posts: filtered };
+}
+
+/** Used by the analytics endpoint to fetch once and partition by channel. */
+export async function getAllSentPosts(
+  token: string
+): Promise<{ posts: BufferSentPost[] } | { error: string }> {
+  const account = await getAccount(token);
+  if (!account?.currentOrganization?.id) {
+    return { error: "No Buffer organization found on this token" };
+  }
+  const schema = await discoverSchema(token);
+  if ("error" in schema) return { error: schema.error };
+
+  if (!schema.postsInputFields.has("organizationId")) {
+    return {
+      error:
+        "Buffer schema unexpected — PostsInput has no organizationId field. Try a different access token.",
+    };
+  }
+
+  const metricsBody = buildMetricsSelection(schema);
+  const postBody = buildPostSelection(schema, metricsBody);
+
+  const QUERY = `query($orgId: OrganizationId!) {
+    posts(input: { organizationId: $orgId }) {
       edges {
-        node {
-          id
-          text
-          status
-          sentAt
-          serviceLink
-          channel { id name service }
-          metrics {
-            reach
-            impressions
-            clicks
-            likes
-            comments
-            shares
-            reactions
-            replies
-            retweets
-            saves
-            videoViews
-            engagementRate
-          }
-        }
+        node { ${postBody} }
       }
     }
   }`;
@@ -159,35 +343,47 @@ export async function getSentPostsForChannel(
         node?: {
           id: string;
           text?: string;
+          status?: string;
           sentAt?: string | null;
-          serviceLink?: string | null;
+          dueAt?: string | null;
           channel?: { id: string; name: string; service: string } | null;
-          metrics?: BufferPostMetrics;
+          metrics?: Record<string, unknown> | null;
+          analytics?: Record<string, unknown> | null;
         };
       }>;
     };
-  }>(token, QUERY, { channelId, first });
-
+  }>(token, QUERY, { orgId: account.currentOrganization.id });
   if (j.errors && j.errors.length) {
-    return {
-      posts: [],
-      error: j.errors.map((e) => e.message).join("; "),
-    };
+    // Bust the cache so the next request re-introspects in case the schema moved.
+    cachedSchema = null;
+    return { error: j.errors.map((e) => e.message).join("; ") };
   }
   const edges = j.data?.posts?.edges ?? [];
   const posts: BufferSentPost[] = [];
   for (const e of edges) {
     const n = e.node;
     if (!n) continue;
+    // Buffer's enum is lowercase strings (`sent`, `scheduled`, …). Be tolerant.
+    const status = String(n.status ?? "").toLowerCase();
+    if (status && status !== "sent") continue;
+    const rawMetrics = (n.metrics ?? n.analytics ?? null) as
+      | Record<string, unknown>
+      | null;
     posts.push({
       id: n.id,
       text: n.text ?? "",
       sentAt: n.sentAt ?? null,
-      serviceLink: n.serviceLink ?? null,
+      serviceLink: null, // Buffer schema doesn't expose this — show via channel
       channel: n.channel ?? null,
-      metrics: n.metrics ?? {},
+      metrics: normalizeMetrics(rawMetrics),
     });
   }
+  // Newest first.
+  posts.sort((a, b) => {
+    const ta = a.sentAt ? new Date(a.sentAt).getTime() : 0;
+    const tb = b.sentAt ? new Date(b.sentAt).getTime() : 0;
+    return tb - ta;
+  });
   return { posts };
 }
 
