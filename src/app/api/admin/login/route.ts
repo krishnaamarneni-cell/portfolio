@@ -25,6 +25,21 @@ export async function POST(request: Request) {
     );
   }
 
+  // Fail fast with a clear message if SESSION_SECRET isn't configured —
+  // otherwise we'd 500 inside the cookie helpers with a stack trace.
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || secret.length < 16) {
+    return NextResponse.json(
+      {
+        error:
+          "SESSION_SECRET is not set in env (need 32+ random chars). " +
+          "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\" " +
+          "and add it to Vercel env + .env.local.",
+      },
+      { status: 503 }
+    );
+  }
+
   const expectedAdmin = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
 
   // ── Check 2FA status up front so the response can ask for the code ──
