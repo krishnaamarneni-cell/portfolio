@@ -9,32 +9,38 @@ import {
 } from "@/lib/content";
 import type { Connector } from "@/lib/content-types";
 import { resolveConnectorCall } from "@/lib/connector-url";
+import {
+  looksLikeMcp,
+  mcpCallTool,
+  mcpInitialize,
+  mcpListTools,
+  mcpToolsToGroqTools,
+  type McpTool,
+} from "@/lib/mcp";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type ChatMessage = { role: "user" | "assistant" | "system"; content: string };
+type ChatMessage = { role: "user" | "assistant" | "system" | "tool"; content: string; tool_call_id?: string; name?: string };
 
-async function callConnector(c: Connector): Promise<unknown | null> {
-  if (!c.enabled || !c.bearer_token) return null;
+type RestSnapshot = { connector: Connector; data: unknown };
+type McpHandle = { connector: Connector; url: string; tools: McpTool[] };
+
+/* ─────── REST connector pull (legacy / WealthClaude /api/agent/me) ─────── */
+
+async function callRestConnector(c: Connector): Promise<unknown | null> {
   const { url, headers } = resolveConnectorCall(c);
   if (!url) return null;
-  // Buffer's GraphQL API isn't useful as chat context (we use Buffer for
-  // posting, not for querying user data). Skip it so the chat doesn't get
-  // confused by unrelated channel/post snapshots.
+  // Skip Buffer (not useful as chat context) and MCP (handled separately).
   try {
     const host = new URL(url).hostname;
-    if (host.endsWith("buffer.com") || host.endsWith("bufferapp.com")) {
-      return null;
-    }
+    if (host.endsWith("buffer.com") || host.endsWith("bufferapp.com")) return null;
   } catch {
-    // fall through and try anyway
+    return null;
   }
+  if (looksLikeMcp(url)) return null;
   try {
-    const r = await fetch(url, {
-      headers,
-      cache: "no-store",
-    });
+    const r = await fetch(url, { headers, cache: "no-store" });
     if (!r.ok) return null;
     return await r.json().catch(() => null);
   } catch {
@@ -42,15 +48,31 @@ async function callConnector(c: Connector): Promise<unknown | null> {
   }
 }
 
-function trim<T>(arr: T[], n: number): T[] {
-  return arr.slice(0, n);
+/* ─────── Buffer's GraphQL data isn't useful here. ─────── */
+
+function describeConnectorRisks(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
+  const obj = data as Record<string, unknown>;
+  const holdings = Array.isArray(obj.holdings) ? obj.holdings : [];
+  const nonUs = new Set<string>();
+  for (const h of holdings) {
+    const sym = String((h as Record<string, unknown>)?.symbol ?? "");
+    const m = sym.match(/\.([A-Z]{1,3})$/);
+    if (m && m[1] !== "US") nonUs.add(m[1]);
+  }
+  if (nonUs.size === 0) return "";
+  return (
+    `\n\n⚠ This snapshot includes holdings on non-US exchanges (${[...nonUs].join(", ")}). ` +
+    `The raw "netWorth" field may include amounts in INR / GBP etc. summed as if USD. ` +
+    `When totals matter, prefer tools that return per-currency values, and add a one-line ` +
+    `caveat suggesting the user check the WealthClaude UI for the authoritative figure.`
+  );
 }
 
 export async function POST(request: Request) {
   if (!(await getSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -72,7 +94,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Empty messages" }, { status: 400 });
   }
 
-  // Build context
+  // Pull static context — site, jobs, projects, notes.
   const [jobs, projects, site, notes, connectors] = await Promise.all([
     fetchJobs().catch(() => []),
     fetchProjects().catch(() => []),
@@ -81,68 +103,67 @@ export async function POST(request: Request) {
     fetchConnectors().catch(() => []),
   ]);
 
-  const connectorData = await Promise.all(
-    connectors.filter((c) => c.enabled).map(async (c) => ({
-      label: c.label,
-      id: c.id,
-      data: await callConnector(c),
-    }))
+  // Pull connector data: REST (snapshot dump) + MCP (tool list).
+  const enabled = connectors.filter((c) => c.enabled);
+  const restSnaps: RestSnapshot[] = [];
+  const mcpHandles: McpHandle[] = [];
+  await Promise.all(
+    enabled.map(async (c) => {
+      const { url } = resolveConnectorCall(c);
+      if (!url || !c.bearer_token) return;
+      if (looksLikeMcp(url)) {
+        await mcpInitialize(url, c.bearer_token).catch(() => undefined);
+        const tools = await mcpListTools(url, c.bearer_token);
+        if (tools.length > 0) {
+          mcpHandles.push({ connector: c, url, tools });
+        }
+      } else {
+        const data = await callRestConnector(c);
+        if (data) restSnaps.push({ connector: c, data });
+      }
+    })
   );
 
-  const aboutBlob = `${site.about.paragraph_one}\n${site.about.paragraph_two}`;
-  const jobsBlob = trim(jobs, 10)
+  // Build system prompt
+  const about = `${site.about.paragraph_one}\n${site.about.paragraph_two}`;
+  const jobsBlob = jobs
+    .slice(0, 10)
     .map(
       (j) =>
         `- ${j.title} @ ${j.company} (${j.period}, ${j.location}) — ${j.description}${j.highlights?.length ? "\n  Highlights: " + j.highlights.join("; ") : ""}`
     )
     .join("\n");
-  const projectsBlob = trim(projects, 10)
+  const projectsBlob = projects
+    .slice(0, 10)
     .map((p) => `- ${p.title} (${p.subtitle}): ${p.description}  [${p.link}]`)
     .join("\n");
-  const notesBlob = trim(
-    notes.filter((n) => n.published),
-    8
-  )
+  const notesBlob = notes
+    .filter((n) => n.published)
+    .slice(0, 8)
     .map((n) => `- ${n.title}: ${n.body}`)
     .join("\n");
-  // Detect mixed currencies — e.g., Indian NSE/BSE tickers (.NS, .BO) priced
-  // in INR but summed by some upstream APIs as if they were USD.
-  function describeConnectorRisks(data: unknown): string {
-    if (!data || typeof data !== "object") return "";
-    const obj = data as Record<string, unknown>;
-    const holdings = Array.isArray(obj.holdings) ? obj.holdings : [];
-    const nonUs = new Set<string>();
-    for (const h of holdings) {
-      const sym = String((h as Record<string, unknown>)?.symbol ?? "");
-      const m = sym.match(/\.([A-Z]{1,3})$/);
-      if (m && m[1] !== "US") nonUs.add(m[1]);
-    }
-    if (nonUs.size === 0) return "";
-    const suffixes = [...nonUs].join(", ");
-    return (
-      `\n\n⚠ This snapshot contains holdings with non-US exchange suffixes (${suffixes}). ` +
-      `The upstream API appears to sum those values as if they were USD even though ` +
-      `they are likely denominated in another currency (e.g. .NS = NSE India, prices in INR). ` +
-      `The "netWorth" field may therefore be inflated. When the user asks for totals, ` +
-      `state the raw number, but ALSO add a one-line caveat about possible currency mixing ` +
-      `and suggest checking the WealthClaude UI for the authoritative figure.`
-    );
-  }
-
-  const connectorsBlob = connectorData
-    .map((c) =>
-      c.data
-        ? `## ${c.label} (${c.id}) live snapshot:\n${JSON.stringify(c.data, null, 2).slice(0, 4000)}${describeConnectorRisks(c.data)}`
-        : `## ${c.label} (${c.id}): connector enabled but no data returned`
+  const restBlob = restSnaps
+    .map((s) => {
+      const head = `## ${s.connector.label} (${s.connector.id}) — REST snapshot:`;
+      const json = JSON.stringify(s.data, null, 2).slice(0, 12000);
+      return `${head}\n${json}${describeConnectorRisks(s.data)}`;
+    })
+    .join("\n\n");
+  const mcpBlob = mcpHandles
+    .map(
+      (h) =>
+        `## ${h.connector.label} (${h.connector.id}) — MCP tools available:\n${h.tools
+          .map((t) => `  • ${h.connector.id}__${t.name}: ${t.description ?? "(no description)"}`)
+          .join("\n")}\nWhen answering questions that need fresh, specific data from ${h.connector.label}, CALL the matching tool. Don't guess.`
     )
     .join("\n\n");
 
-  const system = `You are Krishna Amarneni's personal AI assistant, running inside Krishna's portfolio admin.
+  const system = `You are Krishna Amarneni's personal AI assistant inside Krishna's portfolio admin. You answer Krishna's questions about himself, his work, his book, his published notes, and his money.
 
-You answer Krishna's questions about himself, his work, his book, his money, and his portfolio. You always speak directly to Krishna in second person ("you", not "Krishna"). Be concise, factual, and warm. Never invent numbers — if a fact isn't in the context below, say "I don't have that in your data."
+Voice: direct, factual, second-person ("you", not "Krishna"). Concise. If a fact isn't in the data or tools you have access to, say so plainly.
 
 # About Krishna
-${aboutBlob}
+${about}
 
 # Work history
 ${jobsBlob || "(none on file)"}
@@ -153,26 +174,111 @@ ${projectsBlob || "(none on file)"}
 # Published notes
 ${notesBlob || "(none yet)"}
 
-${
-  connectorsBlob
-    ? `# Connected services\n${connectorsBlob}\n\nWhen the user asks about money, net worth, holdings, or anything financial, prefer the WealthClaude live snapshot above as the source of truth. Quote specific numbers and labels from that JSON.`
-    : "# Connected services\n(none — add a connector under Admin → Connectors to enable live financial answers)"
-}`;
+${restBlob ? `# Connected services (snapshots)\n${restBlob}\n` : ""}${mcpBlob ? `\n# Connected services (tools)\n${mcpBlob}\n\nPrefer tools over guesses. When you call a tool, pass the result back through the conversation honestly. Quote specific numbers from the tool output.\n` : ""}`;
+
+  // Compose Groq messages + tool list
+  const groqTools: Array<{
+    type: "function";
+    function: { name: string; description?: string; parameters: Record<string, unknown> };
+  }> = [];
+  for (const h of mcpHandles) {
+    groqTools.push(...mcpToolsToGroqTools(h.tools, h.connector.id));
+  }
+
+  const { default: Groq } = await import("groq-sdk");
+  const groq = new Groq({ apiKey });
+
+  // tool-call loop — up to N rounds so the model can fetch what it needs.
+  const MAX_ROUNDS = 4;
+  type GroqMsg = {
+    role: "system" | "user" | "assistant" | "tool";
+    content?: string | null;
+    tool_call_id?: string;
+    name?: string;
+    tool_calls?: Array<{
+      id: string;
+      type: "function";
+      function: { name: string; arguments: string };
+    }>;
+  };
+  const loop: GroqMsg[] = [
+    { role: "system", content: system },
+    ...messages.map(
+      (m): GroqMsg => ({ role: m.role as GroqMsg["role"], content: m.content })
+    ),
+  ];
 
   try {
-    const { default: Groq } = await import("groq-sdk");
-    const groq = new Groq({ apiKey });
-    const completion = await groq.chat.completions.create({
+    for (let i = 0; i < MAX_ROUNDS; i++) {
+      const completion = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.3,
+        max_tokens: 1500,
+        messages: loop as never,
+        tools: groqTools.length > 0 ? groqTools : undefined,
+      });
+      const choice = completion.choices[0];
+      const reply = choice?.message;
+      if (!reply) {
+        return NextResponse.json({ error: "Empty Groq response" }, { status: 502 });
+      }
+      const toolCalls = (reply as { tool_calls?: GroqMsg["tool_calls"] }).tool_calls;
+      if (!toolCalls || toolCalls.length === 0) {
+        return NextResponse.json({ reply: reply.content ?? "" });
+      }
+      // Append the assistant message that requested the tools.
+      loop.push({
+        role: "assistant",
+        content: reply.content ?? null,
+        tool_calls: toolCalls,
+      });
+      // Execute each tool call.
+      for (const call of toolCalls) {
+        const fullName = call.function.name; // "<connectorId>__<tool>"
+        const sep = fullName.indexOf("__");
+        const connId = sep > 0 ? fullName.slice(0, sep) : "";
+        const toolName = sep > 0 ? fullName.slice(sep + 2) : fullName;
+        const handle = mcpHandles.find((h) => h.connector.id === connId);
+        let resultJson: string;
+        if (!handle) {
+          resultJson = JSON.stringify({ error: `No MCP handle for ${connId}` });
+        } else {
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(call.function.arguments || "{}");
+          } catch {
+            args = {};
+          }
+          const out = await mcpCallTool(
+            handle.url,
+            handle.connector.bearer_token as string,
+            toolName,
+            args
+          );
+          if (out.ok) {
+            resultJson = JSON.stringify(out.parsed ?? out.content ?? null).slice(0, 16000);
+          } else {
+            resultJson = JSON.stringify({ error: out.error || "Tool failed" });
+          }
+        }
+        loop.push({
+          role: "tool",
+          tool_call_id: call.id,
+          name: fullName,
+          content: resultJson,
+        });
+      }
+    }
+    // Loop exhausted — ask Groq for a final answer without tools.
+    const final = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
-      temperature: 0.4,
+      temperature: 0.3,
       max_tokens: 1500,
-      messages: [
-        { role: "system", content: system },
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
-      ],
+      messages: loop as never,
     });
-    const reply = completion.choices[0]?.message?.content ?? "";
-    return NextResponse.json({ reply });
+    return NextResponse.json({
+      reply: final.choices[0]?.message?.content ?? "",
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Groq request failed";
     return NextResponse.json({ error: message }, { status: 502 });

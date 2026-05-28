@@ -32,11 +32,11 @@ const PRESETS: Record<string, Preset> = {
   wealthclaude: {
     id: "wealthclaude",
     label: "WealthClaude",
-    base_url: "https://www.wealthclaude.com/api/agent/me",
+    base_url: "https://www.wealthclaude.com/api/mcp",
     helpUrl: "https://www.wealthclaude.com/settings/ai-access",
     helpLabel: "WealthClaude → AI Access → New token",
     description:
-      "Read-only token from your WealthClaude account. The chat will see your live net worth, holdings, and dividends.",
+      "Read-only token from your WealthClaude account. With the MCP URL the chat can call specific tools (holdings, debts, dividends, budget) for detailed answers — same data your WealthClaude chatbot uses.",
   },
   buffer: {
     id: "buffer",
@@ -416,12 +416,15 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
             ) : (
               <>
                 For WealthClaude use the{" "}
-                <strong className="text-[#ff8c38]">REST endpoint</strong> —{" "}
+                <strong className="text-[#ff8c38]">MCP endpoint</strong> —{" "}
                 <code className="text-[#ff8c38]">
-                  https://www.wealthclaude.com/api/agent/me
+                  https://www.wealthclaude.com/api/mcp
                 </code>
-                . If you only paste the host we&apos;ll append{" "}
-                <code>/api/agent/me</code> automatically.
+                . The chat will discover the available tools (holdings,
+                debts, dividends, budget, full snapshot) and call them on
+                demand instead of dumping a partial snapshot. If you paste
+                the plain REST URL (<code>/api/agent/me</code>) it still
+                works as a fallback context.
               </>
             )}
           </p>
