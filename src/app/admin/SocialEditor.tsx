@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FiZap,
   FiImage,
@@ -10,6 +10,8 @@ import {
   FiClock,
   FiRefreshCw,
   FiExternalLink,
+  FiCalendar,
+  FiLayers,
 } from "react-icons/fi";
 import { FaXTwitter, FaLinkedinIn, FaInstagram } from "react-icons/fa6";
 
@@ -49,6 +51,25 @@ const inputClass =
   "w-full px-4 py-2.5 rounded-xl bg-[#1a1a1a] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-sm text-white placeholder:text-[#555] transition-colors";
 const textareaClass = inputClass + " resize-y leading-relaxed";
 
+/** Filter Buffer profiles for one of our 3 platforms. */
+function profilesFor(all: BufferProfile[], key: PlatformKey): BufferProfile[] {
+  return all.filter((bp) =>
+    key === "linkedin"
+      ? bp.service === "linkedin"
+      : key === "x"
+      ? bp.service === "twitter" || bp.service === "x"
+      : bp.service === "instagram"
+  );
+}
+
+/** Initial "now-ish" datetime-local string (rounded up 10 min). */
+function defaultScheduleAt(): string {
+  const d = new Date(Date.now() + 10 * 60 * 1000);
+  // toISOString gives UTC; datetime-local needs local — re-derive.
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function SocialEditor({
   onSuccess,
   onError,
@@ -71,6 +92,17 @@ export default function SocialEditor({
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [posting, setPosting] = useState(false);
+
+  // Per-platform schedule pickers
+  const [scheduleAt, setScheduleAt] = useState<Record<PlatformKey, string>>({
+    linkedin: "",
+    x: "",
+    instagram: "",
+  });
+
+  // Batch footer schedule
+  const [batchScheduleAt, setBatchScheduleAt] = useState<string>("");
+  const [batchBusy, setBatchBusy] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/buffer/profiles")
@@ -142,6 +174,87 @@ export default function SocialEditor({
       onError(err instanceof Error ? err.message : "Network error");
     }
     setGenerating(false);
+  }
+
+  /** Convert a datetime-local string ("YYYY-MM-DDTHH:mm") to ISO in UTC. */
+  function toIso(local: string): string | null {
+    if (!local) return null;
+    const d = new Date(local);
+    if (!Number.isFinite(d.getTime())) return null;
+    if (d.getTime() < Date.now() + 60 * 1000) return null; // must be in the future
+    return d.toISOString();
+  }
+
+  /** Per-platform post. */
+  async function postOne(
+    key: PlatformKey,
+    when: "now" | "queue" | string
+  ): Promise<{ ok: boolean; error?: string }> {
+    const p = PLATFORMS.find((x) => x.key === key)!;
+    const text = composition[key];
+    const ids = profilesFor(profiles, key)
+      .filter((bp) => selected[bp.id])
+      .map((bp) => bp.id);
+    if (ids.length === 0) {
+      return { ok: false, error: `No ${p.label} profile selected` };
+    }
+    if (!text.trim()) return { ok: false, error: `${p.label} text is empty` };
+    if (text.length > p.limit)
+      return { ok: false, error: `${p.label} over character limit` };
+    const res = await fetch("/api/admin/buffer/post", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        profile_ids: ids,
+        media_url: imageUrl || undefined,
+        when,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `${p.label} post failed` };
+    return { ok: true };
+  }
+
+  /** Selected platforms = platforms with at least one selected profile + non-empty text. */
+  const readyPlatforms = useMemo<PlatformKey[]>(() => {
+    return PLATFORMS.filter((p) => {
+      const text = composition[p.key];
+      const ids = profilesFor(profiles, p.key).filter((bp) => selected[bp.id]);
+      return ids.length > 0 && text.trim().length > 0 && text.length <= p.limit;
+    }).map((p) => p.key);
+  }, [composition, profiles, selected]);
+
+  async function batchPost(when: "now" | "queue" | string) {
+    if (readyPlatforms.length === 0) {
+      onError(
+        "Nothing to post — generate text and pick at least one profile per platform"
+      );
+      return;
+    }
+    setBatchBusy(true);
+    const results = await Promise.all(
+      readyPlatforms.map(async (k) => ({ k, ...(await postOne(k, when)) }))
+    );
+    setBatchBusy(false);
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length === 0) {
+      const verb =
+        when === "now"
+          ? "Posted to"
+          : when === "queue"
+          ? "Queued on"
+          : "Scheduled on";
+      onSuccess(
+        `${verb} ${results.map((r) => r.k).join(", ")}`
+      );
+    } else if (failed.length === results.length) {
+      onError(failed.map((r) => `${r.k}: ${r.error}`).join(" · "));
+    } else {
+      onError(
+        `Partial: ${failed.map((r) => `${r.k}: ${r.error}`).join(" · ")}`
+      );
+    }
   }
 
   return (
@@ -272,13 +385,7 @@ export default function SocialEditor({
               text={text}
               onChange={(v) => setComposition((c) => ({ ...c, [p.key]: v }))}
               imageUrl={imageUrl}
-              profiles={profiles.filter((bp) =>
-                p.key === "linkedin"
-                  ? bp.service === "linkedin"
-                  : p.key === "x"
-                  ? bp.service === "twitter" || bp.service === "x"
-                  : bp.service === "instagram"
-              )}
+              profiles={profilesFor(profiles, p.key)}
               selectedIds={selected}
               onToggleProfile={(id) =>
                 setSelected((s) => ({ ...s, [id]: !s[id] }))
@@ -288,10 +395,96 @@ export default function SocialEditor({
               onSuccess={onSuccess}
               onError={onError}
               profilesError={profilesError}
+              scheduleAt={scheduleAt[p.key]}
+              setScheduleAt={(v) =>
+                setScheduleAt((s) => ({ ...s, [p.key]: v }))
+              }
+              toIso={toIso}
             />
           );
         })}
       </div>
+
+      {/* Batch footer */}
+      {!profilesError && profiles.length > 0 && (
+        <div className="rounded-2xl border border-[#ff6b00]/25 bg-gradient-to-br from-[#ff6b00]/[0.05] to-transparent p-5 space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <FiLayers size={14} className="text-[#ff8c38]" />
+            <h3 className="text-sm font-bold tracking-wide uppercase text-[#ff8c38]">
+              Post to all platforms at once
+            </h3>
+            <span className="text-[10px] text-[#666] ml-auto font-mono">
+              ready: {readyPlatforms.length}/3
+              {readyPlatforms.length > 0
+                ? ` (${readyPlatforms.join(", ")})`
+                : ""}
+            </span>
+          </div>
+          <p className="text-[11px] text-[#777] leading-relaxed">
+            Runs once per platform with that platform's text + the shared image,
+            using whichever Buffer profiles you've selected on each card.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <div className="flex-1 flex items-center gap-2">
+              <FiCalendar size={13} className="text-[#888] shrink-0" />
+              <input
+                type="datetime-local"
+                value={batchScheduleAt}
+                onChange={(e) => setBatchScheduleAt(e.target.value)}
+                className={inputClass + " text-xs"}
+              />
+              <button
+                type="button"
+                onClick={() => setBatchScheduleAt(defaultScheduleAt())}
+                className="shrink-0 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10px] text-[#888] hover:text-white"
+                title="Set to ~10 minutes from now"
+              >
+                +10m
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => batchPost("queue")}
+              disabled={batchBusy || readyPlatforms.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-50"
+            >
+              <FiClock size={12} />
+              Queue all
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const iso = toIso(batchScheduleAt);
+                if (!iso) {
+                  onError(
+                    "Pick a future date/time to schedule all platforms"
+                  );
+                  return;
+                }
+                batchPost(iso);
+              }}
+              disabled={batchBusy || readyPlatforms.length === 0 || !batchScheduleAt}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.06] border border-white/[0.15] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-50"
+            >
+              <FiCalendar size={12} />
+              Schedule all
+            </button>
+            <button
+              type="button"
+              onClick={() => batchPost("now")}
+              disabled={batchBusy || readyPlatforms.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black text-xs font-bold shadow-[0_4px_15px_rgba(255,107,0,0.35)] hover:scale-[1.03] disabled:opacity-50"
+            >
+              <FiSend size={12} />
+              {batchBusy ? "Posting…" : "Post all now"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Footer help */}
       {profilesError && (
@@ -320,6 +513,9 @@ function PlatformCard({
   onSuccess,
   onError,
   profilesError,
+  scheduleAt,
+  setScheduleAt,
+  toIso,
 }: {
   platform: (typeof PLATFORMS)[number];
   text: string;
@@ -333,6 +529,9 @@ function PlatformCard({
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
   profilesError: string | null;
+  scheduleAt: string;
+  setScheduleAt: (v: string) => void;
+  toIso: (local: string) => string | null;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -349,7 +548,7 @@ function PlatformCard({
     } catch {}
   }
 
-  async function postNow(when: "now" | "queue") {
+  async function postNow(when: "now" | "queue" | string) {
     const ids = profiles.filter((p) => selectedIds[p.id]).map((p) => p.id);
     if (ids.length === 0) {
       onError(`Select at least one ${platform.label} profile to post to`);
@@ -383,7 +582,9 @@ function PlatformCard({
     onSuccess(
       when === "now"
         ? `Posted to ${platform.label} now`
-        : `Queued on ${platform.label}`
+        : when === "queue"
+        ? `Queued on ${platform.label}`
+        : `Scheduled on ${platform.label}`
     );
   }
 
@@ -444,6 +645,49 @@ function PlatformCard({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Per-platform schedule picker */}
+      {!profilesError && profiles.length > 0 && (
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <FiCalendar size={12} className="text-[#666] shrink-0" />
+          <input
+            type="datetime-local"
+            value={scheduleAt}
+            onChange={(e) => setScheduleAt(e.target.value)}
+            className="px-3 py-1.5 rounded-lg bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-xs text-white"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const d = new Date(Date.now() + 10 * 60 * 1000);
+              const pad = (n: number) => String(n).padStart(2, "0");
+              setScheduleAt(
+                `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+              );
+            }}
+            className="shrink-0 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10px] text-[#888] hover:text-white"
+            title="Set to ~10 minutes from now"
+          >
+            +10m
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const iso = toIso(scheduleAt);
+              if (!iso) {
+                onError(`Pick a future date/time to schedule ${platform.label}`);
+                return;
+              }
+              postNow(iso);
+            }}
+            disabled={posting || overLimit || !scheduleAt}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.15] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-50"
+          >
+            <FiCalendar size={11} />
+            Schedule
+          </button>
         </div>
       )}
 
