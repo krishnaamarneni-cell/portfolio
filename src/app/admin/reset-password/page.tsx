@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   FiLock,
@@ -11,11 +11,10 @@ import {
   FiEyeOff,
   FiCheck,
 } from "react-icons/fi";
-import { createSupabaseBrowserClient } from "@/lib/supabase-ssr";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -65,7 +64,7 @@ export default function ResetPasswordPage() {
     return () => {
       cancelled = true;
     };
-  }, [searchParams]);
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
