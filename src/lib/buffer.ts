@@ -84,6 +84,146 @@ export async function getChannels(token: string): Promise<BufferChannel[]> {
   return j.data?.channels ?? [];
 }
 
+/* ─── Analytics: sent posts + their metrics ─── */
+
+export type BufferPostMetrics = {
+  reach?: number;
+  impressions?: number;
+  clicks?: number;
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  reactions?: number;
+  replies?: number;
+  retweets?: number;
+  saves?: number;
+  videoViews?: number;
+  engagementRate?: number;
+};
+
+export type BufferSentPost = {
+  id: string;
+  text: string;
+  sentAt?: string | null;
+  serviceLink?: string | null;
+  channel: { id: string; name: string; service: string } | null;
+  metrics: BufferPostMetrics;
+};
+
+/**
+ * Try to fetch recent sent posts + analytics for one channel.
+ *
+ * Buffer's GraphQL schema has shifted around the analytics field a few times
+ * (Buffer Classic Analyze → "Buffer Analyze" → today's `metrics`/`analytics`
+ * field on Post), so we try the most likely query first and degrade
+ * gracefully — if Buffer rejects a sub-selection we drop it and return whatever
+ * came back.
+ */
+export async function getSentPostsForChannel(
+  token: string,
+  channelId: string,
+  first: number = 20
+): Promise<{ posts: BufferSentPost[]; error?: string }> {
+  // Primary attempt: assume the modern PostsConnection + flat metrics shape.
+  const QUERY = `query($channelId: ChannelId!, $first: Int!) {
+    posts(input: { channelIds: [$channelId], status: sent, first: $first }) {
+      edges {
+        node {
+          id
+          text
+          status
+          sentAt
+          serviceLink
+          channel { id name service }
+          metrics {
+            reach
+            impressions
+            clicks
+            likes
+            comments
+            shares
+            reactions
+            replies
+            retweets
+            saves
+            videoViews
+            engagementRate
+          }
+        }
+      }
+    }
+  }`;
+  const j = await bufferGraphQL<{
+    posts?: {
+      edges?: Array<{
+        node?: {
+          id: string;
+          text?: string;
+          sentAt?: string | null;
+          serviceLink?: string | null;
+          channel?: { id: string; name: string; service: string } | null;
+          metrics?: BufferPostMetrics;
+        };
+      }>;
+    };
+  }>(token, QUERY, { channelId, first });
+
+  if (j.errors && j.errors.length) {
+    return {
+      posts: [],
+      error: j.errors.map((e) => e.message).join("; "),
+    };
+  }
+  const edges = j.data?.posts?.edges ?? [];
+  const posts: BufferSentPost[] = [];
+  for (const e of edges) {
+    const n = e.node;
+    if (!n) continue;
+    posts.push({
+      id: n.id,
+      text: n.text ?? "",
+      sentAt: n.sentAt ?? null,
+      serviceLink: n.serviceLink ?? null,
+      channel: n.channel ?? null,
+      metrics: n.metrics ?? {},
+    });
+  }
+  return { posts };
+}
+
+/** Sum of a metric across a list of sent posts. */
+export function aggregateMetrics(posts: BufferSentPost[]): BufferPostMetrics & {
+  postCount: number;
+} {
+  const keys: (keyof BufferPostMetrics)[] = [
+    "reach",
+    "impressions",
+    "clicks",
+    "likes",
+    "comments",
+    "shares",
+    "reactions",
+    "replies",
+    "retweets",
+    "saves",
+    "videoViews",
+  ];
+  const out: BufferPostMetrics & { postCount: number } = { postCount: posts.length };
+  for (const k of keys) {
+    let sum = 0;
+    let any = false;
+    for (const p of posts) {
+      const v = p.metrics?.[k];
+      if (typeof v === "number") {
+        sum += v;
+        any = true;
+      }
+    }
+    if (any) (out as Record<string, number>)[k] = sum;
+  }
+  return out;
+}
+
 export type BufferPostResult = {
   channelId: string;
   ok: boolean;
