@@ -16,32 +16,56 @@ import ShareMenu from "./ShareMenu";
 import { useSiteContent } from "./SiteContentProvider";
 import type { BookSection } from "@/lib/site-content-types";
 
-/* ───────────────────────── 3D rotating book ───────────────────────── */
-
+/* ───────────────────────── 3D rotating book ─────────────────────────
+ *
+ * Each face uses its own image. Create these files in /public:
+ *   /public/book-front.png   — 1200 × 1800   (aspect 2:3)
+ *   /public/book-back.png    — 1200 × 1800   (aspect 2:3)
+ *   /public/book-spine.png   —  260 × 1800   (aspect ~1:7, vertical strip)
+ *
+ * Each image fills its face exactly (background-size: 100% 100%), so as
+ * long as the aspect ratios match, ChatGPT (or any image tool) just needs
+ * to be told the dimensions above. The faces will never crop or stretch.
+ *
+ * If any of these files is missing, that face falls back to the spread
+ * (Bookcover.png) slice — so you can swap them in one at a time.
+ */
 const COVER_IMAGE_SRC = "/Bookcover.png";
+const BOOK_FRONT_SRC = "/book-front.png";
+const BOOK_BACK_SRC = "/book-back.png";
+const BOOK_SPINE_SRC = "/book-spine.png";
 
-const BOOK_W = 340;
-const BOOK_H = 470;
-const BOOK_D = 70;
+// Book proportions on screen. The 2:3 ratio matches a real-world book.
+const BOOK_W = 320; // front face width
+const BOOK_H = 480; // front face height — 2:3 aspect
+const BOOK_D = 70; // spine thickness — matches a ~300-page paperback
 
 const SPREAD_W = 1774;
-const SPREAD_H = 887;
 
-// Adjust these numbers only if your Bookcover.png crop changes
+// Fallback slices used when the per-face images aren't present yet.
 const SLICES = {
   back: { x: 80, w: 610 },
   spine: { x: 760, w: 150 },
   front: { x: 965, w: 720 },
 };
 
-function sliceStyle(slice: keyof typeof SLICES): React.CSSProperties {
+/**
+ * Stacked background: the per-face image sits on top; the Bookcover.png
+ * slice underneath. If the per-face image isn't present yet, the slice
+ * shows through unchanged.
+ */
+function faceWithFallback(
+  perFaceSrc: string,
+  slice: keyof typeof SLICES
+): React.CSSProperties {
   const s = SLICES[slice];
-  void SPREAD_H; // referenced for clarity; aspect is preserved by 100% height
+  const sliceSize = `${(SPREAD_W / s.w) * 100}% 100%`;
+  const slicePos = `${(s.x / (SPREAD_W - s.w)) * 100}% center`;
   return {
-    backgroundImage: `url(${COVER_IMAGE_SRC})`,
-    backgroundRepeat: "no-repeat",
-    backgroundSize: `${(SPREAD_W / s.w) * 100}% 100%`,
-    backgroundPosition: `${(s.x / (SPREAD_W - s.w)) * 100}% center`,
+    backgroundImage: `url(${perFaceSrc}), url(${COVER_IMAGE_SRC})`,
+    backgroundRepeat: "no-repeat, no-repeat",
+    backgroundSize: `100% 100%, ${sliceSize}`,
+    backgroundPosition: `0 0, ${slicePos}`,
     backgroundColor: "#050403",
   };
 }
@@ -96,7 +120,7 @@ function BookGlobe3D({ onOpenInside }: { onOpenInside: () => void }) {
           <div
             style={{
               ...faceBase,
-              ...sliceStyle("front"),
+              ...faceWithFallback(BOOK_FRONT_SRC, "front"),
               width: BOOK_W,
               height: BOOK_H,
               transform: `translate(-50%, -50%) translateZ(${BOOK_D / 2}px)`,
@@ -107,7 +131,7 @@ function BookGlobe3D({ onOpenInside }: { onOpenInside: () => void }) {
           <div
             style={{
               ...faceBase,
-              ...sliceStyle("back"),
+              ...faceWithFallback(BOOK_BACK_SRC, "back"),
               width: BOOK_W,
               height: BOOK_H,
               transform: `translate(-50%, -50%) rotateY(180deg) translateZ(${BOOK_D / 2}px)`,
@@ -118,7 +142,7 @@ function BookGlobe3D({ onOpenInside }: { onOpenInside: () => void }) {
           <div
             style={{
               ...faceBase,
-              ...sliceStyle("spine"),
+              ...faceWithFallback(BOOK_SPINE_SRC, "spine"),
               width: BOOK_D,
               height: BOOK_H,
               transform: `translate(-50%, -50%) rotateY(-90deg) translateZ(${BOOK_W / 2}px)`,
