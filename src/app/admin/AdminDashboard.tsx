@@ -17,6 +17,8 @@ import {
   FiX,
   FiUpload,
   FiLayout,
+  FiZap,
+  FiActivity,
 } from "react-icons/fi";
 import {
   EMPTY_JOB,
@@ -28,8 +30,9 @@ import {
 } from "@/lib/content-types";
 import type { SiteContent } from "@/lib/site-content-types";
 import SiteContentEditor from "./SiteContentEditor";
+import ThoughtsEditor from "./ThoughtsEditor";
 
-type Tab = "content" | "jobs" | "projects";
+type Tab = "content" | "thoughts" | "jobs" | "projects";
 
 type Props = {
   session: { email: string };
@@ -156,23 +159,42 @@ export default function AdminDashboard({
     await refresh();
   }
 
+  const navItems = [
+    { id: "content" as const, label: "Site Content", icon: FiLayout, hint: "Hero, About, Skills, Book…" },
+    { id: "thoughts" as const, label: "Thoughts", icon: FiZap, hint: "Quick takes + AI formatting" },
+    { id: "jobs" as const, label: "Jobs", icon: FiBriefcase, count: jobs.length, hint: "Experience timeline" },
+    { id: "projects" as const, label: "Projects", icon: FiFolder, count: projects.length, hint: "Featured work" },
+  ];
+
   return (
-    <main className="min-h-screen bg-[#050505] text-white">
+    <main className="min-h-screen bg-[#050505] text-white relative">
+      {/* Ambient background */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-20%] left-1/4 w-[700px] h-[700px] bg-[#ff6b00]/[0.04] rounded-full blur-[180px]" />
+        <div className="absolute bottom-[-10%] right-0 w-[500px] h-[500px] bg-[#ff3d00]/[0.03] rounded-full blur-[150px]" />
+      </div>
+
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-[#050505]/90 backdrop-blur-xl border-b border-white/[0.06]">
-        <div className="max-w-6xl mx-auto px-6 lg:px-10 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+      <header className="sticky top-0 z-30 bg-[#050505]/85 backdrop-blur-xl border-b border-white/[0.06]">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
             <Link
               href="/"
               className="inline-flex items-center gap-2 text-[#888] text-sm hover:text-white transition-colors"
             >
               <FiArrowLeft size={14} />
-              <span className="hidden sm:inline">Back to site</span>
+              <span className="hidden sm:inline">Site</span>
             </Link>
             <span className="hidden sm:block w-px h-5 bg-white/10" />
-            <p className="text-xs font-mono tracking-[0.25em] uppercase text-[#ff6b00]">
-              ✦ Admin
-            </p>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-black font-black text-sm shadow-[0_4px_15px_rgba(255,107,0,0.4)]">
+                K
+              </div>
+              <div>
+                <p className="text-xs font-mono tracking-[0.2em] uppercase text-[#ff6b00] leading-none">Admin</p>
+                <p className="text-[10px] text-[#666] mt-1 font-mono leading-none">krishna-amarneni</p>
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden md:inline text-xs text-[#777] font-mono">
@@ -189,61 +211,103 @@ export default function AdminDashboard({
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-6 lg:px-10 py-10 lg:py-14">
-        {/* Title */}
-        <div className="mb-10">
-          <h1 className="text-4xl lg:text-5xl font-black tracking-tight">Dashboard</h1>
-          <p className="text-[#888] mt-2">
-            Manage your experience timeline and featured projects.
-          </p>
+      <div className="relative max-w-7xl mx-auto px-6 lg:px-8 py-8 lg:py-12">
+        {/* Title row + quick stats */}
+        <div className="flex items-start justify-between flex-wrap gap-6 mb-8">
+          <div>
+            <h1 className="text-3xl lg:text-4xl font-black tracking-tight">
+              Welcome back,{" "}
+              <span className="bg-gradient-to-r from-[#ff6b00] via-[#ff8c38] to-[#ffaa66] bg-clip-text text-transparent">
+                Krishna
+              </span>
+            </h1>
+            <p className="text-[#888] mt-2 text-sm">
+              Your studio for everything that shows up on the site.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <StatPill label="Jobs" value={jobs.length} />
+            <StatPill label="Projects" value={projects.length} />
+            <StatPill label="Status" value="LIVE" highlight />
+          </div>
         </div>
 
         {/* Setup banner if fallback data is showing */}
         {fallbackVisible && (
-          <div className="mb-8 rounded-2xl border border-[#ff6b00]/30 bg-[#ff6b00]/[0.05] p-5 text-sm">
-            <p className="text-[#ffaa66] font-bold mb-1">Supabase not connected yet</p>
-            <p className="text-[#bbb] leading-relaxed">
-              Showing fallback seed data. To start saving:
-            </p>
-            <ol className="text-[#bbb] list-decimal list-inside mt-2 space-y-1">
-              <li>Create a project at supabase.com</li>
-              <li>
-                Run <code className="text-[#ff8c38]">supabase/schema.sql</code> in the SQL Editor
-              </li>
-              <li>
-                Paste your URL + keys into <code className="text-[#ff8c38]">.env.local</code> and restart{" "}
-                <code className="text-[#ff8c38]">npm run dev</code>
-              </li>
-            </ol>
+          <div className="mb-6 rounded-2xl border border-[#ff6b00]/30 bg-gradient-to-br from-[#ff6b00]/[0.08] to-transparent p-5 text-sm flex items-start gap-3">
+            <FiActivity className="text-[#ff8c38] mt-0.5 shrink-0" size={18} />
+            <div>
+              <p className="text-[#ffaa66] font-bold mb-1">Supabase not connected yet</p>
+              <p className="text-[#bbb] leading-relaxed">
+                Showing fallback seed data. Run{" "}
+                <code className="text-[#ff8c38]">supabase/schema.sql</code> in your Supabase
+                SQL Editor and paste your keys into{" "}
+                <code className="text-[#ff8c38]">.env.local</code> to start saving.
+              </p>
+            </div>
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex items-center gap-2 mb-8 flex-wrap">
-          <TabBtn active={tab === "content"} onClick={() => setTab("content")} icon={<FiLayout size={14} />}>
-            Site Content
-          </TabBtn>
-          <TabBtn active={tab === "jobs"} onClick={() => setTab("jobs")} icon={<FiBriefcase size={14} />}>
-            Jobs ({jobs.length})
-          </TabBtn>
-          <TabBtn
-            active={tab === "projects"}
-            onClick={() => setTab("projects")}
-            icon={<FiFolder size={14} />}
-          >
-            Projects ({projects.length})
-          </TabBtn>
-        </div>
+        {/* Main grid: sidebar + content */}
+        <div className="grid lg:grid-cols-[240px_1fr] gap-6 lg:gap-10">
+          {/* Sidebar nav */}
+          <nav className="lg:sticky lg:top-24 lg:self-start space-y-1.5">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = tab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setTab(item.id)}
+                  className={`w-full text-left rounded-2xl px-4 py-3 transition-all flex items-start gap-3 group relative ${
+                    active
+                      ? "bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black shadow-[0_8px_24px_rgba(255,107,0,0.35)]"
+                      : "bg-white/[0.03] border border-white/[0.06] hover:border-[#ff6b00]/30 text-[#ccc] hover:text-white"
+                  }`}
+                >
+                  <Icon size={16} className="mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">{item.label}</span>
+                      {typeof item.count === "number" && (
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                            active
+                              ? "bg-black/15 text-black"
+                              : "bg-white/[0.06] text-[#888]"
+                          }`}
+                        >
+                          {item.count}
+                        </span>
+                      )}
+                    </div>
+                    <p className={`text-[11px] mt-0.5 ${active ? "text-black/70" : "text-[#666]"}`}>
+                      {item.hint}
+                    </p>
+                  </div>
+                  {active && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-black" />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
 
-        {/* List */}
-        {tab === "content" ? (
-          <SiteContentEditor
-            initial={siteContent}
-            onSaved={(c) => setSiteContent(c)}
-            onError={(m) => flash("err", m)}
-            onSuccess={(m) => flash("ok", m)}
-          />
-        ) : tab === "jobs" ? (
+          {/* Content panel */}
+          <div className="min-w-0">
+            {tab === "content" ? (
+              <SiteContentEditor
+                initial={siteContent}
+                onSaved={(c) => setSiteContent(c)}
+                onError={(m) => flash("err", m)}
+                onSuccess={(m) => flash("ok", m)}
+              />
+            ) : tab === "thoughts" ? (
+              <ThoughtsEditor
+                onSuccess={(m) => flash("ok", m)}
+                onError={(m) => flash("err", m)}
+              />
+            ) : tab === "jobs" ? (
           <section>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-xl font-bold">Experience Timeline</h2>
@@ -290,6 +354,8 @@ export default function AdminDashboard({
             </div>
           </section>
         )}
+          </div>
+        </div>
       </div>
 
       {/* Modals */}
@@ -334,29 +400,34 @@ export default function AdminDashboard({
 
 /* ─────────────────────────── helpers ─────────────────────────── */
 
-function TabBtn({
-  active,
-  onClick,
-  icon,
-  children,
+function StatPill({
+  label,
+  value,
+  highlight,
 }: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  children: React.ReactNode;
+  label: string;
+  value: string | number;
+  highlight?: boolean;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
-        active
-          ? "bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black shadow-[0_4px_20px_rgba(255,107,0,0.35)]"
-          : "bg-white/[0.04] text-[#888] border border-white/[0.06] hover:text-white hover:border-[#ff6b00]/30"
+    <div
+      className={`rounded-2xl px-4 py-3 min-w-[88px] border ${
+        highlight
+          ? "bg-gradient-to-br from-emerald-500/15 to-emerald-500/[0.04] border-emerald-500/30"
+          : "bg-white/[0.03] border-white/[0.06]"
       }`}
     >
-      {icon}
-      {children}
-    </button>
+      <p
+        className={`font-black text-xl leading-none ${
+          highlight ? "text-emerald-400" : "text-white"
+        }`}
+      >
+        {value}
+      </p>
+      <p className="text-[10px] font-mono tracking-[0.15em] uppercase text-[#666] mt-1.5">
+        {label}
+      </p>
+    </div>
   );
 }
 

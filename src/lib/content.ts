@@ -6,12 +6,15 @@ import type {
   JobInput,
   Project,
   ProjectInput,
+  Thought,
+  ThoughtInput,
 } from "./content-types";
 import type { SiteContent } from "./site-content-types";
 
 const JOBS_TABLE = "jobs";
 const PROJECTS_TABLE = "projects";
 const SITE_CONTENT_TABLE = "site_content";
+const THOUGHTS_TABLE = "thoughts";
 
 function deepMerge<T>(base: T, override: unknown): T {
   if (
@@ -158,5 +161,74 @@ export async function updateProject(
 export async function deleteProject(id: string): Promise<void> {
   const client = requireAdminClient();
   const { error } = await client.from(PROJECTS_TABLE).delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/* ───────────────────────── thoughts ───────────────────────── */
+
+export async function fetchPublishedThoughts(): Promise<Thought[]> {
+  if (!supabasePublic) return [];
+  const { data, error } = await supabasePublic
+    .from(THOUGHTS_TABLE)
+    .select("*")
+    .eq("published", true)
+    .order("published_at", { ascending: false });
+  if (error) {
+    console.error("[content] fetchPublishedThoughts error:", error.message);
+    return [];
+  }
+  return (data ?? []) as Thought[];
+}
+
+export async function fetchAllThoughts(): Promise<Thought[]> {
+  const client = requireAdminClient();
+  const { data, error } = await client
+    .from(THOUGHTS_TABLE)
+    .select("*")
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Thought[];
+}
+
+export async function createThought(input: ThoughtInput): Promise<Thought> {
+  const client = requireAdminClient();
+  const payload = {
+    ...input,
+    published_at: input.published && !input.published_at ? new Date().toISOString() : input.published_at,
+  };
+  const { data, error } = await client
+    .from(THOUGHTS_TABLE)
+    .insert(payload)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Thought;
+}
+
+export async function updateThought(
+  id: string,
+  input: Partial<ThoughtInput>
+): Promise<Thought> {
+  const client = requireAdminClient();
+  const payload: Record<string, unknown> = { ...input, updated_at: new Date().toISOString() };
+  if (input.published === true && !input.published_at) {
+    payload.published_at = new Date().toISOString();
+  }
+  if (input.published === false) {
+    payload.published_at = null;
+  }
+  const { data, error } = await client
+    .from(THOUGHTS_TABLE)
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Thought;
+}
+
+export async function deleteThought(id: string): Promise<void> {
+  const client = requireAdminClient();
+  const { error } = await client.from(THOUGHTS_TABLE).delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

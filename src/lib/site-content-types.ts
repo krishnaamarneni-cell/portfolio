@@ -90,6 +90,8 @@ export type Holding = {
   category: "Public" | "Private";
   brand_color: string;
   link?: string;
+  /** Domain (e.g. "amd.com") used to fetch the logo from a logo CDN. */
+  logo_domain?: string;
 };
 
 export type InvestmentsSection = {

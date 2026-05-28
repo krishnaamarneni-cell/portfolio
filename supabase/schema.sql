@@ -63,3 +63,25 @@ alter table public.site_content enable row level security;
 drop policy if exists "Public can read site_content" on public.site_content;
 create policy "Public can read site_content" on public.site_content
   for select to anon, authenticated using (true);
+
+-- ============ Thoughts (admin-authored, public-readable when published) ============
+create table if not exists public.thoughts (
+  id uuid primary key default gen_random_uuid(),
+  title text not null default '',
+  body text not null default '',
+  raw_text text,
+  tags text[] not null default '{}',
+  published boolean not null default false,
+  published_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists thoughts_published_idx
+  on public.thoughts (published, published_at desc);
+
+alter table public.thoughts enable row level security;
+
+drop policy if exists "Public can read published thoughts" on public.thoughts;
+create policy "Public can read published thoughts" on public.thoughts
+  for select to anon, authenticated using (published = true);

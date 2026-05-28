@@ -447,9 +447,9 @@ function Barcode() {
  * 3D rotating book — front/back/spine all visible as it spins.
  * Hover or click to pause; click again to open the inside-pages modal.
  */
-const BOOK_W = 260;
-const BOOK_H = 360;
-const BOOK_D = 56; // spine thickness in px
+const BOOK_W = 340;
+const BOOK_H = 470;
+const BOOK_D = 72; // spine thickness in px
 
 // Calibrated background-position-x for each face based on where the slice
 // sits in Bookcover.png (1774×887 spread with back / spine / front).

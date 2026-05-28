@@ -874,6 +874,12 @@ function HoldingsFields({
           placeholder="Optional link"
         />
       </div>
+      <input
+        value={value.logo_domain ?? ""}
+        onChange={(e) => set("logo_domain", e.target.value || undefined)}
+        className={inputClass}
+        placeholder="Logo domain (e.g. amd.com)"
+      />
     </div>
   );
 }

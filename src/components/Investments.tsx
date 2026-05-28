@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import ScrollReveal from "./ScrollReveal";
 import TiltCard from "./TiltCard";
 import Parallax3D from "./Parallax3D";
@@ -14,6 +15,7 @@ import {
 import HoverSpotlight from "./HoverSpotlight";
 import { useSiteContent } from "./SiteContentProvider";
 import type { Holding as HoldingDB } from "@/lib/site-content-types";
+import { holdingLogoUrl } from "@/lib/logo";
 
 type Holding = {
   ticker: string;
@@ -22,6 +24,7 @@ type Holding = {
   category: "Public" | "Private";
   brandColor: string;
   link?: string;
+  logoDomain?: string;
 };
 
 function toHolding(h: HoldingDB): Holding {
@@ -32,8 +35,10 @@ function toHolding(h: HoldingDB): Holding {
     category: h.category,
     brandColor: h.brand_color,
     link: h.link,
+    logoDomain: h.logo_domain,
   };
 }
+
 
 const PER_PAGE = 3;
 
@@ -59,12 +64,32 @@ function HoldingCard({ h, index }: { h: Holding; index: number }) {
               {/* Header row */}
               <div className="flex items-start justify-between mb-5">
                 <div className="flex items-center gap-3">
-                  {/* Ticker badge */}
+                  {/* Logo / ticker badge */}
                   <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-white text-sm shadow-lg shrink-0"
+                    className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-white text-sm shadow-lg shrink-0 overflow-hidden relative"
                     style={{ backgroundColor: h.brandColor }}
                   >
-                    {h.category === "Private" ? <FiLock size={18} /> : h.ticker.slice(0, 4)}
+                    {h.logoDomain ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={holdingLogoUrl(h.logoDomain) ?? ""}
+                          alt={`${h.name} logo`}
+                          className="w-9 h-9 object-contain"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                        <span className="absolute inset-0 -z-10 flex items-center justify-center">
+                          {h.category === "Private" ? <FiLock size={18} /> : h.ticker.slice(0, 4)}
+                        </span>
+                      </>
+                    ) : h.category === "Private" ? (
+                      <FiLock size={18} />
+                    ) : (
+                      h.ticker.slice(0, 4)
+                    )}
                   </div>
                   <div>
                     <h3 className="text-white font-bold text-lg leading-tight">{h.ticker}</h3>
@@ -265,12 +290,21 @@ export default function Investments() {
         </ScrollReveal>
 
         <ScrollReveal direction="zoom3d" delay={0.15}>
-          <p className="text-[#666] text-lg mb-16 max-w-xl">
-            {investments.intro}
-            <span className="block text-xs mt-2 text-[#555] italic">
-              {investments.disclaimer}
-            </span>
-          </p>
+          <div className="flex items-end justify-between flex-wrap gap-4 mb-16">
+            <p className="text-[#666] text-lg max-w-xl">
+              {investments.intro}
+              <span className="block text-xs mt-2 text-[#555] italic">
+                {investments.disclaimer}
+              </span>
+            </p>
+            <Link
+              href="/investments"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/[0.04] border border-white/10 text-[#ccc] text-sm font-medium hover:border-[#ff6b00]/40 hover:text-[#ff6b00] hover:bg-[#ff6b00]/[0.06] transition-all"
+            >
+              View full portfolio
+              <FiArrowUpRight size={14} />
+            </Link>
+          </div>
         </ScrollReveal>
 
         {publicHoldings.length > 0 && (

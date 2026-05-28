@@ -208,6 +208,7 @@ export const SITE_CONTENT_FALLBACK: SiteContent = {
         category: "Public",
         brand_color: "#ed1c24",
         link: "https://www.google.com/finance/quote/AMD:NASDAQ",
+        logo_domain: "amd.com",
       },
       {
         ticker: "WMT",
@@ -217,6 +218,7 @@ export const SITE_CONTENT_FALLBACK: SiteContent = {
         category: "Public",
         brand_color: "#0071ce",
         link: "https://www.google.com/finance/quote/WMT:NYSE",
+        logo_domain: "walmart.com",
       },
       {
         ticker: "MSTR",
@@ -226,6 +228,7 @@ export const SITE_CONTENT_FALLBACK: SiteContent = {
         category: "Public",
         brand_color: "#f7931a",
         link: "https://www.google.com/finance/quote/MSTR:NASDAQ",
+        logo_domain: "strategy.com",
       },
       {
         ticker: "META",
@@ -235,6 +238,7 @@ export const SITE_CONTENT_FALLBACK: SiteContent = {
         category: "Public",
         brand_color: "#1877f2",
         link: "https://www.google.com/finance/quote/META:NASDAQ",
+        logo_domain: "meta.com",
       },
       {
         ticker: "CAVA",
@@ -244,6 +248,7 @@ export const SITE_CONTENT_FALLBACK: SiteContent = {
         category: "Public",
         brand_color: "#d4a574",
         link: "https://www.google.com/finance/quote/CAVA:NYSE",
+        logo_domain: "cava.com",
       },
       {
         ticker: "CELH",
@@ -253,6 +258,7 @@ export const SITE_CONTENT_FALLBACK: SiteContent = {
         category: "Public",
         brand_color: "#00b3a6",
         link: "https://www.google.com/finance/quote/CELH:NASDAQ",
+        logo_domain: "celsius.com",
       },
       {
         ticker: "AMZN",
@@ -262,6 +268,7 @@ export const SITE_CONTENT_FALLBACK: SiteContent = {
         category: "Public",
         brand_color: "#ff9900",
         link: "https://www.google.com/finance/quote/AMZN:NASDAQ",
+        logo_domain: "amazon.com",
       },
     ],
     private_holdings: [

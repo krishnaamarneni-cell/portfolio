@@ -32,6 +32,29 @@ export type Project = {
 export type JobInput = Omit<Job, "id" | "created_at">;
 export type ProjectInput = Omit<Project, "id" | "created_at">;
 
+export type Thought = {
+  id: string;
+  title: string;
+  body: string;
+  raw_text: string | null;
+  tags: string[];
+  published: boolean;
+  published_at: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ThoughtInput = Omit<Thought, "id" | "created_at" | "updated_at">;
+
+export const EMPTY_THOUGHT: ThoughtInput = {
+  title: "",
+  body: "",
+  raw_text: null,
+  tags: [],
+  published: false,
+  published_at: null,
+};
+
 export const EMPTY_JOB: JobInput = {
   title: "",
   category: "",
