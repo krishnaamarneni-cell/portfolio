@@ -12,10 +12,40 @@ type Props = {
 const inputClass =
   "w-full px-4 py-2.5 rounded-xl bg-[#1a1a1a] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-sm text-white placeholder:text-[#555] transition-colors";
 
+type Preset = {
+  id: string;
+  label: string;
+  base_url: string;
+  helpUrl: string;
+  helpLabel: string;
+  description: string;
+};
+
+const PRESETS: Record<string, Preset> = {
+  wealthclaude: {
+    id: "wealthclaude",
+    label: "WealthClaude",
+    base_url: "https://www.wealthclaude.com/api/agent/me",
+    helpUrl: "https://www.wealthclaude.com/settings/ai-access",
+    helpLabel: "WealthClaude → AI Access → New token",
+    description:
+      "Read-only token from your WealthClaude account. The chat will see your live net worth, holdings, and dividends.",
+  },
+  buffer: {
+    id: "buffer",
+    label: "Buffer",
+    base_url: "https://api.bufferapp.com/1/profiles.json",
+    helpUrl: "https://buffer.com/developers/apps",
+    helpLabel: "buffer.com/developers/apps",
+    description:
+      "Buffer access token. Lets the Social tab list your LinkedIn / X / Instagram profiles and post via Buffer's queue.",
+  },
+};
+
 const DEFAULT_DRAFT = {
   id: "wealthclaude",
   label: "WealthClaude",
-  base_url: "https://www.wealthclaude.com/api/agent/me",
+  base_url: PRESETS.wealthclaude.base_url,
   bearer_token: "",
   enabled: true,
 };
@@ -197,13 +227,81 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
         </div>
       ) : null}
 
+      {/* Preset picker */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-[#666] mr-1">
+          Preset
+        </span>
+        {Object.values(PRESETS).map((p) => {
+          const isActive = draft.id === p.id;
+          const existing = connectors.find((c) => c.id === p.id);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() =>
+                setDraft({
+                  id: p.id,
+                  label: p.label,
+                  base_url: existing?.base_url ?? p.base_url,
+                  bearer_token: existing?.bearer_token ?? "",
+                  enabled: existing?.enabled ?? true,
+                })
+              }
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                isActive
+                  ? "bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black shadow-[0_4px_15px_rgba(255,107,0,0.35)]"
+                  : "bg-white/[0.04] border border-white/[0.06] text-[#999] hover:border-[#ff6b00]/30 hover:text-white"
+              }`}
+            >
+              {p.label}
+              {existing && (
+                <span
+                  className={`text-[9px] font-mono ${isActive ? "text-black/70" : "text-emerald-400"}`}
+                >
+                  ✓
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Preset-specific help */}
+      {PRESETS[draft.id] && (
+        <div className="mb-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs leading-relaxed text-[#bbb]">
+          <p>{PRESETS[draft.id].description}</p>
+          <p className="mt-2 text-[#888]">
+            Get a token at{" "}
+            <a
+              href={PRESETS[draft.id].helpUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#ff8c38] hover:underline"
+            >
+              {PRESETS[draft.id].helpLabel}
+            </a>
+            .
+            {draft.id === "buffer" && (
+              <>
+                {" "}
+                On Buffer&apos;s developer page click <strong>Create New App</strong>{" "}
+                → fill any name → open the app → copy the{" "}
+                <strong>Access Token</strong> (long string starting with{" "}
+                <code className="text-[#ff8c38]">1/</code>). Paste it below.
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
       {/* Add / edit form */}
       <form
         onSubmit={save}
         className="rounded-2xl border border-[#ff6b00]/20 bg-gradient-to-br from-[#ff6b00]/[0.05] to-transparent p-5 space-y-4"
       >
         <p className="text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
-          {connectors.find((c) => c.id === draft.id) ? "Edit" : "Add"} WealthClaude connector
+          {connectors.find((c) => c.id === draft.id) ? "Edit" : "Add"} {draft.label || draft.id} connector
         </p>
 
         <div className="grid sm:grid-cols-2 gap-3">
@@ -243,11 +341,23 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
             placeholder="https://www.wealthclaude.com/api/agent/me"
           />
           <p className="text-[10px] text-[#555] mt-1.5">
-            For WealthClaude use the <strong className="text-[#ff8c38]">REST endpoint</strong> from
-            your AI Access page —{" "}
-            <code className="text-[#ff8c38]">https://www.wealthclaude.com/api/agent/me</code>.
-            (The <code>/api/mcp</code> URL is JSON-RPC and won&apos;t work here yet.) If you only
-            paste the host we&apos;ll append <code>/api/agent/me</code> automatically.
+            {draft.id === "buffer" ? (
+              <>
+                Leave this as the Buffer profiles URL — the Social tab uses
+                hard-coded Buffer endpoints, only the token below actually
+                matters for Buffer.
+              </>
+            ) : (
+              <>
+                For WealthClaude use the{" "}
+                <strong className="text-[#ff8c38]">REST endpoint</strong> —{" "}
+                <code className="text-[#ff8c38]">
+                  https://www.wealthclaude.com/api/agent/me
+                </code>
+                . If you only paste the host we&apos;ll append{" "}
+                <code>/api/agent/me</code> automatically.
+              </>
+            )}
           </p>
         </div>
 
@@ -264,8 +374,17 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
             autoComplete="new-password"
           />
           <p className="text-[10px] text-[#555] mt-1.5">
-            Generate this in WealthClaude → AI Access → New token. Stored
-            server-side; never exposed to the public site.
+            {draft.id === "buffer" ? (
+              <>
+                Long token starting with <code>1/</code> from your Buffer app
+                page (Create app → open it → copy Access Token).
+              </>
+            ) : (
+              <>
+                Generate this in WealthClaude → AI Access → New token.
+              </>
+            )}{" "}
+            Stored server-side; never exposed to the public site.
           </p>
         </div>
 
