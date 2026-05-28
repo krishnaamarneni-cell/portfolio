@@ -6,6 +6,13 @@ import {
   resolveAgentModel,
   runAgent,
 } from "@/lib/agents";
+import {
+  search,
+  searchResultsToContext,
+  whichSearchProvider,
+  searchProviderHelp,
+  type SearchResult,
+} from "@/lib/search";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,12 +30,15 @@ export async function POST(request: Request) {
       { status: 503 }
     );
   }
+  if (!whichSearchProvider()) {
+    return NextResponse.json({ error: searchProviderHelp() }, { status: 503 });
+  }
+
   let body: Body = {};
   try {
     body = (await request.json().catch(() => ({}))) as Body;
   } catch {}
 
-  // Gather context: holdings (via WealthClaude MCP), recent roles, skills.
   const [holdingsResult, jobs, site] = await Promise.all([
     fetchHoldingSymbols(),
     fetchJobs().catch(() => []),
@@ -40,29 +50,85 @@ export async function POST(request: Request) {
     .filter(Boolean);
   const skills = (site.skills?.skills ?? []).slice(0, 25);
 
-  const system = `You are Krishna Amarneni's personal news scout. You have a web-search tool. Use it.
+  // Build 3 focused queries — one per bucket the user cares about.
+  const tickersClause = holdingsResult.symbols.length
+    ? holdingsResult.symbols.slice(0, 8).join(" OR ")
+    : "(major US tickers)";
+  const baseQueries = [
+    `${tickersClause} stock news this week`,
+    `AI tools models agents released this week`,
+    `tech job market hiring layoffs SAP AI engineer trends`,
+  ];
+  if (body.extraQuery) baseQueries.push(body.extraQuery);
 
-Job: in one shot, surface what's NEW (last 7 days, prioritise last 24 hours) across three buckets:
-1. **Stocks/investments** — only for the tickers in Krishna's portfolio (provided below). Earnings, M&A, downgrades, big moves, anything actionable.
-2. **Job market** — trends affecting people in roles like Krishna's (SAP, fullstack, AI builder).
-3. **AI tools** — new models, agent frameworks, dev tools that someone building AI products should know about.
+  let searchResults: SearchResult[] = [];
+  try {
+    searchResults = await Promise.all(
+      baseQueries.map((q) =>
+        search({ query: q, maxResults: 6 }).catch(
+          (err): SearchResult => ({
+            query: q,
+            hits: [
+              {
+                title: "Search failed",
+                url: "",
+                snippet: err instanceof Error ? err.message : String(err),
+              },
+            ],
+          })
+        )
+      )
+    );
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Search failed" },
+      { status: 502 }
+    );
+  }
+  searchResults = searchResults.map((r) => ({
+    ...r,
+    hits: r.hits.filter((h) => h.url && /^https?:\/\//i.test(h.url)),
+  }));
 
-Output rules:
-- Return clean Markdown. Three H2 sections: \`## Stocks\`, \`## Job Market\`, \`## AI Tools\`.
-- Each section: 3-6 bullets. Each bullet ends with a Markdown link: \` [Source](URL)\`.
-- Lead with the ticker / company / tool name in bold.
-- Skip anything you can't back with a real URL.
-- No filler. No "hope this helps". No emojis.`;
+  const totalHits = searchResults.reduce((n, r) => n + r.hits.length, 0);
+  if (totalHits === 0) {
+    return NextResponse.json({
+      markdown: "## No results\n\nWeb search returned nothing. Try a more focused extra-query.",
+      context: { symbols: holdingsResult.symbols, model: body.model },
+    });
+  }
+
+  const system = `You are Krishna's news scout. You are given REAL web-search results below — actual URLs and snippets. Summarise them into three sections.
+
+HARD RULES:
+- NEVER invent a URL. Only use URLs that appear literally in the search results.
+- NEVER invent a fact. Only paraphrase what's in the snippets.
+- If a bucket has no relevant results, write exactly: \`Nothing notable in today's results.\` under its heading.
+
+Output format:
+## Stocks
+- **<Ticker or company>** — <one-sentence takeaway from snippet> [Source](<exact URL>)
+
+## AI Tools
+- **<Tool / model name>** — <one-sentence takeaway from snippet> [Source](<exact URL>)
+
+## Job Market
+- **<Headline noun>** — <one-sentence takeaway from snippet> [Source](<exact URL>)
+
+3-6 bullets per section. No emojis. No filler.`;
 
   const symbolsLine = holdingsResult.symbols.length
     ? `Krishna's tickers: ${holdingsResult.symbols.join(", ")}.`
-    : `Krishna's holdings are unavailable — search the broad US market + AI sector.`;
+    : "Krishna's holdings aren't available — use broad US market context.";
 
   const userPrompt = [
     symbolsLine,
     roles.length ? `Recent roles: ${roles.join("; ")}.` : "",
     skills.length ? `Skill bag: ${skills.join(", ")}.` : "",
     body.extraQuery ? `Extra focus: ${body.extraQuery}` : "",
+    "",
+    "Web-search results:",
+    searchResultsToContext(searchResults),
   ]
     .filter(Boolean)
     .join("\n");
@@ -70,10 +136,11 @@ Output rules:
   const model = resolveAgentModel(body.model);
   const result = await runAgent({
     apiKey,
-    model,
+    // We already searched — no need for compound's tool loop.
+    model: model.startsWith("compound") ? "llama-3.3-70b-versatile" : model,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 2400,
+    maxTokens: 2600,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });
@@ -86,6 +153,7 @@ Output rules:
       roles,
       model: result.modelUsed ?? model,
       modelRequested: model,
+      provider: whichSearchProvider(),
     },
   });
 }

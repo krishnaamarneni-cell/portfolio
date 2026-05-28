@@ -72,6 +72,8 @@ export default function AgentsTab({
     "PepsiCo, Walmart, Anthropic, OpenAI, Stripe, Databricks"
   );
   const [targetRole, setTargetRole] = useState("");
+  const [profile, setProfile] = useState<"software" | "sap" | "both">("both");
+  const [location, setLocation] = useState("");
 
   useEffect(() => {
     setNewsState(loadCached("news"));
@@ -79,8 +81,21 @@ export default function AgentsTab({
     try {
       const saved = window.localStorage.getItem("krishna_admin_agent_model");
       if (saved) setModel(saved);
+      const p = window.localStorage.getItem("krishna_admin_agent_profile");
+      if (p === "software" || p === "sap" || p === "both") setProfile(p);
+      const l = window.localStorage.getItem("krishna_admin_agent_location");
+      if (l) setLocation(l);
+      const c = window.localStorage.getItem("krishna_admin_agent_companies");
+      if (c) setCompaniesText(c);
     } catch {}
   }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("krishna_admin_agent_profile", profile);
+      window.localStorage.setItem("krishna_admin_agent_location", location);
+      window.localStorage.setItem("krishna_admin_agent_companies", companiesText);
+    } catch {}
+  }, [profile, location, companiesText]);
   useEffect(() => {
     try {
       window.localStorage.setItem("krishna_admin_agent_model", model);
@@ -133,6 +148,8 @@ export default function AgentsTab({
           model,
           companies,
           targetRole: targetRole || undefined,
+          profile,
+          location: location || undefined,
         }),
       });
       const data = await r.json().catch(() => ({}));
@@ -268,15 +285,62 @@ export default function AgentsTab({
           </button>
         </div>
 
-        <div className="space-y-2">
-          <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666]">
-            Target companies (comma separated)
-          </label>
-          <input
-            value={companiesText}
-            onChange={(e) => setCompaniesText(e.target.value)}
-            className="w-full px-4 py-2 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-xs text-white"
-          />
+        <div className="space-y-3">
+          {/* Profile picker — Software / SAP / Both */}
+          <div className="space-y-1.5">
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666]">
+              Background to match against
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { key: "software", label: "Software / AI" },
+                  { key: "sap", label: "SAP / Enterprise" },
+                  { key: "both", label: "Both" },
+                ] as const
+              ).map((opt) => {
+                const on = profile === opt.key;
+                return (
+                  <button
+                    type="button"
+                    key={opt.key}
+                    onClick={() => setProfile(opt.key)}
+                    className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                      on
+                        ? "bg-[#ff6b00]/15 border-[#ff6b00]/40 text-[#ff8c38]"
+                        : "bg-white/[0.04] border-white/[0.08] text-[#999] hover:border-[#ff6b00]/30"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+                Target companies (comma separated)
+              </label>
+              <input
+                value={companiesText}
+                onChange={(e) => setCompaniesText(e.target.value)}
+                className="w-full px-4 py-2 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-xs text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+                Location (Remote, NJ, Chicago…)
+              </label>
+              <input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="leave blank for anywhere"
+                className="w-full px-4 py-2 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-xs text-white placeholder:text-[#555]"
+              />
+            </div>
+          </div>
           <input
             value={targetRole}
             onChange={(e) => setTargetRole(e.target.value)}
@@ -288,7 +352,7 @@ export default function AgentsTab({
         {jobsError && (
           <ErrorBox
             msg={jobsError}
-            hint="If `compound-beta` isn't on your plan, switch the Model dropdown to Llama 3.3 70B (no web)."
+            hint="Add TAVILY_API_KEY (free at tavily.com, 1000/mo) or BRAVE_API_KEY (free at api.search.brave.com, 2000/mo) to Vercel env so the agent has real search results to cite from."
           />
         )}
 
@@ -306,11 +370,13 @@ export default function AgentsTab({
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-[11px] text-[#888] leading-relaxed flex items-start gap-2">
         <FiCpu size={12} className="mt-0.5 shrink-0" />
         <p>
-          The News scout pulls live ticker symbols from any WealthClaude-style
-          MCP connector you've enabled, then asks the agent to search the open
-          web. The Jobs scout uses your Jobs + Skills from this admin as the
-          match criteria. Results are cached in this browser so you can come
-          back to them.
+          Both scouts now do a REAL web search (Tavily or Brave) before the
+          agent writes anything, then strictly limit the model to URLs that
+          appeared in the search results — so no more hallucinated 404 Apply
+          links. The News scout pulls live ticker symbols from any
+          WealthClaude-style MCP connector you've enabled. The Jobs scout
+          searches per company using your chosen profile + location. Results
+          are cached in this browser.
         </p>
       </div>
     </section>
@@ -360,6 +426,15 @@ function ContextChips({
   if (Array.isArray(context.companies) && context.companies.length > 0) {
     chips.push(`${context.companies.length} companies`);
   }
+  if (typeof context.provider === "string") {
+    chips.push(`search: ${context.provider}`);
+  }
+  if (typeof context.profile === "string") {
+    chips.push(`profile: ${context.profile}`);
+  }
+  if (typeof context.location === "string" && context.location) {
+    chips.push(`loc: ${context.location}`);
+  }
   if (typeof context.model === "string") {
     const requested = typeof context.modelRequested === "string"
       ? context.modelRequested
@@ -369,6 +444,15 @@ function ContextChips({
         ? `${context.model} (fell back from ${requested})`
         : context.model
     );
+  }
+  // Show how many real search hits each company landed so the user can sanity-
+  // check why a company has no results.
+  if (context.hitsByCompany && typeof context.hitsByCompany === "object") {
+    const entries = Object.entries(
+      context.hitsByCompany as Record<string, number>
+    );
+    const empty = entries.filter(([, n]) => n === 0).map(([k]) => k);
+    if (empty.length > 0) chips.push(`no hits: ${empty.join(", ")}`);
   }
   if (chips.length === 0) return null;
   return (
