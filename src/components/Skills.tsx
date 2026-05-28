@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import ScrollReveal from "./ScrollReveal";
 import TiltCard from "./TiltCard";
 import Parallax3D from "./Parallax3D";
+import { useSiteContent } from "./SiteContentProvider";
 
 const SkillsAvatar = dynamic(() => import("./Avatar3D").then(mod => ({ default: mod.SkillsAvatar })), { ssr: false });
 import {
@@ -12,63 +13,44 @@ import {
   SiSupabase, SiPostgresql, SiStripe, SiThreedotjs, SiVercel,
   SiGit, SiDocker, SiFramer, SiOpenai,
 } from "react-icons/si";
-import { FiDatabase, FiServer, FiCpu, FiTool } from "react-icons/fi";
+import { FiDatabase, FiServer, FiCpu, FiTool, FiZap } from "react-icons/fi";
+import type { IconType } from "react-icons";
 
-const allSkills = [
-  { name: "Next.js", icon: SiNextdotjs },
-  { name: "React", icon: SiReact },
-  { name: "TypeScript", icon: SiTypescript },
-  { name: "Python", icon: SiPython },
-  { name: "Tailwind CSS", icon: SiTailwindcss },
-  { name: "Supabase", icon: SiSupabase },
-  { name: "PostgreSQL", icon: SiPostgresql },
-  { name: "Stripe", icon: SiStripe },
-  { name: "Three.js", icon: SiThreedotjs },
-  { name: "Vercel", icon: SiVercel },
-  { name: "Git", icon: SiGit },
-  { name: "Docker", icon: SiDocker },
-  { name: "Framer Motion", icon: SiFramer },
-  { name: "Claude AI", icon: SiOpenai },
-  { name: "AI Agents", icon: FiCpu },
-  { name: "Groq SDK", icon: FiCpu },
-  { name: "SAP S/4HANA", icon: FiDatabase },
-  { name: "SAP Ariba", icon: FiDatabase },
-  { name: "SAP MM/SD", icon: FiDatabase },
-  { name: "Power BI", icon: FiDatabase },
-  { name: "REST APIs", icon: FiServer },
-  { name: "Vibe Coding", icon: FiTool },
-  { name: "LLM Integration", icon: SiOpenai },
-  { name: "Supply Chain", icon: FiDatabase },
-];
+const SKILL_ICONS: Record<string, IconType> = {
+  "Next.js": SiNextdotjs,
+  React: SiReact,
+  TypeScript: SiTypescript,
+  Python: SiPython,
+  "Tailwind CSS": SiTailwindcss,
+  Supabase: SiSupabase,
+  PostgreSQL: SiPostgresql,
+  Stripe: SiStripe,
+  "Three.js": SiThreedotjs,
+  Vercel: SiVercel,
+  Git: SiGit,
+  Docker: SiDocker,
+  "Framer Motion": SiFramer,
+  "Claude AI": SiOpenai,
+  "AI Agents": FiCpu,
+  "Groq SDK": FiCpu,
+  "SAP S/4HANA": FiDatabase,
+  "SAP Ariba": FiDatabase,
+  "SAP MM/SD": FiDatabase,
+  "Power BI": FiDatabase,
+  "REST APIs": FiServer,
+  "Vibe Coding": FiTool,
+  "LLM Integration": SiOpenai,
+  "Supply Chain": FiDatabase,
+};
 
-const services = [
-  {
-    num: "01",
-    title: "SAP Consulting",
-    desc: "End-to-end SAP implementations across S/4HANA, Ariba, MM/SD/PP/QM — streamlining supply chains for Fortune 500 companies.",
-    tools: ["SAP S/4HANA", "Ariba", "MM/SD", "Power BI", "Supply Chain"],
-  },
-  {
-    num: "02",
-    title: "Web Development",
-    desc: "Full-stack applications built with modern frameworks — responsive, performant, and production-ready from day one.",
-    tools: ["Next.js", "React", "TypeScript", "Tailwind CSS", "Supabase"],
-  },
-  {
-    num: "03",
-    title: "AI & Automation",
-    desc: "Autonomous AI agents, LLM integrations, and intelligent workflows that handle complex tasks end to end.",
-    tools: ["Claude AI", "AI Agents", "Python", "Groq SDK", "LLM"],
-  },
-  {
-    num: "04",
-    title: "Fintech Products",
-    desc: "Financial platforms with real-time data, Stripe integration, and secure transaction handling at scale.",
-    tools: ["Stripe", "PostgreSQL", "Vercel", "REST APIs", "Docker"],
-  },
-];
+function iconFor(name: string): IconType {
+  return SKILL_ICONS[name] ?? FiZap;
+}
 
 export default function Skills() {
+  const { skills: skillsContent } = useSiteContent();
+  const allSkills = skillsContent.skills.map((n) => ({ name: n, icon: iconFor(n) }));
+  const services = skillsContent.services;
   const sectionRef = useRef<HTMLElement>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -112,20 +94,19 @@ export default function Skills() {
           <div>
             <ScrollReveal direction="rotate3d">
               <p className="text-[#ff6b00] text-sm font-mono mb-4 tracking-[0.3em] uppercase">
-                / Services, Skills, Abilities
+                {skillsContent.eyebrow}
               </p>
             </ScrollReveal>
 
             <ScrollReveal direction="flipX" delay={0.1}>
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
-                What I do <span className="text-gradient">best?</span>
+                {skillsContent.heading_pre} <span className="text-gradient">{skillsContent.heading_accent}</span>
               </h2>
             </ScrollReveal>
 
             <ScrollReveal direction="zoom3d" delay={0.2}>
               <p className="text-[#777] text-lg leading-relaxed max-w-lg">
-                I bridge enterprise SAP systems with modern web development and AI — creating
-                solutions that help businesses grow and make a real impact.
+                {skillsContent.intro}
               </p>
             </ScrollReveal>
 
@@ -172,7 +153,7 @@ export default function Skills() {
           {services.map((svc, i) => {
             const dirs = ["flipY", "rotate3d", "flipX", "zoom3d"] as const;
             return (
-              <ScrollReveal key={svc.title} delay={0.1 * i} direction={dirs[i]}>
+              <ScrollReveal key={`${svc.title}-${i}`} delay={0.1 * i} direction={dirs[i % dirs.length]}>
                 <TiltCard className="rounded-[20px] h-full" intensity={12}>
                   <div className="card-dark card-3d-shine p-7 h-full shadow-3d">
                     <div className="flex items-center gap-4 mb-4">
@@ -180,7 +161,7 @@ export default function Skills() {
                       <h3 className="text-white font-bold text-xl">{svc.title}</h3>
                     </div>
 
-                    <p className="text-[#888] text-sm leading-relaxed mb-5">{svc.desc}</p>
+                    <p className="text-[#888] text-sm leading-relaxed mb-5">{svc.description}</p>
 
                     <div className="flex flex-wrap gap-2">
                       {svc.tools.map((t) => (

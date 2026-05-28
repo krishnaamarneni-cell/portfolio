@@ -3,21 +3,16 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { FiArrowDown } from "react-icons/fi";
 import dynamic from "next/dynamic";
+import { useSiteContent } from "./SiteContentProvider";
 
 const Avatar3D = dynamic(
   () => import("./Avatar3D").then((mod) => ({ default: mod.HeroAvatar })),
   { ssr: false }
 );
 
-const roles = [
-  "Full-Stack Developer",
-  "AI Agent Developer",
-  "SAP Business Analyst",
-  "Vibe Coder",
-  "Finance Tech Builder",
-];
-
 export default function Hero() {
+  const { hero } = useSiteContent();
+  const roles = hero.roles.length > 0 ? hero.roles : ["Builder"];
   const [roleIndex, setRoleIndex] = useState(0);
   const [text, setText] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -53,7 +48,7 @@ export default function Hero() {
         now.toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
-          timeZone: "America/New_York",
+          timeZone: hero.timezone || "America/New_York",
           hour12: false,
         })
       );
@@ -61,7 +56,7 @@ export default function Hero() {
     update();
     const timer = setInterval(update, 30000);
     return () => clearInterval(timer);
-  }, []);
+  }, [hero.timezone]);
 
   useEffect(() => {
     const handleMouse = (e: MouseEvent) => {
@@ -125,7 +120,7 @@ export default function Hero() {
           <h1
             className="text-5xl sm:text-6xl font-black leading-[0.85] tracking-tighter text-white uppercase select-none opacity-0 animate-[slideInLeft_1s_0.4s_forwards]"
           >
-            KRISHNA
+            {hero.first_name}
           </h1>
 
           <div className="shrink-0 -my-2 opacity-0 animate-[fadeIn_0.3s_0.2s_forwards]">
@@ -135,16 +130,16 @@ export default function Hero() {
           <h1
             className="text-5xl sm:text-6xl font-black leading-[0.85] tracking-tighter text-gradient uppercase select-none opacity-0 animate-[slideInRight_1s_0.4s_forwards]"
           >
-            AMARNENI
+            {hero.last_name}
           </h1>
 
           <div className="mt-6 text-center opacity-0 animate-[fadeIn_1s_0.8s_forwards]">
-            <p className="text-[#777] text-xs italic tracking-wider mb-1">SAP Expert &amp; AI Builder · Full-Stack Dev</p>
+            <p className="text-[#777] text-xs italic tracking-wider mb-1">{hero.tagline_left} · {hero.tagline_right}</p>
             <div className="text-base font-light h-7">
               <span className="text-[#999]">{text}</span>
               <span className="text-[#ff6b00] animate-pulse">|</span>
             </div>
-            <p className="text-[#777] text-xs mt-2">New Jersey, USA · {currentTime} EST</p>
+            <p className="text-[#777] text-xs mt-2">{hero.location} · {currentTime}</p>
           </div>
         </div>
 
@@ -158,7 +153,7 @@ export default function Hero() {
               transition: "transform 0.4s ease-out",
             }}
           >
-            KRISHNA
+            {hero.first_name}
           </h1>
 
           {/* Avatar */}
@@ -174,22 +169,22 @@ export default function Hero() {
               transition: "transform 0.4s ease-out",
             }}
           >
-            AMARNENI
+            {hero.last_name}
           </h1>
         </div>
 
         {/* Labels row below (desktop only) */}
         <div className="hidden md:flex justify-between items-start mt-4 opacity-0 animate-[fadeIn_1s_0.8s_forwards]">
           <div>
-            <p className="text-[#777] text-sm italic tracking-wider mb-1">SAP Expert &amp; AI Builder</p>
+            <p className="text-[#777] text-sm italic tracking-wider mb-1">{hero.tagline_left}</p>
             <div className="text-lg font-light h-7">
               <span className="text-[#999]">{text}</span>
               <span className="text-[#ff6b00] animate-pulse">|</span>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-[#777] text-sm italic tracking-wider mb-1">Full-Stack Developer</p>
-            <p className="text-[#777] text-sm">New Jersey, USA · {currentTime} EST</p>
+            <p className="text-[#777] text-sm italic tracking-wider mb-1">{hero.tagline_right}</p>
+            <p className="text-[#777] text-sm">{hero.location} · {currentTime}</p>
           </div>
         </div>
       </div>

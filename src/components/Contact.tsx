@@ -4,31 +4,10 @@ import { useState } from "react";
 import ScrollReveal from "./ScrollReveal";
 import TiltCard from "./TiltCard";
 import { FiMail, FiMapPin, FiSend, FiLinkedin, FiGithub, FiArrowUpRight, FiChevronDown, FiBriefcase, FiUsers } from "react-icons/fi";
-
-const faqs = [
-  {
-    q: "What technologies do you specialize in?",
-    a: "I specialize in SAP (S/4HANA, BTP, ABAP, Fiori), full-stack web development (Next.js, React, TypeScript, Node.js), and AI/ML agent development. I bring a unique blend of enterprise SAP expertise and modern web technologies.",
-  },
-  {
-    q: "Are you available for freelance or contract work?",
-    a: "Yes! I'm open to freelance projects, contract roles, and full-time opportunities. Whether it's an SAP implementation, a web application, or an AI-powered solution, I'd love to discuss how I can help.",
-  },
-  {
-    q: "What is your typical project process?",
-    a: "I start with a discovery call to understand your needs, then provide a proposal with timeline and scope. Development follows an agile approach with regular check-ins. I prioritize clean code, thorough testing, and clear documentation.",
-  },
-  {
-    q: "Do you work with teams or solo?",
-    a: "Both! I've led cross-functional teams on large SAP implementations and also deliver end-to-end solo projects. I'm comfortable collaborating with designers, PMs, and other developers, or owning the full stack independently.",
-  },
-  {
-    q: "What industries have you worked in?",
-    a: "I've worked across FMCG (Coca-Cola, PepsiCo), pharmaceuticals (Xiromed), flavors & fragrances (IFF), and IT consulting (Denken Solutions, SaasIT). This cross-industry experience helps me understand diverse business requirements.",
-  },
-];
+import { useSiteContent } from "./SiteContentProvider";
 
 export default function Contact() {
+  const { contact } = useSiteContent();
   const [formData, setFormData] = useState({ name: "", email: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
   const [role, setRole] = useState<"recruiter" | "project" | null>(null);
@@ -41,7 +20,7 @@ export default function Contact() {
     const body = encodeURIComponent(
       `Name: ${formData.name}\nEmail: ${formData.email}\nRole: ${role === "recruiter" ? "Recruiter" : role === "project" ? "Has a project" : "Not specified"}\n\n${formData.message}`
     );
-    window.open(`mailto:krishna.amarneni@gmail.com?subject=${subject}&body=${body}`);
+    window.open(`mailto:${contact.email}?subject=${subject}&body=${body}`);
     setSubmitted(true);
     setTimeout(() => setSubmitted(false), 3000);
   };
@@ -54,15 +33,15 @@ export default function Contact() {
         <ScrollReveal direction="zoom3d">
           <div className="text-center mb-20">
             <p className="text-[#ff6b00] text-sm font-mono mb-4 tracking-[0.3em] uppercase">
-              // Let&apos;s Connect
+              {contact.eyebrow}
             </p>
             <h2 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white leading-tight mb-6">
-              Got a project in
+              {contact.heading_pre}
               <br />
-              <span className="text-gradient">mind?</span>
+              <span className="text-gradient">{contact.heading_accent}</span>
             </h2>
             <p className="text-[#777] text-lg max-w-md mx-auto mb-10">
-              I&apos;m always open to new opportunities, collaborations, and interesting projects.
+              {contact.intro}
             </p>
 
             {/* Role selection */}
@@ -97,8 +76,8 @@ export default function Contact() {
           {/* Left info */}
           <div className="lg:col-span-2 space-y-5">
             {[
-              { icon: FiMail, label: "Email", value: "krishna.amarneni@gmail.com", href: "mailto:krishna.amarneni@gmail.com" },
-              { icon: FiMapPin, label: "Location", value: "New Jersey, USA", href: undefined },
+              { icon: FiMail, label: "Email", value: contact.email, href: `mailto:${contact.email}` },
+              { icon: FiMapPin, label: "Location", value: contact.location, href: undefined },
             ].map((item, i) => {
               const dirs = ["flipY", "rotate3d"] as const;
               return (
@@ -127,8 +106,8 @@ export default function Contact() {
             <ScrollReveal delay={0.3} direction="rotate3d">
               <div className="flex gap-3 pt-4">
                 {[
-                  { icon: FiLinkedin, href: "https://linkedin.com/in/krishnaamarneni", label: "LinkedIn" },
-                  { icon: FiGithub, href: "https://github.com/krishnaamarneni", label: "GitHub" },
+                  { icon: FiLinkedin, href: contact.linkedin, label: "LinkedIn" },
+                  { icon: FiGithub, href: contact.github, label: "GitHub" },
                 ].map(({ icon: Icon, href, label }) => (
                   <a
                     key={label}
@@ -224,7 +203,7 @@ export default function Contact() {
           </ScrollReveal>
 
           <div className="max-w-3xl mx-auto space-y-3">
-            {faqs.map((faq, i) => (
+            {contact.faqs.map((faq, i) => (
               <ScrollReveal key={i} delay={i * 0.05} direction="zoom3d">
                 <div
                   className="border border-white/[0.06] rounded-2xl overflow-hidden transition-all duration-300 hover:border-white/[0.1]"
@@ -234,7 +213,7 @@ export default function Contact() {
                     onClick={() => setOpenFaq(openFaq === i ? null : i)}
                     className="w-full flex items-center justify-between px-6 py-5 text-left"
                   >
-                    <span className="text-sm font-medium text-white pr-4">{faq.q}</span>
+                    <span className="text-sm font-medium text-white pr-4">{faq.question}</span>
                     <FiChevronDown
                       size={18}
                       className={`text-[#ff6b00] shrink-0 transition-transform duration-300 ${
@@ -245,11 +224,11 @@ export default function Contact() {
                   <div
                     className="overflow-hidden transition-all duration-300"
                     style={{
-                      maxHeight: openFaq === i ? "200px" : "0px",
+                      maxHeight: openFaq === i ? "400px" : "0px",
                       opacity: openFaq === i ? 1 : 0,
                     }}
                   >
-                    <p className="px-6 pb-5 text-sm text-[#888] leading-relaxed">{faq.a}</p>
+                    <p className="px-6 pb-5 text-sm text-[#888] leading-relaxed">{faq.answer}</p>
                   </div>
                 </div>
               </ScrollReveal>

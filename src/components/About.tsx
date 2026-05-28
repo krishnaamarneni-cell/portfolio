@@ -6,47 +6,30 @@ import TiltCard from "./TiltCard";
 import Parallax3D from "./Parallax3D";
 import { FiCpu, FiCode, FiDatabase, FiGlobe, FiCalendar, FiCopy, FiDownload, FiCheck } from "react-icons/fi";
 import { FaXTwitter, FaInstagram, FaYoutube, FaLinkedinIn, FaGithub, FaStar } from "react-icons/fa6";
+import { useSiteContent } from "./SiteContentProvider";
+import type { IconType } from "react-icons";
 
-const highlights = [
-  {
-    icon: FiCpu,
-    title: "AI & Agents",
-    desc: "Built Lucy AI — an autonomous agent handling 50+ tasks from email to code deployment to production.",
-    accent: "#ff6b00",
-  },
-  {
-    icon: FiCode,
-    title: "Full-Stack Dev",
-    desc: "Next.js, React, TypeScript, Supabase, Python, Three.js — shipping production apps end to end.",
-    accent: "#ff8c38",
-  },
-  {
-    icon: FiDatabase,
-    title: "SAP Expert",
-    desc: "7+ years across S/4HANA, Ariba, MM/SD/PP/QM with Coca-Cola, PepsiCo, and Xiromed.",
-    accent: "#ffab5e",
-  },
-  {
-    icon: FiGlobe,
-    title: "Global Scale",
-    desc: "Delivered solutions across NA, LATAM, APAC, and Europe for Fortune 500 companies.",
-    accent: "#ff6b00",
-  },
-];
+const ICONS: Record<string, IconType> = {
+  Cpu: FiCpu,
+  Code: FiCode,
+  Database: FiDatabase,
+  Globe: FiGlobe,
+};
 
-const socials = [
-  { icon: FaXTwitter, href: "https://x.com/Kp26W39306", label: "X" },
-  { icon: FaInstagram, href: "https://www.instagram.com/krishna.amarneni/", label: "Instagram" },
-  { icon: FaYoutube, href: "#", label: "YouTube" },
-  { icon: FaLinkedinIn, href: "https://www.linkedin.com/in/krishnaamarneni/", label: "LinkedIn" },
-  { icon: FaGithub, href: "https://github.com/krishnaamarneni-cell", label: "GitHub" },
-];
+const SOCIAL_ICONS: Record<string, IconType> = {
+  X: FaXTwitter,
+  Instagram: FaInstagram,
+  YouTube: FaYoutube,
+  LinkedIn: FaLinkedinIn,
+  GitHub: FaGithub,
+};
 
 export default function About() {
+  const { about } = useSiteContent();
   const [copied, setCopied] = useState(false);
 
   const copyEmail = () => {
-    navigator.clipboard.writeText("krishna.amarneni@gmail.com");
+    navigator.clipboard.writeText(about.email_for_copy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -66,32 +49,25 @@ export default function About() {
           <div>
             <ScrollReveal direction="rotate3d">
               <p className="text-[#ff6b00] text-sm font-mono mb-4 tracking-[0.3em] uppercase">
-                // Who I Am
+                {about.eyebrow}
               </p>
             </ScrollReveal>
 
             <ScrollReveal direction="flipX" delay={0.1}>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-8">
-                SAP Professional
-                <br />
-                turned <span className="text-gradient">Builder</span>
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-8 whitespace-pre-line">
+                {about.heading_pre} <span className="text-gradient">{about.heading_accent}</span>
               </h2>
             </ScrollReveal>
 
             <ScrollReveal direction="zoom3d" delay={0.2}>
               <p className="text-[#888] text-lg leading-relaxed mb-6">
-                I bridge the gap between enterprise systems and modern web development.
-                With 7+ years in SAP consulting for companies like <span className="text-white">Coca-Cola</span>,{" "}
-                <span className="text-white">PepsiCo</span>, and <span className="text-white">Xiromed</span>,
-                I now also build AI-powered products, autonomous agents, and fintech platforms.
+                {about.paragraph_one}
               </p>
             </ScrollReveal>
 
             <ScrollReveal direction="zoom3d" delay={0.3}>
               <p className="text-[#888] text-lg leading-relaxed">
-                I believe in <span className="text-[#ff6b00] font-medium">&ldquo;vibe coding&rdquo;</span> &mdash;
-                shipping fast, iterating faster, and letting AI amplify what&apos;s possible.
-                Every product I build is designed, developed, and deployed by me.
+                {about.paragraph_two}
               </p>
             </ScrollReveal>
 
@@ -102,11 +78,7 @@ export default function About() {
             {/* Stats with 3D */}
             <ScrollReveal direction="flipX" delay={0.5}>
               <div className="grid grid-cols-3 gap-8">
-                {[
-                  { value: "7+", label: "Years" },
-                  { value: "3", label: "Products" },
-                  { value: "40%", label: "Error Cut" },
-                ].map((s) => (
+                {about.stats.map((s) => (
                   <div key={s.label} className="group cursor-default" style={{ perspective: "800px" }}>
                     <div className="transition-transform duration-300 group-hover:[transform:perspective(800px)_rotateY(10deg)_scale(1.05)]">
                       <p className="text-3xl md:text-4xl font-bold text-gradient">{s.value}</p>
@@ -121,7 +93,7 @@ export default function About() {
             <ScrollReveal direction="zoom3d" delay={0.6}>
               <div className="flex flex-wrap gap-3 mt-10">
                 <a
-                  href="https://calendly.com/krishna-amarneni/30min"
+                  href={about.calendly_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-6 py-3 rounded-full bg-[#ff6b00] text-black font-semibold text-sm hover:bg-[#ff8c38] hover:shadow-lg hover:shadow-[#ff6b00]/20 active:scale-[0.97] transition-all"
@@ -137,7 +109,7 @@ export default function About() {
                   {copied ? "Copied!" : "Copy email"}
                 </button>
                 <a
-                  href="/Krishna_Amarneni_Resume.docx"
+                  href={about.resume_url}
                   download
                   className="flex items-center gap-2 px-6 py-3 rounded-full border border-white/[0.1] text-[#ccc] text-sm font-medium hover:border-[#ff6b00]/30 hover:text-white active:scale-[0.97] transition-all"
                 >
@@ -155,20 +127,23 @@ export default function About() {
                     <FaStar key={i} size={14} className="text-[#ff6b00]" />
                   ))}
                 </div>
-                <p className="text-[#888] text-sm mb-5">Trusted by over <span className="text-white font-medium">130+ clients</span></p>
+                <p className="text-[#888] text-sm mb-5">{about.trust_blurb}</p>
                 <div className="flex items-center gap-3">
-                  {socials.map(({ icon: Icon, href, label }) => (
-                    <a
-                      key={label}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-10 h-10 rounded-xl border border-white/[0.08] flex items-center justify-center text-[#888] hover:text-[#ff6b00] hover:border-[#ff6b00]/20 transition-all"
-                      aria-label={label}
-                    >
-                      <Icon size={16} />
-                    </a>
-                  ))}
+                  {about.socials.map((s) => {
+                    const Icon = SOCIAL_ICONS[s.platform] ?? FaGithub;
+                    return (
+                      <a
+                        key={s.platform}
+                        href={s.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-10 h-10 rounded-xl border border-white/[0.08] flex items-center justify-center text-[#888] hover:text-[#ff6b00] hover:border-[#ff6b00]/20 transition-all"
+                        aria-label={s.platform}
+                      >
+                        <Icon size={16} />
+                      </a>
+                    );
+                  })}
                 </div>
               </div>
             </ScrollReveal>
@@ -176,20 +151,21 @@ export default function About() {
 
           {/* Right cards — 3D tilt */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 lg:pt-24">
-            {highlights.map((item, i) => {
+            {about.highlights.map((item, i) => {
               const dirs = ["flipY", "rotate3d", "zoom3d", "flipX"] as const;
+              const Icon = ICONS[item.icon] ?? FiCpu;
               return (
-                <ScrollReveal key={item.title} delay={0.1 + i * 0.12} direction={dirs[i]}>
+                <ScrollReveal key={`${item.title}-${i}`} delay={0.1 + i * 0.12} direction={dirs[i % dirs.length]}>
                   <TiltCard className="h-full rounded-[20px]" intensity={20}>
                     <div className="card-dark card-3d-shine p-6 h-full shadow-3d">
                       <div
                         className="w-12 h-12 rounded-xl flex items-center justify-center mb-5"
                         style={{ backgroundColor: `${item.accent}15` }}
                       >
-                        <item.icon size={22} style={{ color: item.accent }} />
+                        <Icon size={22} style={{ color: item.accent }} />
                       </div>
                       <h3 className="text-white font-semibold text-lg mb-2">{item.title}</h3>
-                      <p className="text-[#666] text-sm leading-relaxed">{item.desc}</p>
+                      <p className="text-[#666] text-sm leading-relaxed">{item.description}</p>
                     </div>
                   </TiltCard>
                 </ScrollReveal>

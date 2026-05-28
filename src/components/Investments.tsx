@@ -12,6 +12,8 @@ import {
   FiChevronRight,
 } from "react-icons/fi";
 import HoverSpotlight from "./HoverSpotlight";
+import { useSiteContent } from "./SiteContentProvider";
+import type { Holding as HoldingDB } from "@/lib/site-content-types";
 
 type Holding = {
   ticker: string;
@@ -22,82 +24,16 @@ type Holding = {
   link?: string;
 };
 
-const publicHoldings: Holding[] = [
-  {
-    ticker: "AMD",
-    name: "Advanced Micro Devices",
-    thesis:
-      "Riding the AI compute wave with MI300/MI325 chips — a credible challenger to NVIDIA in data-center GPUs.",
-    category: "Public",
-    brandColor: "#ed1c24",
-    link: "https://www.google.com/finance/quote/AMD:NASDAQ",
-  },
-  {
-    ticker: "WMT",
-    name: "Walmart Inc.",
-    thesis:
-      "Defensive compounder dominating retail + e-commerce. Steady earnings growth, dividend aristocrat, and a strong digital flywheel.",
-    category: "Public",
-    brandColor: "#0071ce",
-    link: "https://www.google.com/finance/quote/WMT:NYSE",
-  },
-  {
-    ticker: "MSTR",
-    name: "Strategy (formerly MicroStrategy)",
-    thesis:
-      "Largest corporate Bitcoin treasury — leveraged, asymmetric exposure to BTC's long-term thesis.",
-    category: "Public",
-    brandColor: "#f7931a",
-    link: "https://www.google.com/finance/quote/MSTR:NASDAQ",
-  },
-  {
-    ticker: "META",
-    name: "Meta Platforms",
-    thesis:
-      "Cash machine with the largest social graph on Earth — Reels monetization, AI personalization, and Llama leverage.",
-    category: "Public",
-    brandColor: "#1877f2",
-    link: "https://www.google.com/finance/quote/META:NASDAQ",
-  },
-  {
-    ticker: "CAVA",
-    name: "CAVA Group",
-    thesis:
-      "Mediterranean fast-casual category creator with strong unit economics and Chipotle-like expansion potential.",
-    category: "Public",
-    brandColor: "#d4a574",
-    link: "https://www.google.com/finance/quote/CAVA:NYSE",
-  },
-  {
-    ticker: "CELH",
-    name: "Celsius Holdings",
-    thesis:
-      "Fast-growing energy drink brand riding the healthier-alternative wave with strong DTC and gym-channel pull.",
-    category: "Public",
-    brandColor: "#00b3a6",
-    link: "https://www.google.com/finance/quote/CELH:NASDAQ",
-  },
-  {
-    ticker: "AMZN",
-    name: "Amazon.com",
-    thesis:
-      "AWS print money + retail flywheel + advertising business. Long-term compounder with AI tailwinds.",
-    category: "Public",
-    brandColor: "#ff9900",
-    link: "https://www.google.com/finance/quote/AMZN:NASDAQ",
-  },
-];
-
-const privateHoldings: Holding[] = [
-  {
-    ticker: "EDERRA",
-    name: "Ederra (Private)",
-    thesis:
-      "Early-stage private investment in a category I deeply believe in. Locked-up but high conviction.",
-    category: "Private",
-    brandColor: "#ff6b00",
-  },
-];
+function toHolding(h: HoldingDB): Holding {
+  return {
+    ticker: h.ticker,
+    name: h.name,
+    thesis: h.thesis,
+    category: h.category,
+    brandColor: h.brand_color,
+    link: h.link,
+  };
+}
 
 const PER_PAGE = 3;
 
@@ -303,6 +239,10 @@ function Carousel({ holdings, label }: { holdings: Holding[]; label: string }) {
 }
 
 export default function Investments() {
+  const { investments } = useSiteContent();
+  const publicHoldings = investments.public_holdings.map(toHolding);
+  const privateHoldings = investments.private_holdings.map(toHolding);
+
   return (
     <section id="investments" className="relative py-28 lg:py-36 px-6 lg:px-10">
       <Parallax3D speed={0.03} rotateIntensity={1}>
@@ -314,30 +254,32 @@ export default function Investments() {
       <div className="max-w-7xl mx-auto relative">
         <ScrollReveal direction="rotate3d">
           <p className="text-[#ff6b00] text-sm font-mono mb-4 tracking-[0.3em] uppercase">
-            // My Top Investments
+            {investments.eyebrow}
           </p>
         </ScrollReveal>
 
         <ScrollReveal direction="flipX" delay={0.1}>
           <HoverSpotlight as="h2" className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6 cursor-default">
-            Where my <span className="text-gradient">money</span> lives
+            {investments.heading_pre} <span className="text-gradient">{investments.heading_accent}</span> lives
           </HoverSpotlight>
         </ScrollReveal>
 
         <ScrollReveal direction="zoom3d" delay={0.15}>
           <p className="text-[#666] text-lg mb-16 max-w-xl">
-            High-conviction positions across public markets and private deals.
+            {investments.intro}
             <span className="block text-xs mt-2 text-[#555] italic">
-              ⚠️ Personal positions · Not investment advice.
+              {investments.disclaimer}
             </span>
           </p>
         </ScrollReveal>
 
-        {/* Public — paginated 3-per-page loop */}
-        <Carousel holdings={publicHoldings} label="Public Markets" />
+        {publicHoldings.length > 0 && (
+          <Carousel holdings={publicHoldings} label={investments.public_label} />
+        )}
 
-        {/* Private — separate section */}
-        <Carousel holdings={privateHoldings} label="Private Deals" />
+        {privateHoldings.length > 0 && (
+          <Carousel holdings={privateHoldings} label={investments.private_label} />
+        )}
       </div>
     </section>
   );

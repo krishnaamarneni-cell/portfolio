@@ -5,113 +5,34 @@ import Image from "next/image";
 import ScrollReveal from "./ScrollReveal";
 import ScrollTrack from "./ScrollTrack";
 import { FiBriefcase, FiMapPin, FiCalendar } from "react-icons/fi";
+import { FALLBACK_JOBS } from "@/lib/content-fallback";
+import type { Job } from "@/lib/content-types";
 
-const experiences = [
-  {
-    title: "SAP Business Analyst",
-    category: "Enterprise & Integration",
-    company: "The Coca-Cola Company",
-    location: "Atlanta, USA",
-    period: "Feb 2025 – Present",
-    logo: { src: "/logos/coca-cola.png", bg: "#ffffff" },
-    description:
-      "Supporting end-to-end supply chain operations across SAP S/4HANA and SAP Ariba, ensuring system stability and business continuity for global operations.",
-    highlights: [
-      "SAP S/4HANA & SAP Ariba integration",
-      "ASN, inventory & delivery error resolution",
-      "CIG and cXML root cause analysis",
-      "UAT, regression testing & go-live support",
-      "Liaison between business, IT & SAP CoE",
-    ],
-    tags: ["SAP S/4HANA", "SAP Ariba", "CIG", "cXML", "ASN"],
-  },
-  {
-    title: "SAP S/4HANA MM / SD Consultant",
-    category: "Pharma & Compliance",
-    company: "Xiromed",
-    location: "New Jersey, USA",
-    period: "Nov 2023 – Jan 2025",
-    logo: { src: "", bg: "#0a4da2" },
-    description:
-      "Managed SAP S/4HANA master data with 99.9% accuracy and delivered end-to-end MM, IM, and SD implementations for pharmaceutical operations.",
-    highlights: [
-      "99.9% master data accuracy",
-      "End-to-end SAP MM, IM, SD delivery",
-      "DSCSA compliance via TraceLink",
-      "Global supply chain: APAC, EU, NA, LATAM",
-      "Demand planning & forecasting support",
-    ],
-    tags: ["SAP MM/SD", "TraceLink", "DSCSA", "Supply Chain"],
-  },
-  {
-    title: "SAP S/4HANA Master Data Analyst",
-    category: "Data Governance & Finance",
-    company: "PepsiCo Inc.",
-    location: "New York, USA",
-    period: "Apr 2023 – Sept 2023",
-    logo: { src: "/logos/pepsico.png", bg: "#004b93" },
-    description:
-      "Reduced master-data-related errors by ~40% through root-cause analysis and standardized data maintenance across procurement and finance.",
-    highlights: [
-      "~40% error reduction via root-cause analysis",
-      "Vendor & material master with SOX compliance",
-      "Power BI reporting for data quality",
-      "S/4HANA deployment & post-go-live support",
-    ],
-    tags: ["Master Data", "SOX", "Power BI", "S/4HANA"],
-  },
-  {
-    title: "Data Analyst",
-    category: "Analytics & Procurement",
-    company: "DenKen",
-    location: "California, USA",
-    period: "Dec 2022 – Mar 2023",
-    logo: { src: "/logos/denken.webp", bg: "#2d2d2d" },
-    description:
-      "Utilized MySQL and Tableau for data analysis, providing actionable insights for supplier optimization and cost reduction.",
-    highlights: [
-      "MySQL & Tableau data analysis",
-      "Supplier negotiation & cost savings",
-      "Sales & inventory trend optimization",
-      "Cross-functional process improvements",
-    ],
-    tags: ["MySQL", "Tableau", "Data Analysis", "Procurement"],
-  },
-  {
-    title: "SAP SRM / Vendor Master Data Analyst",
-    category: "Master Data Management",
-    company: "IFF",
-    location: "Hyderabad, India",
-    period: "May 2020 – Feb 2021",
-    logo: { src: "/logos/iff.webp", bg: "#1a1a1a" },
-    description:
-      "Created and maintained vendor master records in SAP SRM/S/4HANA, performing validation and cleansing to reduce data inconsistencies.",
-    highlights: [
-      "Vendor master in SAP SRM/S/4HANA",
-      "Data validation & cleansing",
-      "Procurement leadership reporting",
-      "SOP documentation & knowledge transfer",
-    ],
-    tags: ["SAP SRM", "Vendor Master", "Procurement"],
-  },
-  {
-    title: "IT Procurement Associate",
-    category: "Procurement & Sourcing",
-    company: "SAAS IT",
-    location: "Chennai, India",
-    period: "Mar 2019 – Apr 2020",
-    logo: { src: "/logos/saasit.png", bg: "#1a1a1a" },
-    description:
-      "Managed procurement using SAP S/4HANA and SAP Ariba, achieving ~10% cost savings through data-driven vendor negotiations.",
-    highlights: [
-      "SAP S/4HANA & Ariba procurement",
-      "~10% cost savings via negotiations",
-      "RFI/RFQ analysis & recommendations",
-      "Cross-training & knowledge sharing",
-    ],
-    tags: ["SAP Ariba", "Procurement", "RFQ/RFI"],
-  },
-];
+type Experience = {
+  title: string;
+  category: string;
+  company: string;
+  location: string;
+  period: string;
+  logo: { src: string; bg: string };
+  description: string;
+  highlights: string[];
+  tags: string[];
+};
+
+function toExperience(j: Job): Experience {
+  return {
+    title: j.title,
+    category: j.category,
+    company: j.company,
+    location: j.location,
+    period: j.period,
+    logo: { src: j.logo_src ?? "", bg: j.logo_bg },
+    description: j.description,
+    highlights: j.highlights,
+    tags: j.tags,
+  };
+}
 
 /* ── 3D tilt on cursor move ── */
 function FloatCard({
@@ -157,11 +78,29 @@ function FloatCard({
 }
 
 export default function Experience() {
+  const [experiences, setExperiences] = useState<Experience[]>(() =>
+    FALLBACK_JOBS.map(toExperience)
+  );
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Scroll-based index + per-card progress tracking
   const [cardProgress, setCardProgress] = useState(0); // 0-1 how far next card has risen
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/jobs")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled && Array.isArray(d.jobs) && d.jobs.length > 0) {
+          setExperiences(d.jobs.map(toExperience));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -182,9 +121,12 @@ export default function Experience() {
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [experiences.length]);
 
-  const activeLogo = experiences[activeIndex].logo;
+  if (experiences.length === 0) return null;
+  const safeIndex = Math.min(activeIndex, experiences.length - 1);
+  const activeExp = experiences[safeIndex];
+  const activeLogo = activeExp.logo;
 
   return (
     <section id="experience" className="relative">
@@ -381,28 +323,28 @@ export default function Experience() {
                     {activeLogo.src ? (
                       <Image
                         src={activeLogo.src}
-                        alt={experiences[activeIndex].company}
+                        alt={activeExp.company}
                         width={200}
                         height={200}
                         className="relative z-0 object-contain max-w-[70%] max-h-[70%] transition-all duration-500"
                       />
                     ) : (
                       <span className="relative z-0 text-4xl font-bold tracking-wider text-white transition-all duration-500">
-                        {experiences[activeIndex].company}
+                        {activeExp.company}
                       </span>
                     )}
                   </div>
 
                   <div className="text-center mt-8">
                     <p className="text-white font-bold text-xl transition-all duration-500">
-                      {experiences[activeIndex].company}
+                      {activeExp.company}
                     </p>
                     <p className="text-[#666] text-sm mt-1 flex items-center justify-center gap-1.5">
                       <FiMapPin size={13} />
-                      {experiences[activeIndex].location}
+                      {activeExp.location}
                     </p>
                     <p className="text-[#555] text-xs font-mono mt-2">
-                      {experiences[activeIndex].period}
+                      {activeExp.period}
                     </p>
                   </div>
                 </div>

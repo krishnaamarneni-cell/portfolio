@@ -1,81 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import ScrollReveal from "./ScrollReveal";
 import TiltCard from "./TiltCard";
 import Parallax3D from "./Parallax3D";
 import { FiExternalLink, FiArrowUpRight, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import HoverSpotlight from "./HoverSpotlight";
-
-type Project = {
-  title: string;
-  subtitle: string;
-  number: string;
-  description: string;
-  link: string;
-  tags: string[];
-  gradient: string;
-  preview: string; // local PNG screenshot
-};
-
-const projects: Project[] = [
-  {
-    title: "WealthClaude",
-    subtitle: "AI Finance Tracking Platform",
-    number: "01",
-    description:
-      "Full portfolio tracker with 3D globe across 51 markets, AI market intelligence, dividend analytics, 15+ calculators, and 7-layer security.",
-    link: "https://www.wealthclaude.com",
-    tags: ["Next.js", "Supabase", "Three.js", "Stripe", "Groq AI"],
-    gradient: "from-[#22c55e] to-[#16a34a]",
-    preview: "/previews/wealthclaude.png",
-  },
-  {
-    title: "North Falmouth Pharmacy",
-    subtitle: "LTC Pharmacy · Cape Cod",
-    number: "02",
-    description:
-      "Long-term care pharmacy website serving Cape Cod facilities — eMAR integration, compliance packaging, immunizations, enrollment forms.",
-    link: "https://www.nfpltc.com",
-    tags: ["Next.js", "React", "TypeScript", "Tailwind CSS"],
-    gradient: "from-[#f59e0b] to-[#ea580c]",
-    preview: "/previews/nfpltc.png",
-  },
-  {
-    title: "Auburn RX Pharmacy",
-    subtitle: "Independent Retail Pharmacy",
-    number: "03",
-    description:
-      "Modern pharmacy website featuring online refill requests, immunization booking, prescription transfer, and local healthcare resources.",
-    link: "https://auburnrx.vercel.app",
-    tags: ["Next.js", "TypeScript", "Tailwind CSS", "Vercel"],
-    gradient: "from-[#0ea5e9] to-[#0284c7]",
-    preview: "/previews/auburnrx.png",
-  },
-  {
-    title: "Saint Francis Medical",
-    subtitle: "Healthcare & Medical Practice",
-    number: "04",
-    description:
-      "Patient-focused medical practice website with appointment booking, services overview, provider profiles, and HIPAA-conscious contact forms.",
-    link: "https://saint-francis-medical.vercel.app",
-    tags: ["Next.js", "React", "Tailwind CSS", "Vercel"],
-    gradient: "from-[#8b5cf6] to-[#6d28d9]",
-    preview: "/previews/saint-francis.png",
-  },
-  {
-    title: "Lucy AI",
-    subtitle: "Autonomous AI Agent",
-    number: "05",
-    description:
-      "An autonomous agent handling 50+ tasks: Gmail, Calendar, social media, job applications, writes & deploys her own code, daily briefings.",
-    link: "https://www.lucyaiagent.com",
-    tags: ["Python", "Claude AI", "Next.js", "Supabase", "Vercel"],
-    gradient: "from-[#ff6b00] to-[#ff3d00]",
-    preview: "/previews/lucyaiagent.png",
-  },
-];
+import { FALLBACK_PROJECTS } from "@/lib/content-fallback";
+import type { Project } from "@/lib/content-types";
 
 
 function ProjectCard({ project, index }: { project: Project; index: number }) {
@@ -189,10 +122,26 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
 const PER_PAGE = 3;
 
 export default function Projects() {
+  const [projects, setProjects] = useState<Project[]>(FALLBACK_PROJECTS);
   const [page, setPage] = useState(0);
-  const totalPages = Math.ceil(projects.length / PER_PAGE);
 
-  // Loop pagination
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/projects")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled && Array.isArray(d.projects) && d.projects.length > 0) {
+          setProjects(d.projects);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const totalPages = Math.max(1, Math.ceil(projects.length / PER_PAGE));
+
   const next = () => setPage((p) => (p + 1) % totalPages);
   const prev = () => setPage((p) => (p - 1 + totalPages) % totalPages);
 

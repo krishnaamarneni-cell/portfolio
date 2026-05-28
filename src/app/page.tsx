@@ -8,14 +8,16 @@ import About from "@/components/About";
 import Skills from "@/components/Skills";
 import Experience from "@/components/Experience";
 import Projects from "@/components/Projects";
+import Book from "@/components/Book";
 import Investments from "@/components/Investments";
 import NotesPreview from "@/components/NotesPreview";
 import Contact from "@/components/Contact";
 import Footer from "@/components/Footer";
+import SiteContentProvider from "@/components/SiteContentProvider";
 
 export default function Home() {
   return (
-    <>
+    <SiteContentProvider>
       <ScrollProgress />
       <CursorGlow />
       <Navbar />
@@ -30,6 +32,8 @@ export default function Home() {
         <div className="section-divider" />
         <Projects />
         <div className="section-divider" />
+        <Book />
+        <div className="section-divider" />
         <Investments />
         <div className="section-divider" />
         <NotesPreview />
@@ -37,6 +41,6 @@ export default function Home() {
         <Contact />
       </main>
       <Footer />
-    </>
+    </SiteContentProvider>
   );
 }

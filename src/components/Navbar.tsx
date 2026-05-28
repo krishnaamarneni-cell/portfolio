@@ -11,6 +11,7 @@ const navLinks = [
   { name: "Experience", href: "/#experience", id: "experience" },
   { name: "Skills", href: "/#skills", id: "skills" },
   { name: "Projects", href: "/#projects", id: "projects" },
+  { name: "Book", href: "/#book", id: "book" },
   { name: "Notes", href: "/notes", id: "notes" },
 ];
 
@@ -63,7 +64,7 @@ export default function Navbar() {
         setActive("home");
         return;
       }
-      const sections = ["contact", "projects", "skills", "experience", "about"];
+      const sections = ["contact", "book", "projects", "skills", "experience", "about"];
       for (const id of sections) {
         const el = document.getElementById(id);
         if (el && el.getBoundingClientRect().top <= 200) {
