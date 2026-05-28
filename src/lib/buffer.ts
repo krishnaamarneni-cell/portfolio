@@ -91,17 +91,24 @@ export type BufferPostResult = {
   postId?: string;
 };
 
+/**
+ * Buffer's createPost returns the PostActionPayload union:
+ *   PostActionSuccess { post { id ... } }
+ *   NotFoundError / UnauthorizedError / UnexpectedError / InvalidInputError /
+ *   LimitReachedError / RestProxyError → each has a "message" String
+ *   (RestProxyError also has link/code).
+ */
 const CREATE_POST_MUTATION = `mutation($input: CreatePostInput!) {
   createPost(input: $input) {
-    ... on CreatePostSuccess { post { id status text dueAt } }
-    ... on CreatePostError { message }
-    ... on UserError { message }
-    ... on PostError { message }
+    __typename
+    ... on PostActionSuccess { post { id status text dueAt } }
+    ... on NotFoundError { message }
+    ... on UnauthorizedError { message }
+    ... on UnexpectedError { message }
+    ... on InvalidInputError { message }
+    ... on LimitReachedError { message }
+    ... on RestProxyError { message link code }
   }
-}`;
-
-const FALLBACK_CREATE_POST_MUTATION = `mutation($input: CreatePostInput!) {
-  createPost(input: $input)
 }`;
 
 type ShareMode =
@@ -139,21 +146,14 @@ export async function createBufferPost({
     input.dueAt = dueAt;
   }
 
-  // Try the typed mutation first — falls back to a plain scalar if the schema
-  // differs. Either way we surface a useful error message to the UI.
-  let j = await bufferGraphQL<{ createPost: unknown }>(
-    token,
-    CREATE_POST_MUTATION,
-    { input }
-  );
-
-  if (j.errors && j.errors.some((e) => /Fragment|InlineFragment|Selections|Spread/.test(e.message))) {
-    j = await bufferGraphQL<{ createPost: unknown }>(
-      token,
-      FALLBACK_CREATE_POST_MUTATION,
-      { input }
-    );
-  }
+  const j = await bufferGraphQL<{
+    createPost:
+      | {
+          __typename: "PostActionSuccess";
+          post?: { id?: string; status?: string; text?: string; dueAt?: string };
+        }
+      | { __typename: string; message?: string; link?: string; code?: number };
+  }>(token, CREATE_POST_MUTATION, { input });
 
   if (j.errors && j.errors.length) {
     return {
@@ -162,14 +162,18 @@ export async function createBufferPost({
       error: j.errors.map((e) => e.message).join("; "),
     };
   }
-  const cp = j.data?.createPost as
-    | { post?: { id?: string }; message?: string }
-    | string
-    | undefined;
-  if (cp && typeof cp === "object" && cp.message) {
-    return { channelId, ok: false, error: cp.message };
+  const cp = j.data?.createPost;
+  if (!cp) {
+    return { channelId, ok: false, error: "Buffer returned no payload" };
   }
-  const postId =
-    cp && typeof cp === "object" && cp.post?.id ? cp.post.id : undefined;
-  return { channelId, ok: true, postId };
+  if (cp.__typename === "PostActionSuccess") {
+    const success = cp as { post?: { id?: string } };
+    return { channelId, ok: true, postId: success.post?.id };
+  }
+  const errObj = cp as { __typename: string; message?: string; code?: number };
+  return {
+    channelId,
+    ok: false,
+    error: `${errObj.__typename}: ${errObj.message ?? "(no message)"}${errObj.code ? ` [code ${errObj.code}]` : ""}`,
+  };
 }
