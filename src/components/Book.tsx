@@ -31,9 +31,9 @@ import type { BookSection } from "@/lib/site-content-types";
  * (Bookcover.png) slice — so you can swap them in one at a time.
  */
 const COVER_IMAGE_SRC = "/Bookcover.png";
-const BOOK_FRONT_SRC = "/book-front.png";
-const BOOK_BACK_SRC = "/book-back.png";
-const BOOK_SPINE_SRC = "/book-spine.png";
+const BOOK_FRONT_SRC = "/Front.png";
+const BOOK_BACK_SRC = "/back.png";
+const BOOK_SPINE_SRC = "/spine.png";
 
 // Book proportions on screen. The 2:3 ratio matches a real-world book.
 const BOOK_W = 320; // front face width
@@ -53,10 +53,16 @@ const SLICES = {
  * Stacked background: the per-face image sits on top; the Bookcover.png
  * slice underneath. If the per-face image isn't present yet, the slice
  * shows through unchanged.
+ *
+ * `topSize` defaults to "100% 100%" (no distortion when the per-face image
+ * matches the face aspect ratio exactly). For the spine — whose source
+ * image often has padding on the sides — we pass "cover" so the central
+ * artwork fills the face without horizontal compression.
  */
 function faceWithFallback(
   perFaceSrc: string,
-  slice: keyof typeof SLICES
+  slice: keyof typeof SLICES,
+  topSize: string = "100% 100%"
 ): React.CSSProperties {
   const s = SLICES[slice];
   const sliceSize = `${(SPREAD_W / s.w) * 100}% 100%`;
@@ -64,8 +70,8 @@ function faceWithFallback(
   return {
     backgroundImage: `url(${perFaceSrc}), url(${COVER_IMAGE_SRC})`,
     backgroundRepeat: "no-repeat, no-repeat",
-    backgroundSize: `100% 100%, ${sliceSize}`,
-    backgroundPosition: `0 0, ${slicePos}`,
+    backgroundSize: `${topSize}, ${sliceSize}`,
+    backgroundPosition: `center center, ${slicePos}`,
     backgroundColor: "#050403",
   };
 }
@@ -142,7 +148,7 @@ function BookGlobe3D({ onOpenInside }: { onOpenInside: () => void }) {
           <div
             style={{
               ...faceBase,
-              ...faceWithFallback(BOOK_SPINE_SRC, "spine"),
+              ...faceWithFallback(BOOK_SPINE_SRC, "spine", "cover"),
               width: BOOK_D,
               height: BOOK_H,
               transform: `translate(-50%, -50%) rotateY(-90deg) translateZ(${BOOK_W / 2}px)`,
