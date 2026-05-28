@@ -24,6 +24,7 @@ import {
   FiShare2,
   FiBarChart2,
   FiCpu,
+  FiHeart,
 } from "react-icons/fi";
 import {
   EMPTY_JOB,
@@ -41,6 +42,7 @@ import AdminChat from "./AdminChat";
 import SocialEditor from "./SocialEditor";
 import SocialAnalytics from "./SocialAnalytics";
 import AgentsTab from "./AgentsTab";
+import PersonalTab from "./PersonalTab";
 
 type Tab =
   | "content"
@@ -50,6 +52,7 @@ type Tab =
   | "social"
   | "analytics"
   | "agents"
+  | "personal"
   | "connectors"
   | "chat";
 
@@ -186,6 +189,7 @@ export default function AdminDashboard({
     { id: "social" as const, label: "Social", icon: FiShare2, hint: "Compose & post via Buffer" },
     { id: "analytics" as const, label: "Analytics", icon: FiBarChart2, hint: "Buffer post performance" },
     { id: "agents" as const, label: "Agents", icon: FiCpu, hint: "News + Jobs scouts" },
+    { id: "personal" as const, label: "Life", icon: FiHeart, hint: "Notepad + Life agent" },
     { id: "connectors" as const, label: "Connectors", icon: FiLink, hint: "Buffer + WealthClaude + Gmail" },
     { id: "chat" as const, label: "Chat", icon: FiMessageSquare, hint: "Talk to your data with Groq" },
   ];
@@ -340,6 +344,11 @@ export default function AdminDashboard({
               <SocialAnalytics onError={(m) => flash("err", m)} />
             ) : tab === "agents" ? (
               <AgentsTab
+                onSuccess={(m) => flash("ok", m)}
+                onError={(m) => flash("err", m)}
+              />
+            ) : tab === "personal" ? (
+              <PersonalTab
                 onSuccess={(m) => flash("ok", m)}
                 onError={(m) => flash("err", m)}
               />

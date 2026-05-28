@@ -108,6 +108,29 @@ drop policy if exists "Public can read published thoughts" on public.thoughts;
 create policy "Public can read published thoughts" on public.thoughts
   for select to anon, authenticated using (published = true);
 
+-- ============ Personal notepad (Life Cockpit) ============
+create table if not exists public.personal_notes (
+  id uuid primary key default gen_random_uuid(),
+  body text not null,
+  tags text[] not null default '{}',
+  -- Optional date the note's "event" happens (visa expiry, flight, move, …).
+  event_date date,
+  -- How many days before event_date the life-agent should start nagging.
+  remind_before_days int,
+  pinned boolean not null default false,
+  archived boolean not null default false,
+  source text not null default 'manual', -- 'manual' | 'agent' | 'import'
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists personal_notes_event_idx
+  on public.personal_notes (event_date)
+  where event_date is not null and archived = false;
+
+alter table public.personal_notes enable row level security;
+-- Service-role only. No public policy.
+
 -- ============ Gmail OAuth tokens (singleton row) ============
 create table if not exists public.gmail_tokens (
   id text primary key default 'singleton',
