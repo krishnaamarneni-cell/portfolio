@@ -131,7 +131,7 @@ create index if not exists personal_notes_event_idx
 alter table public.personal_notes enable row level security;
 -- Service-role only. No public policy.
 
--- ============ Admin settings (singleton, includes Morning Briefing config) ============
+-- ============ Admin settings (singleton, includes Morning Briefing + Sunday Reflection config) ============
 create table if not exists public.admin_settings (
   id text primary key default 'singleton',
   morning_briefing_enabled boolean not null default false,
@@ -143,6 +143,91 @@ create table if not exists public.admin_settings (
 );
 alter table public.admin_settings enable row level security;
 -- Service-role only.
+
+-- Sunday Reflection columns (added later — idempotent).
+alter table public.admin_settings
+  add column if not exists sunday_reflection_enabled boolean not null default false,
+  add column if not exists sunday_reflection_to text,
+  add column if not exists sunday_reflection_last_run_at timestamptz,
+  add column if not exists sunday_reflection_last_status text,
+  add column if not exists sunday_reflection_last_subject text;
+
+-- ============ Personal facts (central truths agents inject into every prompt) ============
+create table if not exists public.personal_facts (
+  id uuid primary key default gen_random_uuid(),
+  key text not null unique,
+  value text not null,
+  category text not null default 'general',
+  expires_at date,
+  source text not null default 'manual',
+  updated_at timestamptz not null default now()
+);
+alter table public.personal_facts enable row level security;
+
+-- ============ Chat threads + messages ============
+create table if not exists public.chat_threads (
+  id uuid primary key default gen_random_uuid(),
+  title text not null default 'New chat',
+  pinned boolean not null default false,
+  archived boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references public.chat_threads(id) on delete cascade,
+  role text not null check (role in ('system','user','assistant','tool')),
+  content text,
+  tool_calls jsonb,
+  tool_call_id text,
+  name text,
+  created_at timestamptz not null default now()
+);
+create index if not exists chat_messages_thread_idx
+  on public.chat_messages (thread_id, created_at);
+alter table public.chat_threads enable row level security;
+alter table public.chat_messages enable row level security;
+
+-- ============ Habits (daily checkboxes + streaks) ============
+create table if not exists public.habits (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  emoji text,
+  cadence text not null default 'daily', -- 'daily' | 'weekdays' | 'weekly'
+  archived boolean not null default false,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.habit_checkins (
+  id uuid primary key default gen_random_uuid(),
+  habit_id uuid not null references public.habits(id) on delete cascade,
+  date date not null,
+  done boolean not null default true,
+  note text,
+  created_at timestamptz not null default now(),
+  unique(habit_id, date)
+);
+create index if not exists habit_checkins_date_idx
+  on public.habit_checkins (habit_id, date desc);
+alter table public.habits enable row level security;
+alter table public.habit_checkins enable row level security;
+
+-- ============ Reading list ============
+create table if not exists public.reading_list (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  author text,
+  status text not null default 'reading' check (status in ('wishlist','reading','done','abandoned')),
+  progress int, -- pages or %
+  rating int check (rating between 1 and 5),
+  notes text,
+  cover_url text,
+  started_at date,
+  finished_at date,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.reading_list enable row level security;
 
 -- ============ Gmail OAuth tokens (singleton row) ============
 create table if not exists public.gmail_tokens (

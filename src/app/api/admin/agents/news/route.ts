@@ -13,6 +13,7 @@ import {
   searchProviderHelp,
   type SearchResult,
 } from "@/lib/search";
+import { buildFactsContext } from "@/lib/facts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -98,7 +99,9 @@ export async function POST(request: Request) {
     });
   }
 
+  const factsBlock = await buildFactsContext();
   const system = `You are Krishna's news scout. You are given REAL web-search results below — actual URLs and snippets. Summarise them into three sections.
+${factsBlock ? `\n${factsBlock}\n` : ""}
 
 HARD RULES:
 - NEVER invent a URL. Only use URLs that appear literally in the search results.

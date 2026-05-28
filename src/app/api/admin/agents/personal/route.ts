@@ -14,6 +14,7 @@ import {
   whichSearchProvider,
   type SearchResult,
 } from "@/lib/search";
+import { buildFactsContext } from "@/lib/facts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -102,12 +103,14 @@ export async function POST(request: Request) {
   }
 
   const notesBlock = formatNotesForPrompt(notes, now);
+  const factsBlock = await buildFactsContext();
   const searchBlock =
     searchResults.length > 0
       ? `\n\nLive web-search results (use ONLY these URLs when citing sources):\n${searchResultsToContext(searchResults)}`
       : "";
 
-  const system = `You are Krishna's personal life agent. He's a builder in NJ on H1B STEM OPT, planning a possible move to Tampa, with international travel coming up. He saves short notes in a notepad; you read them and tell him what matters.
+  const system = `You are Krishna's personal life agent. He saves short notes in a notepad; you read them and tell him what matters.
+${factsBlock ? `\n${factsBlock}\n` : ""}
 
 Your job: write a tight, one-screen Markdown digest that does FOUR things:
 

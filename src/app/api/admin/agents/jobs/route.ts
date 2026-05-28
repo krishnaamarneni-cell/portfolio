@@ -9,6 +9,7 @@ import {
   searchProviderHelp,
   type SearchResult,
 } from "@/lib/search";
+import { buildFactsContext } from "@/lib/facts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -166,7 +167,9 @@ export async function POST(request: Request) {
 
   const searchBlock = searchResultsToContext(searchResults);
 
+  const factsBlock = await buildFactsContext();
   const system = `You are Krishna Amarneni's job-hunting agent. You are given a block of REAL web-search results below — actual URLs and snippets from public job boards and company career sites. Your only job is to:
+${factsBlock ? `\n${factsBlock}\n` : ""}
 
 1. Read the snippets.
 2. Pick the entries that are clearly job postings (titles like "Senior Engineer", "SAP Analyst", an Apply CTA, etc.) — IGNORE company homepages, news articles, blog posts.

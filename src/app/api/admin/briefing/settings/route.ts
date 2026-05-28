@@ -20,10 +20,14 @@ export async function PUT(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     morning_briefing_enabled?: boolean;
     morning_briefing_to?: string | null;
+    sunday_reflection_enabled?: boolean;
+    sunday_reflection_to?: string | null;
   };
   const settings = await updateSettings({
     morning_briefing_enabled: body.morning_briefing_enabled,
     morning_briefing_to: body.morning_briefing_to,
+    sunday_reflection_enabled: body.sunday_reflection_enabled,
+    sunday_reflection_to: body.sunday_reflection_to,
   });
   return NextResponse.json({ settings });
 }

@@ -9,6 +9,8 @@ import {
 import { fetchHoldingSymbols, runAgent } from "@/lib/agents";
 import { search, searchResultsToContext, whichSearchProvider } from "@/lib/search";
 import { sendEmail } from "@/lib/gmail";
+import { buildFactsContext } from "@/lib/facts";
+import { habitsWithStreaks } from "@/lib/habits";
 
 export type AdminSettings = {
   id: string;
@@ -17,6 +19,11 @@ export type AdminSettings = {
   morning_briefing_last_run_at: string | null;
   morning_briefing_last_status: string | null;
   morning_briefing_last_subject: string | null;
+  sunday_reflection_enabled: boolean;
+  sunday_reflection_to: string | null;
+  sunday_reflection_last_run_at: string | null;
+  sunday_reflection_last_status: string | null;
+  sunday_reflection_last_subject: string | null;
   updated_at: string;
 };
 
@@ -41,6 +48,11 @@ export async function getSettings(): Promise<AdminSettings> {
     morning_briefing_last_run_at: null,
     morning_briefing_last_status: null,
     morning_briefing_last_subject: null,
+    sunday_reflection_enabled: false,
+    sunday_reflection_to: null,
+    sunday_reflection_last_run_at: null,
+    sunday_reflection_last_status: null,
+    sunday_reflection_last_subject: null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -155,7 +167,9 @@ async function runLifeAgent(
     })
     .join("\n");
 
+  const factsBlock = await buildFactsContext();
   const system = `You are Krishna's life agent writing his morning briefing email. Keep it tight — he'll read it on a phone before coffee.
+${factsBlock ? `\n${factsBlock}\n` : ""}
 
 Write three sections in Markdown:
 
@@ -395,6 +409,180 @@ export async function sendBriefingNow(): Promise<{
     await updateSettings({
       morning_briefing_last_run_at: new Date().toISOString(),
       morning_briefing_last_status: status,
+    });
+    return { ok: false, status };
+  }
+}
+
+/* ─────────────── Sunday Reflection ─────────────── */
+
+export type ReflectionPayload = {
+  subject: string;
+  html: string;
+  text: string;
+  markdown: string;
+};
+
+const REFLECTION_MODEL = "llama-3.3-70b-versatile";
+
+/** Build the Sunday Reflection — a weekly recap covering habits, notes,
+ *  what changed this week, and what's coming. */
+export async function buildReflection(): Promise<ReflectionPayload> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY not set");
+
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 86_400_000);
+  const weekAgoISO = weekAgo.toISOString().slice(0, 10);
+
+  // Pull state for the prompt.
+  const [notes, habits, factsBlock] = await Promise.all([
+    listNotes().catch<PersonalNote[]>(() => []),
+    habitsWithStreaks().catch(() => []),
+    buildFactsContext(),
+  ]);
+
+  const recentNotes = notes.filter((n) => n.created_at >= weekAgoISO);
+  const upcomingNotes = notes.filter((n) => {
+    if (!n.event_date) return false;
+    const d = daysUntil(n, now) ?? -999;
+    return d >= 0 && d <= 30;
+  });
+
+  const habitsBlock = habits
+    .map(
+      (h) => `- ${h.emoji ?? "•"} ${h.name} — streak: ${h.streak}d, ${countDaysInWeek(h)} of last 7 days`
+    )
+    .join("\n");
+
+  const recentBlock = recentNotes
+    .slice(0, 12)
+    .map((n) => `- [${n.created_at.slice(0, 10)}] ${n.body.replace(/\s+/g, " ").trim()}`)
+    .join("\n");
+
+  const upcomingBlock = upcomingNotes
+    .slice(0, 10)
+    .map((n) => {
+      const d = daysUntil(n, now);
+      return `- ${n.event_date} (in ${d}d): ${n.body.replace(/\s+/g, " ").trim()}`;
+    })
+    .join("\n");
+
+  const system = `You are Krishna's Sunday Reflection agent. He's just finished a week. You're writing him a short email — Sunday-evening tone, not analytical. Help him close the week and look forward.
+${factsBlock ? `\n${factsBlock}\n` : ""}
+Write four sections in Markdown:
+
+## ✅ What you did
+2–4 bullets pulled from notes added this week + habits actually checked off. Specific. No filler.
+
+## ⚠️ What slipped
+Habits with low completion this week, deadlines drifting. Honest, not harsh.
+
+## 📅 Next 7 days
+2–4 things from upcoming notes. Lead with "Mon", "Tue", or "in Xd".
+
+## 🎯 One thing to focus on
+ONE sentence. The single thing that, if he nails it, makes next week better. Pick the highest-leverage item from what's on his plate.
+
+HARD RULES: no invented facts. Reference only the week's actual notes and habit data below. Under 350 words.`;
+
+  const userPrompt = `Today: ${now.toISOString().slice(0, 10)} (Sunday).
+Last 7 days began: ${weekAgoISO}.
+
+Habits + streaks:
+${habitsBlock || "(no habits tracked yet)"}
+
+Notes added this past week:
+${recentBlock || "(nothing this week)"}
+
+Upcoming next 30 days from notes:
+${upcomingBlock || "(nothing scheduled)"}`;
+
+  const result = await runAgent({
+    apiKey,
+    model: REFLECTION_MODEL,
+    systemPrompt: system,
+    userPrompt,
+    maxTokens: 2000,
+  });
+  const markdown = result.content || "## Sunday Reflection\n\n(agent returned nothing)";
+  const subject = `Sunday Reflection — week ending ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  const html = renderHtmlSimple(subject, markdown);
+  const text = `${subject}\n\n${stripMarkdown(markdown)}`;
+  return { subject, html, text, markdown };
+}
+
+function countDaysInWeek(h: { checkins: Record<string, boolean> }): number {
+  const now = new Date();
+  let count = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now.getTime() - i * 86_400_000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    if (h.checkins[key]) count++;
+  }
+  return count;
+}
+
+function renderHtmlSimple(subject: string, md: string): string {
+  const inner = markdownToHtml(md);
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1f2937">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7f9;padding:24px 12px">
+  <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06)">
+      <tr><td style="background:linear-gradient(135deg,#7c3aed,#a78bfa);padding:24px 28px;color:#fff">
+        <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:0.7">Sunday Reflection</div>
+        <div style="font-size:22px;font-weight:800;margin-top:4px">${subject}</div>
+      </td></tr>
+      <tr><td style="padding:24px 28px;font-size:15px;line-height:1.6">
+        ${inner}
+      </td></tr>
+      <tr><td style="padding:18px 28px;background:#fafbfc;font-size:12px;color:#6b7280">
+        Krishna's portfolio admin · <a href="https://krishnaamarneni.com/admin?tab=personal" style="color:#7c3aed">Open Life Cockpit</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+export async function sendReflectionNow(): Promise<{
+  ok: boolean;
+  status: string;
+  subject?: string;
+}> {
+  const settings = await getSettings();
+  // Reuse the morning_briefing_to address by default; allow override if set.
+  const to = settings.sunday_reflection_to || settings.morning_briefing_to;
+  if (!to) {
+    const status = "no recipient configured";
+    await updateSettings({
+      sunday_reflection_last_run_at: new Date().toISOString(),
+      sunday_reflection_last_status: status,
+    });
+    return { ok: false, status };
+  }
+  try {
+    const reflection = await buildReflection();
+    const send = await sendEmail({
+      to,
+      subject: reflection.subject,
+      html: reflection.html,
+      text: reflection.text,
+    });
+    const status = send.ok ? "sent" : `send failed: ${send.error ?? "unknown"}`;
+    await updateSettings({
+      sunday_reflection_last_run_at: new Date().toISOString(),
+      sunday_reflection_last_status: status,
+      sunday_reflection_last_subject: reflection.subject,
+    });
+    return { ok: send.ok, status, subject: reflection.subject };
+  } catch (err) {
+    const status = `build failed: ${err instanceof Error ? err.message : String(err)}`;
+    await updateSettings({
+      sunday_reflection_last_run_at: new Date().toISOString(),
+      sunday_reflection_last_status: status,
     });
     return { ok: false, status };
   }

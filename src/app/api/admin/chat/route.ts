@@ -18,6 +18,12 @@ import {
   type McpTool,
 } from "@/lib/mcp";
 import { resolveModel } from "@/lib/groq-models";
+import { buildFactsContext } from "@/lib/facts";
+import {
+  appendMessage,
+  ensureThread,
+  getThreadMessages,
+} from "@/lib/chat-history";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -82,18 +88,47 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { messages?: ChatMessage[]; model?: string };
+  let body: { messages?: ChatMessage[]; model?: string; thread_id?: string };
   try {
-    body = (await request.json()) as { messages?: ChatMessage[]; model?: string };
+    body = (await request.json()) as {
+      messages?: ChatMessage[];
+      model?: string;
+      thread_id?: string;
+    };
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
   const chosenModel = resolveModel("chat", body.model);
-  const messages = (body.messages ?? []).filter(
+  const incoming = (body.messages ?? []).filter(
     (m) => m && (m.role === "user" || m.role === "assistant") && m.content
   );
-  if (messages.length === 0) {
+  if (incoming.length === 0) {
     return NextResponse.json({ error: "Empty messages" }, { status: 400 });
+  }
+
+  // ── Resolve thread + reconstruct full message history from DB ──
+  // The client may send only the newest user message + a thread_id; we hydrate
+  // the rest from chat_messages so old conversations actually have memory.
+  const lastUserMsg = [...incoming].reverse().find((m) => m.role === "user");
+  const thread = await ensureThread(body.thread_id, lastUserMsg?.content ?? "");
+  const persisted = await getThreadMessages(thread.id).catch(() => []);
+  const messages: ChatMessage[] = persisted
+    .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+    .map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content ?? "",
+    }));
+  // Append only the new user messages the client just sent (avoid double-storing
+  // ones already in the DB).
+  const persistedTexts = new Set(persisted.map((p) => `${p.role}::${p.content}`));
+  for (const m of incoming) {
+    const key = `${m.role}::${m.content}`;
+    if (!persistedTexts.has(key)) {
+      messages.push(m);
+      if (m.role === "user") {
+        await appendMessage(thread.id, { role: "user", content: m.content });
+      }
+    }
   }
 
   // Pull static context — site, jobs, projects, notes.
@@ -160,9 +195,11 @@ export async function POST(request: Request) {
     )
     .join("\n\n");
 
+  const factsBlock = await buildFactsContext();
   const system = `You are Krishna Amarneni's personal AI assistant inside Krishna's portfolio admin. You answer Krishna's questions about himself, his work, his book, his published notes, and his money.
 
 Voice: direct, factual, second-person ("you", not "Krishna"). Concise. If a fact isn't in the data or tools you have access to, say so plainly.
+${factsBlock ? `\n# Your facts (always-on memory)\n${factsBlock}\n` : ""}
 
 # About Krishna
 ${about}
@@ -226,7 +263,14 @@ ${restBlob ? `# Connected services (snapshots)\n${restBlob}\n` : ""}${mcpBlob ? 
       }
       const toolCalls = (reply as { tool_calls?: GroqMsg["tool_calls"] }).tool_calls;
       if (!toolCalls || toolCalls.length === 0) {
-        return NextResponse.json({ reply: reply.content ?? "" });
+        const finalText = reply.content ?? "";
+        if (finalText) {
+          await appendMessage(thread.id, {
+            role: "assistant",
+            content: finalText,
+          }).catch(() => undefined);
+        }
+        return NextResponse.json({ reply: finalText, thread_id: thread.id });
       }
       // Append the assistant message that requested the tools.
       loop.push({
@@ -278,8 +322,16 @@ ${restBlob ? `# Connected services (snapshots)\n${restBlob}\n` : ""}${mcpBlob ? 
       max_tokens: 1500,
       messages: loop as never,
     });
+    const finalReply = final.choices[0]?.message?.content ?? "";
+    if (finalReply) {
+      await appendMessage(thread.id, {
+        role: "assistant",
+        content: finalReply,
+      }).catch(() => undefined);
+    }
     return NextResponse.json({
-      reply: final.choices[0]?.message?.content ?? "",
+      reply: finalReply,
+      thread_id: thread.id,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Groq request failed";
