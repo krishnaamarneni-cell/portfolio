@@ -18,9 +18,44 @@ import ShareMenu from "./ShareMenu";
 import { useSiteContent } from "./SiteContentProvider";
 import type { BookSection } from "@/lib/site-content-types";
 
-/* ───────────────────────── front cover (SVG) ───────────────────────── */
+/* ───────────────────────── cover image config ─────────────────────────
+ * Bookcover.png is a flat spread laid out as: BACK | SPINE | FRONT.
+ * The image is 1774 × 887. Each face is ~5/6 (wider than a real 2/3 book
+ * because the source is a stylized mockup with margins).
+ *
+ * We render the cover faces by using the image as a background and sliding
+ * it left (back) or right (front).
+ */
+const COVER_IMAGE_SRC = "/Bookcover.png";
+const COVER_FACE_ASPECT = "5 / 6";
 
-function BookCoverFront({ book }: { book: BookSection }) {
+/* ───────────────────────── front cover (image) ───────────────────────── */
+
+function BookCoverImage({
+  face,
+  ariaLabel,
+}: {
+  face: "front" | "back";
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      role="img"
+      aria-label={ariaLabel}
+      className="w-full h-full block"
+      style={{
+        backgroundImage: `url(${COVER_IMAGE_SRC})`,
+        backgroundSize: "auto 100%",
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: face === "front" ? "100% center" : "0% center",
+        backgroundColor: "#0a0604",
+      }}
+    />
+  );
+}
+
+/* keep the SVG cover as a fallback in case the image is missing */
+function BookCoverFrontSVG({ book }: { book: BookSection }) {
   return (
     <svg
       viewBox="0 0 400 600"
@@ -164,7 +199,17 @@ function splitSubtitleLines(s: string): string[] {
 
 /* ───────────────────────── back cover (HTML) ───────────────────────── */
 
+function BookCoverFront({ book }: { book: BookSection }) {
+  void book; // image carries its own typography
+  return <BookCoverImage face="front" ariaLabel="Drive to Freedom front cover" />;
+}
+
 function BookCoverBack({ book }: { book: BookSection }) {
+  void book;
+  return <BookCoverImage face="back" ariaLabel="Drive to Freedom back cover" />;
+}
+
+function BookCoverBackSVG({ book }: { book: BookSection }) {
   const firstSynopsis = book.back_synopsis[0] ?? "";
   const restSynopsis = book.back_synopsis.slice(1);
   // Drop cap: take first character only if it's a letter; else fall back to whole paragraph.
@@ -411,8 +456,9 @@ function BookCard3D({
       <button
         type="button"
         onClick={() => setFlipped((f) => !f)}
-        className="block w-full aspect-[2/3] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6b00] rounded-2xl"
+        className="block w-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6b00] rounded-2xl"
         style={{
+          aspectRatio: COVER_FACE_ASPECT,
           transformStyle: "preserve-3d",
           transition: "transform 0.9s cubic-bezier(0.4, 0, 0.2, 1)",
           transform: flipped ? "rotateY(180deg)" : "rotateY(-3deg)",
