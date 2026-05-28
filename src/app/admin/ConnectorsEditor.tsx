@@ -41,11 +41,11 @@ const PRESETS: Record<string, Preset> = {
   buffer: {
     id: "buffer",
     label: "Buffer",
-    base_url: "https://api.bufferapp.com/1/profiles.json",
+    base_url: "https://api.buffer.com/graphql",
     helpUrl: "https://buffer.com/developers/apps",
     helpLabel: "buffer.com/developers/apps",
     description:
-      "Buffer access token. Lets the Social tab list your LinkedIn / X / Instagram profiles and post via Buffer's queue.",
+      "Buffer access token. Lets the Social tab list your LinkedIn / X / Instagram channels and post via Buffer's queue.",
   },
 };
 
@@ -351,8 +351,10 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
                 {" "}
                 On Buffer&apos;s developer page click <strong>Create New App</strong>{" "}
                 → fill any name → open the app → copy the{" "}
-                <strong>Access Token</strong> (long string starting with{" "}
-                <code className="text-[#ff8c38]">1/</code>). Paste it below.
+                <strong>Access Token</strong>. Paste it below. We talk to
+                Buffer&apos;s new GraphQL API at{" "}
+                <code className="text-[#ff8c38]">api.buffer.com/graphql</code>{" "}
+                — the URL field below is just for show; only the token matters.
               </>
             )}
           </p>

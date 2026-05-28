@@ -8,7 +8,8 @@ import {
   fetchSiteContent,
 } from "@/lib/content";
 import type { Connector } from "@/lib/content-types";
-import { resolveConnectorEndpoint } from "@/lib/connector-url";
+import { resolveConnectorCall } from "@/lib/connector-url";
+import { getAccount, getChannels } from "@/lib/buffer";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,21 +23,62 @@ type ConnectorSnapshot = {
   data?: unknown;
 };
 
+function looksLikeBuffer(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host.endsWith("buffer.com") || host.endsWith("bufferapp.com");
+  } catch {
+    return false;
+  }
+}
+
 async function callConnector(c: Connector): Promise<ConnectorSnapshot> {
   if (!c.enabled) return { id: c.id, label: c.label, ok: false, error: "Disabled" };
   if (!c.bearer_token) {
     return { id: c.id, label: c.label, ok: false, error: "No bearer token" };
   }
-  const url = resolveConnectorEndpoint(c);
+  const { url, headers } = resolveConnectorCall(c);
   if (!url) {
     return { id: c.id, label: c.label, ok: false, error: "No endpoint URL" };
   }
+
+  // Buffer's API is GraphQL — call /account via the helper rather than
+  // GET-ing a random URL, so the Test button works regardless of what the
+  // user pasted in the endpoint field.
+  if (looksLikeBuffer(url)) {
+    try {
+      const account = await getAccount(c.bearer_token);
+      if (!account) {
+        return { id: c.id, label: c.label, ok: false, error: "Buffer rejected token" };
+      }
+      const channels = await getChannels(c.bearer_token);
+      return {
+        id: c.id,
+        label: c.label,
+        ok: true,
+        data: {
+          account: { name: account.name, email: account.email },
+          organization: account.currentOrganization,
+          channels: channels.map((ch) => ({
+            id: ch.id,
+            service: ch.service,
+            displayName: ch.displayName,
+          })),
+        },
+      };
+    } catch (err) {
+      return {
+        id: c.id,
+        label: c.label,
+        ok: false,
+        error: err instanceof Error ? err.message : "fetch failed",
+      };
+    }
+  }
+
   try {
     const r = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${c.bearer_token}`,
-        Accept: "application/json",
-      },
+      headers,
       cache: "no-store",
     });
     if (!r.ok) {

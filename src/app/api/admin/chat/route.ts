@@ -8,7 +8,7 @@ import {
   fetchSiteContent,
 } from "@/lib/content";
 import type { Connector } from "@/lib/content-types";
-import { resolveConnectorEndpoint } from "@/lib/connector-url";
+import { resolveConnectorCall } from "@/lib/connector-url";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,14 +17,22 @@ type ChatMessage = { role: "user" | "assistant" | "system"; content: string };
 
 async function callConnector(c: Connector): Promise<unknown | null> {
   if (!c.enabled || !c.bearer_token) return null;
-  const url = resolveConnectorEndpoint(c);
+  const { url, headers } = resolveConnectorCall(c);
   if (!url) return null;
+  // Buffer's GraphQL API isn't useful as chat context (we use Buffer for
+  // posting, not for querying user data). Skip it so the chat doesn't get
+  // confused by unrelated channel/post snapshots.
+  try {
+    const host = new URL(url).hostname;
+    if (host.endsWith("buffer.com") || host.endsWith("bufferapp.com")) {
+      return null;
+    }
+  } catch {
+    // fall through and try anyway
+  }
   try {
     const r = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${c.bearer_token}`,
-        Accept: "application/json",
-      },
+      headers,
       cache: "no-store",
     });
     if (!r.ok) return null;
