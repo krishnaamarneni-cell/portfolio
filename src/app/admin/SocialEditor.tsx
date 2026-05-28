@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FiZap,
   FiImage,
@@ -12,6 +12,9 @@ import {
   FiExternalLink,
   FiCalendar,
   FiLayers,
+  FiSave,
+  FiFolder,
+  FiTrash2,
 } from "react-icons/fi";
 import { FaXTwitter, FaLinkedinIn, FaInstagram } from "react-icons/fa6";
 
@@ -35,6 +38,7 @@ type Composition = {
   x: string;
   instagram: string;
   image_query: string;
+  image_prompt: string;
 };
 
 type BufferProfile = {
@@ -45,7 +49,46 @@ type BufferProfile = {
   avatar?: string;
 };
 
-const EMPTY: Composition = { linkedin: "", x: "", instagram: "", image_query: "" };
+type Draft = {
+  id: string;
+  savedAt: number;
+  topic: string;
+  hint: string;
+  composition: Composition;
+  imageUrl: string;
+  imageCredit: string | null;
+  imagePrompt: string;
+  imageProvider: "auto" | "fal" | "unsplash";
+};
+
+const EMPTY: Composition = {
+  linkedin: "",
+  x: "",
+  instagram: "",
+  image_query: "",
+  image_prompt: "",
+};
+
+const DRAFTS_KEY = "krishna_admin_social_drafts_v1";
+
+function loadDrafts(): Draft[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(DRAFTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as Draft[];
+  } catch {
+    return [];
+  }
+}
+
+function persistDrafts(list: Draft[]) {
+  try {
+    window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(list));
+  } catch {}
+}
 
 const inputClass =
   "w-full px-4 py-2.5 rounded-xl bg-[#1a1a1a] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-sm text-white placeholder:text-[#555] transition-colors";
@@ -65,9 +108,24 @@ function profilesFor(all: BufferProfile[], key: PlatformKey): BufferProfile[] {
 /** Initial "now-ish" datetime-local string (rounded up 10 min). */
 function defaultScheduleAt(): string {
   const d = new Date(Date.now() + 10 * 60 * 1000);
-  // toISOString gives UTC; datetime-local needs local — re-derive.
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function shortPreview(s: string, n = 60) {
+  const trimmed = s.replace(/\s+/g, " ").trim();
+  return trimmed.length > n ? trimmed.slice(0, n - 1) + "…" : trimmed;
+}
+
+function timeAgo(ms: number) {
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return "just now";
+  const m = Math.floor(diff / 60_000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
 
 export default function SocialEditor({
@@ -87,6 +145,10 @@ export default function SocialEditor({
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageProvider, setImageProvider] = useState<"auto" | "fal" | "unsplash">("auto");
   const [generating, setGenerating] = useState(false);
+  /** Tracks whether the user has typed into the image prompt themselves —
+   * if false, we keep the input synced to whichever auto-prompt fits the
+   * selected provider. */
+  const userEditedPromptRef = useRef(false);
 
   const [profiles, setProfiles] = useState<BufferProfile[]>([]);
   const [profilesError, setProfilesError] = useState<string | null>(null);
@@ -104,6 +166,15 @@ export default function SocialEditor({
   const [batchScheduleAt, setBatchScheduleAt] = useState<string>("");
   const [batchBusy, setBatchBusy] = useState(false);
 
+  // Drafts
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [loadedDraftId, setLoadedDraftId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDrafts(loadDrafts());
+  }, []);
+
   useEffect(() => {
     fetch("/api/admin/buffer/profiles")
       .then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
@@ -115,6 +186,24 @@ export default function SocialEditor({
         }
       });
   }, []);
+
+  /** Pick the "natural" prompt for a provider — fal/auto get the rich Flux
+   * prompt, Unsplash gets the short search query. */
+  function promptForProvider(
+    provider: "auto" | "fal" | "unsplash",
+    c: Composition
+  ): string {
+    if (provider === "unsplash") return c.image_query || "";
+    return c.image_prompt || c.image_query || "";
+  }
+
+  /** Keep image prompt synced to provider + composition while the user
+   * hasn't manually edited it. */
+  useEffect(() => {
+    if (userEditedPromptRef.current) return;
+    const next = promptForProvider(imageProvider, composition);
+    setImagePrompt(next);
+  }, [imageProvider, composition]);
 
   async function compose() {
     if (!topic.trim()) {
@@ -134,13 +223,19 @@ export default function SocialEditor({
         setComposing(false);
         return;
       }
-      setComposition({
+      const newComp: Composition = {
         linkedin: data.linkedin ?? "",
         x: data.x ?? "",
         instagram: data.instagram ?? "",
         image_query: data.image_query ?? "",
-      });
-      if (!imagePrompt.trim() && data.image_query) setImagePrompt(data.image_query);
+        image_prompt: data.image_prompt ?? "",
+      };
+      setComposition(newComp);
+      // Force-resync the prompt to the fresh content, regardless of whether
+      // the user had previously edited the prompt by hand — they just asked
+      // for new content, so the old custom prompt no longer applies.
+      userEditedPromptRef.current = false;
+      setImagePrompt(promptForProvider(imageProvider, newComp));
       onSuccess("Posts drafted");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Network error");
@@ -149,7 +244,7 @@ export default function SocialEditor({
   }
 
   async function generateImage(aspect: "square" | "landscape" = "landscape") {
-    const prompt = imagePrompt.trim() || composition.image_query;
+    const prompt = imagePrompt.trim() || promptForProvider(imageProvider, composition);
     if (!prompt) {
       onError("Need an image prompt or a generated topic first");
       return;
@@ -181,7 +276,7 @@ export default function SocialEditor({
     if (!local) return null;
     const d = new Date(local);
     if (!Number.isFinite(d.getTime())) return null;
-    if (d.getTime() < Date.now() + 60 * 1000) return null; // must be in the future
+    if (d.getTime() < Date.now() + 60 * 1000) return null;
     return d.toISOString();
   }
 
@@ -216,7 +311,6 @@ export default function SocialEditor({
     return { ok: true };
   }
 
-  /** Selected platforms = platforms with at least one selected profile + non-empty text. */
   const readyPlatforms = useMemo<PlatformKey[]>(() => {
     return PLATFORMS.filter((p) => {
       const text = composition[p.key];
@@ -245,9 +339,7 @@ export default function SocialEditor({
           : when === "queue"
           ? "Queued on"
           : "Scheduled on";
-      onSuccess(
-        `${verb} ${results.map((r) => r.k).join(", ")}`
-      );
+      onSuccess(`${verb} ${results.map((r) => r.k).join(", ")}`);
     } else if (failed.length === results.length) {
       onError(failed.map((r) => `${r.k}: ${r.error}`).join(" · "));
     } else {
@@ -257,15 +349,164 @@ export default function SocialEditor({
     }
   }
 
+  /* ─── Drafts ─── */
+
+  function saveDraft() {
+    const hasContent =
+      topic.trim() ||
+      composition.linkedin.trim() ||
+      composition.x.trim() ||
+      composition.instagram.trim() ||
+      imageUrl.trim();
+    if (!hasContent) {
+      onError("Nothing to save yet");
+      return;
+    }
+    const id = loadedDraftId ?? `d_${Date.now().toString(36)}`;
+    const next: Draft = {
+      id,
+      savedAt: Date.now(),
+      topic,
+      hint,
+      composition,
+      imageUrl,
+      imageCredit,
+      imagePrompt,
+      imageProvider,
+    };
+    const others = drafts.filter((d) => d.id !== id);
+    const updated = [next, ...others].slice(0, 30); // cap at 30
+    setDrafts(updated);
+    persistDrafts(updated);
+    setLoadedDraftId(id);
+    onSuccess(loadedDraftId ? "Draft updated" : "Draft saved");
+  }
+
+  function loadDraft(d: Draft) {
+    setTopic(d.topic);
+    setHint(d.hint);
+    setComposition(d.composition);
+    setImageUrl(d.imageUrl);
+    setImageCredit(d.imageCredit);
+    setImagePrompt(d.imagePrompt);
+    // Treat the loaded prompt as user-edited so we don't overwrite it
+    // when the provider effect runs.
+    userEditedPromptRef.current = !!d.imagePrompt;
+    setImageProvider(d.imageProvider);
+    setLoadedDraftId(d.id);
+    setDraftsOpen(false);
+    onSuccess(`Loaded draft from ${timeAgo(d.savedAt)}`);
+  }
+
+  function deleteDraft(id: string) {
+    const updated = drafts.filter((d) => d.id !== id);
+    setDrafts(updated);
+    persistDrafts(updated);
+    if (loadedDraftId === id) setLoadedDraftId(null);
+  }
+
+  function newBlank() {
+    setTopic("");
+    setHint("");
+    setComposition(EMPTY);
+    setImageUrl("");
+    setImageCredit(null);
+    setImagePrompt("");
+    userEditedPromptRef.current = false;
+    setLoadedDraftId(null);
+    onSuccess("Cleared");
+  }
+
   return (
     <section className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold">Social</h2>
-        <p className="text-xs text-[#666] mt-1">
-          Drop a topic, generate platform-native posts with Groq, attach an image,
-          then push to LinkedIn / X / Instagram through Buffer.
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-xl font-bold">Social</h2>
+          <p className="text-xs text-[#666] mt-1">
+            Drop a topic, generate platform-native posts with Groq, attach an image,
+            then push to LinkedIn / X / Instagram through Buffer.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {loadedDraftId && (
+            <span className="text-[10px] font-mono text-[#888] bg-white/[0.04] border border-white/[0.08] px-2 py-1 rounded-full">
+              editing draft
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={saveDraft}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.12] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00]"
+            title="Save current state to come back later"
+          >
+            <FiSave size={12} />
+            {loadedDraftId ? "Update draft" : "Save draft"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDraftsOpen((o) => !o)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00]"
+          >
+            <FiFolder size={12} />
+            Drafts {drafts.length > 0 ? `(${drafts.length})` : ""}
+          </button>
+          {(loadedDraftId || topic || composition.linkedin) && (
+            <button
+              type="button"
+              onClick={newBlank}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-[#888] hover:text-white"
+            >
+              New
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Drafts panel */}
+      {draftsOpen && (
+        <div className="rounded-2xl border border-white/[0.08] bg-[#161616] p-4 space-y-2">
+          {drafts.length === 0 ? (
+            <p className="text-xs text-[#666]">
+              No saved drafts. Hit <strong className="text-white/80">Save draft</strong> to keep your current work.
+            </p>
+          ) : (
+            <ul className="divide-y divide-white/[0.05]">
+              {drafts.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
+                >
+                  <button
+                    type="button"
+                    onClick={() => loadDraft(d)}
+                    className="flex-1 text-left min-w-0"
+                  >
+                    <div className="text-sm text-white truncate">
+                      {shortPreview(d.topic) || shortPreview(d.composition.linkedin) || "(untitled)"}
+                    </div>
+                    <div className="text-[10px] font-mono text-[#666] mt-0.5">
+                      {timeAgo(d.savedAt)}
+                      {d.imageUrl ? " · 🖼" : ""}
+                      {d.composition.linkedin ? " · LI" : ""}
+                      {d.composition.x ? " · X" : ""}
+                      {d.composition.instagram ? " · IG" : ""}
+                      {loadedDraftId === d.id ? " · editing" : ""}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteDraft(d.id)}
+                    className="shrink-0 p-1.5 rounded-md text-[#666] hover:text-red-400 hover:bg-red-500/10"
+                    title="Delete draft"
+                  >
+                    <FiTrash2 size={12} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Topic + compose */}
       <div className="rounded-2xl border border-[#ff6b00]/20 bg-gradient-to-br from-[#ff6b00]/[0.05] to-transparent p-5 space-y-3">
@@ -307,33 +548,65 @@ export default function SocialEditor({
           <div className="flex items-center gap-2">
             <select
               value={imageProvider}
-              onChange={(e) =>
-                setImageProvider(e.target.value as "auto" | "fal" | "unsplash")
-              }
+              onChange={(e) => {
+                const next = e.target.value as "auto" | "fal" | "unsplash";
+                setImageProvider(next);
+                // Reset the "user edited" flag so the prompt auto-swaps to
+                // whichever style fits the new provider, unless the user is
+                // mid-typing something they want to keep.
+                if (!imagePrompt.trim()) {
+                  userEditedPromptRef.current = false;
+                }
+              }}
               className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs text-[#ccc] focus:outline-none"
             >
               <option value="auto">Auto (fal.ai → Unsplash)</option>
               <option value="fal">fal.ai (Flux)</option>
               <option value="unsplash">Unsplash search</option>
             </select>
+            {(composition.image_prompt || composition.image_query) && (
+              <button
+                type="button"
+                onClick={() => {
+                  userEditedPromptRef.current = false;
+                  setImagePrompt(promptForProvider(imageProvider, composition));
+                }}
+                className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs text-[#888] hover:text-[#ff6b00]"
+                title="Re-fill prompt from generated content"
+              >
+                <FiRefreshCw size={11} className="inline mr-1" />
+                Reset prompt
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Use a textarea instead of a single-line input so long Flux prompts
+            actually fit on screen. */}
         <div className="flex gap-2">
-          <input
+          <textarea
+            rows={imageProvider === "unsplash" ? 1 : 3}
             value={imagePrompt}
-            onChange={(e) => setImagePrompt(e.target.value)}
-            className={inputClass}
+            onChange={(e) => {
+              userEditedPromptRef.current = true;
+              setImagePrompt(e.target.value);
+            }}
+            className={textareaClass}
             placeholder={
-              composition.image_query
-                ? `Suggested: ${composition.image_query}`
-                : "Concrete subject (e.g. 'highway sunset', 'trader at desk')"
+              imageProvider === "unsplash"
+                ? composition.image_query
+                  ? `Suggested: ${composition.image_query}`
+                  : "Stock-photo search words (e.g. 'highway sunset')"
+                : composition.image_prompt
+                ? "Auto-filled from your post — edit freely"
+                : "Describe the scene, mood, lighting, style — Flux likes detail"
             }
           />
           <button
             type="button"
             onClick={() => generateImage("landscape")}
             disabled={generating}
-            className="shrink-0 inline-flex items-center gap-2 px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-60"
+            className="shrink-0 self-start inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-60"
           >
             <FiImage size={14} />
             {generating ? "…" : "Generate"}
@@ -743,6 +1016,3 @@ function PlatformCard({
     </div>
   );
 }
-
-// silence unused import in some bundlers
-void FiRefreshCw;

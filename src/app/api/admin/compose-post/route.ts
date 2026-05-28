@@ -36,14 +36,18 @@ Critical:
 - Don't invent facts about Krishna or his companies that aren't in the topic
 - Three versions should share the same core idea but be genuinely native to each platform
 - No "buy now", no clickbait, no fake urgency
-- An "image_query" should be 2-4 concrete words for a stock photo that visualizes the idea
+
+Image fields:
+- "image_query" → 2-4 concrete words for an Unsplash stock-photo search (e.g., "trader desk monitors")
+- "image_prompt" → a rich, descriptive prompt (40-80 words) for a Flux text-to-image model. Visualize the post's main metaphor or scene. Include subject, setting, lighting, mood, color palette, composition, and style cues ("editorial photography", "cinematic", "minimal vector", "isometric illustration", etc.). NO text or logos in the image. NO people's faces unless the topic demands it. Concrete, not abstract.
 
 Output STRICT JSON, no markdown fences:
 {
   "linkedin": "...",
   "x": "...",
   "instagram": "...",
-  "image_query": "..."
+  "image_query": "...",
+  "image_prompt": "..."
 }`;
 
 export async function POST(request: Request) {
@@ -84,7 +88,7 @@ export async function POST(request: Request) {
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       temperature: 0.55,
-      max_tokens: 2000,
+      max_tokens: 2200,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -97,6 +101,7 @@ export async function POST(request: Request) {
       x?: string;
       instagram?: string;
       image_query?: string;
+      image_prompt?: string;
     };
     try {
       parsed = JSON.parse(raw);
@@ -111,6 +116,7 @@ export async function POST(request: Request) {
       x: (parsed.x ?? "").slice(0, 270),
       instagram: (parsed.instagram ?? "").slice(0, 2000),
       image_query: parsed.image_query ?? "",
+      image_prompt: parsed.image_prompt ?? "",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Groq request failed";
