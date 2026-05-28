@@ -97,10 +97,34 @@ export async function POST(request: Request) {
   )
     .map((n) => `- ${n.title}: ${n.body}`)
     .join("\n");
+  // Detect mixed currencies — e.g., Indian NSE/BSE tickers (.NS, .BO) priced
+  // in INR but summed by some upstream APIs as if they were USD.
+  function describeConnectorRisks(data: unknown): string {
+    if (!data || typeof data !== "object") return "";
+    const obj = data as Record<string, unknown>;
+    const holdings = Array.isArray(obj.holdings) ? obj.holdings : [];
+    const nonUs = new Set<string>();
+    for (const h of holdings) {
+      const sym = String((h as Record<string, unknown>)?.symbol ?? "");
+      const m = sym.match(/\.([A-Z]{1,3})$/);
+      if (m && m[1] !== "US") nonUs.add(m[1]);
+    }
+    if (nonUs.size === 0) return "";
+    const suffixes = [...nonUs].join(", ");
+    return (
+      `\n\n⚠ This snapshot contains holdings with non-US exchange suffixes (${suffixes}). ` +
+      `The upstream API appears to sum those values as if they were USD even though ` +
+      `they are likely denominated in another currency (e.g. .NS = NSE India, prices in INR). ` +
+      `The "netWorth" field may therefore be inflated. When the user asks for totals, ` +
+      `state the raw number, but ALSO add a one-line caveat about possible currency mixing ` +
+      `and suggest checking the WealthClaude UI for the authoritative figure.`
+    );
+  }
+
   const connectorsBlob = connectorData
     .map((c) =>
       c.data
-        ? `## ${c.label} (${c.id}) live snapshot:\n${JSON.stringify(c.data, null, 2).slice(0, 4000)}`
+        ? `## ${c.label} (${c.id}) live snapshot:\n${JSON.stringify(c.data, null, 2).slice(0, 4000)}${describeConnectorRisks(c.data)}`
         : `## ${c.label} (${c.id}): connector enabled but no data returned`
     )
     .join("\n\n");

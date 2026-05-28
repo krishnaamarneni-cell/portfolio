@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FiSave, FiTrash2, FiCheck, FiCheckCircle, FiAlertCircle } from "react-icons/fi";
+import {
+  FiSave,
+  FiTrash2,
+  FiCheckCircle,
+  FiAlertCircle,
+  FiEdit2,
+  FiPlus,
+} from "react-icons/fi";
 import type { Connector } from "@/lib/content-types";
 
 type Props = {
@@ -57,6 +64,7 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +86,8 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
               enabled: existing.enabled,
             });
           }
+          // Auto-expand the form only when the user has nothing saved yet.
+          setExpanded(data.connectors.length === 0);
         } else if (data.error) {
           onError(data.error);
         }
@@ -114,6 +124,7 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
     }
     onSuccess("Connector saved");
     await refresh();
+    setExpanded(false);
   }
 
   async function remove(id: string) {
@@ -214,6 +225,22 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
                     {testing === c.id ? "Testing…" : "Test"}
                   </button>
                   <button
+                    onClick={() => {
+                      setDraft({
+                        id: c.id,
+                        label: c.label,
+                        base_url: c.base_url,
+                        bearer_token: c.bearer_token ?? "",
+                        enabled: c.enabled,
+                      });
+                      setExpanded(true);
+                    }}
+                    className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.06] hover:border-[#ff6b00]/40 hover:text-[#ff6b00] flex items-center justify-center transition-colors"
+                    title="Edit"
+                  >
+                    <FiEdit2 size={13} />
+                  </button>
+                  <button
                     onClick={() => remove(c.id)}
                     className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.06] hover:border-red-500/40 hover:text-red-400 flex items-center justify-center transition-colors"
                     title="Delete"
@@ -227,6 +254,43 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
         </div>
       ) : null}
 
+      {/* Collapsed state: just an Add button */}
+      {!expanded ? (
+        <div className="flex items-center justify-between flex-wrap gap-3 p-4 rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02]">
+          <p className="text-xs text-[#888]">
+            {connectors.length > 0
+              ? "Edit a connector above, or add another below."
+              : "No connectors yet — pick a preset to get started."}
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {Object.values(PRESETS).map((p) => {
+              const existing = connectors.find((c) => c.id === p.id);
+              if (existing) return null;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    setDraft({
+                      id: p.id,
+                      label: p.label,
+                      base_url: p.base_url,
+                      bearer_token: "",
+                      enabled: true,
+                    });
+                    setExpanded(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-semibold text-xs shadow-[0_4px_15px_rgba(255,107,0,0.35)] hover:scale-[1.03] transition-transform"
+                >
+                  <FiPlus size={12} />
+                  Add {p.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Preset picker */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-[#666] mr-1">
@@ -402,6 +466,15 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
         </label>
 
         <div className="flex items-center justify-end gap-3 pt-1">
+          {connectors.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="px-4 py-2 rounded-full border border-white/10 text-sm text-[#999] hover:bg-white/[0.04] hover:text-white"
+            >
+              Cancel
+            </button>
+          )}
           <button
             type="submit"
             disabled={saving}
@@ -416,10 +489,9 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
           </button>
         </div>
       </form>
+        </>
+      )}
     </section>
   );
 }
 
-// keep FiCheck used as an import target so unused-import lint doesn't trip;
-// some bundlers warn on unused named imports.
-void FiCheck;
