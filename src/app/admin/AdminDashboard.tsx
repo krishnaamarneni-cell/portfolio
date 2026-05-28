@@ -161,7 +161,7 @@ export default function AdminDashboard({
 
   const navItems = [
     { id: "content" as const, label: "Site Content", icon: FiLayout, hint: "Hero, About, Skills, Book…" },
-    { id: "thoughts" as const, label: "Thoughts", icon: FiZap, hint: "Quick takes + AI formatting" },
+    { id: "thoughts" as const, label: "Notes", icon: FiZap, hint: "Quick takes + AI formatting" },
     { id: "jobs" as const, label: "Jobs", icon: FiBriefcase, count: jobs.length, hint: "Experience timeline" },
     { id: "projects" as const, label: "Projects", icon: FiFolder, count: projects.length, hint: "Featured work" },
   ];

@@ -65,7 +65,7 @@ export default function ThoughtsEditor({ onSuccess, onError }: Props) {
       onError(data.error || "Save failed");
       return false;
     }
-    onSuccess(id ? "Thought updated" : "Thought saved");
+    onSuccess(id ? "Note updated" : "Note saved");
     await refresh();
     return true;
   }
@@ -85,14 +85,14 @@ export default function ThoughtsEditor({ onSuccess, onError }: Props) {
   }
 
   async function remove(id: string) {
-    if (!confirm("Delete this thought?")) return;
+    if (!confirm("Delete this note?")) return;
     const res = await fetch(`/api/admin/thoughts/${id}`, { method: "DELETE" });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       onError(data.error || "Delete failed");
       return;
     }
-    onSuccess("Thought deleted");
+    onSuccess("Note deleted");
     await refresh();
   }
 
@@ -100,23 +100,23 @@ export default function ThoughtsEditor({ onSuccess, onError }: Props) {
     <section>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-bold">Thoughts</h2>
+          <h2 className="text-xl font-bold">Notes</h2>
           <p className="text-xs text-[#666] mt-1">
-            Drop raw thoughts in. Have Groq clean them up. Publish to{" "}
+            Drop raw notes in. Have Groq clean them up. Publish to{" "}
             <a
-              href="/thoughts"
+              href="/notes"
               target="_blank"
               rel="noopener noreferrer"
               className="text-[#ff8c38] hover:underline"
             >
-              /thoughts
+              /notes
             </a>{" "}
             when ready.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <a
-            href="/thoughts"
+            href="/notes"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10 text-[#ccc] text-sm hover:border-[#ff6b00]/40 hover:text-[#ff6b00] transition-colors"
@@ -129,7 +129,7 @@ export default function ThoughtsEditor({ onSuccess, onError }: Props) {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-semibold text-sm shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.03] transition-transform"
           >
             <FiPlus size={14} />
-            New thought
+            New note
           </button>
         </div>
       </div>
@@ -138,10 +138,11 @@ export default function ThoughtsEditor({ onSuccess, onError }: Props) {
         <p className="text-[#666] text-sm">Loading…</p>
       ) : thoughts.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/[0.08] p-10 text-center">
-          <p className="text-[#888]">No thoughts yet.</p>
+          <p className="text-[#888]">No notes yet.</p>
           <p className="text-xs text-[#555] mt-2">
-            Add a <code>thoughts</code> table to Supabase by running
-            <code className="text-[#ff8c38]"> supabase/schema.sql</code> first.
+            If saves fail, run{" "}
+            <code className="text-[#ff8c38]">supabase/schema.sql</code> in your
+            Supabase SQL editor to create the database table.
           </p>
         </div>
       ) : (
@@ -321,7 +322,7 @@ function ThoughtModal({
       <div className="w-full max-w-3xl bg-[#0f0f0f] border border-white/[0.08] rounded-3xl shadow-[0_30px_80px_rgba(0,0,0,0.7)] my-8">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] sticky top-0 bg-[#0f0f0f]/95 backdrop-blur-xl rounded-t-3xl">
           <h2 className="font-bold text-lg">
-            {initial ? "Edit Thought" : "New Thought"}
+            {initial ? "Edit Note" : "New Note"}
           </h2>
           <button
             onClick={onClose}
@@ -335,7 +336,7 @@ function ThoughtModal({
         <form onSubmit={submit} className="p-6 space-y-5">
           <div className="rounded-2xl border border-[#ff6b00]/20 bg-gradient-to-br from-[#ff6b00]/[0.05] to-transparent p-4">
             <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38] mb-2">
-              Raw thought — write freely
+              Raw note — write freely
             </label>
             <textarea
               rows={6}
@@ -443,7 +444,7 @@ function ThoughtModal({
               <strong className="text-white">Publish</strong>{" "}
               <span className="text-[#888]">
                 — when checked, this appears on the public{" "}
-                <code className="text-[#ff8c38]">/thoughts</code> page.
+                <code className="text-[#ff8c38]">/notes</code> page.
               </span>
             </span>
           </label>
