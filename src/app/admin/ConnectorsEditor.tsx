@@ -15,7 +15,7 @@ const inputClass =
 const DEFAULT_DRAFT = {
   id: "wealthclaude",
   label: "WealthClaude",
-  base_url: "https://www.wealthclaude.com",
+  base_url: "https://www.wealthclaude.com/api/agent/me",
   bearer_token: "",
   enabled: true,
 };
@@ -233,18 +233,21 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
 
         <div>
           <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#888] mb-2">
-            Base URL (no trailing slash)
+            Endpoint URL
           </label>
           <input
             type="url"
             value={draft.base_url}
             onChange={(e) => setDraft({ ...draft, base_url: e.target.value })}
             className={inputClass}
-            placeholder="https://www.wealthclaude.com"
+            placeholder="https://www.wealthclaude.com/api/agent/me"
           />
           <p className="text-[10px] text-[#555] mt-1.5">
-            The chat will call <code className="text-[#ff8c38]">{draft.base_url}/api/agent/me</code> to
-            pull a snapshot of your portfolio.
+            For WealthClaude use the <strong className="text-[#ff8c38]">REST endpoint</strong> from
+            your AI Access page —{" "}
+            <code className="text-[#ff8c38]">https://www.wealthclaude.com/api/agent/me</code>.
+            (The <code>/api/mcp</code> URL is JSON-RPC and won&apos;t work here yet.) If you only
+            paste the host we&apos;ll append <code>/api/agent/me</code> automatically.
           </p>
         </div>
 

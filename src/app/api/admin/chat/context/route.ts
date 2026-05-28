@@ -8,6 +8,7 @@ import {
   fetchSiteContent,
 } from "@/lib/content";
 import type { Connector } from "@/lib/content-types";
+import { resolveConnectorEndpoint } from "@/lib/connector-url";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,7 +27,10 @@ async function callConnector(c: Connector): Promise<ConnectorSnapshot> {
   if (!c.bearer_token) {
     return { id: c.id, label: c.label, ok: false, error: "No bearer token" };
   }
-  const url = `${c.base_url.replace(/\/+$/, "")}/api/agent/me`;
+  const url = resolveConnectorEndpoint(c);
+  if (!url) {
+    return { id: c.id, label: c.label, ok: false, error: "No endpoint URL" };
+  }
   try {
     const r = await fetch(url, {
       headers: {

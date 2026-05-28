@@ -8,6 +8,7 @@ import {
   fetchSiteContent,
 } from "@/lib/content";
 import type { Connector } from "@/lib/content-types";
+import { resolveConnectorEndpoint } from "@/lib/connector-url";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,7 +17,8 @@ type ChatMessage = { role: "user" | "assistant" | "system"; content: string };
 
 async function callConnector(c: Connector): Promise<unknown | null> {
   if (!c.enabled || !c.bearer_token) return null;
-  const url = `${c.base_url.replace(/\/+$/, "")}/api/agent/me`;
+  const url = resolveConnectorEndpoint(c);
+  if (!url) return null;
   try {
     const r = await fetch(url, {
       headers: {
