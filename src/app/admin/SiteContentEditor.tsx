@@ -702,7 +702,7 @@ function BookEditor({
       </Field>
       <div className="rounded-xl border border-dashed border-[#ff6b00]/30 p-4 space-y-3">
         <p className="text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
-          Cover artwork text
+          Front cover artwork
         </p>
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Publisher (top tiny text)">
@@ -741,6 +741,80 @@ function BookEditor({
             />
           </Field>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-dashed border-[#ff6b00]/30 p-4 space-y-3">
+        <p className="text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
+          Back cover (shown when reader flips the book)
+        </p>
+        <Field label="Synopsis paragraphs" hint="Reader-facing pitch on the back of the book.">
+          <StringListEditor
+            items={value.back_synopsis}
+            onChange={(v) => set("back_synopsis", v)}
+            placeholder="One paragraph per line"
+            addLabel="Add paragraph"
+          />
+        </Field>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Praise pull-quote">
+            <textarea
+              rows={2}
+              value={value.back_praise_quote}
+              onChange={(e) => set("back_praise_quote", e.target.value)}
+              className={textareaClass}
+              placeholder="A short, memorable quote"
+            />
+          </Field>
+          <Field label="Quote attribution">
+            <input
+              value={value.back_praise_attribution}
+              onChange={(e) => set("back_praise_attribution", e.target.value)}
+              className={inputClass}
+              placeholder="— Reviewer, Publication"
+            />
+          </Field>
+        </div>
+        <Field label="About the author">
+          <textarea
+            rows={3}
+            value={value.back_author_bio}
+            onChange={(e) => set("back_author_bio", e.target.value)}
+            className={textareaClass}
+          />
+        </Field>
+        <Field label="ISBN (shown next to barcode)">
+          <input
+            value={value.back_isbn}
+            onChange={(e) => set("back_isbn", e.target.value)}
+            className={inputClass}
+            placeholder="978-0-0000-0000-0"
+          />
+        </Field>
+      </div>
+
+      <div className="rounded-xl border border-dashed border-[#ff6b00]/30 p-4 space-y-3">
+        <p className="text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
+          Inside (page-spread modal)
+        </p>
+        <Field label="Prologue title">
+          <input
+            value={value.prologue_title}
+            onChange={(e) => set("prologue_title", e.target.value)}
+            className={inputClass}
+            placeholder='e.g. "The Cold Apple"'
+          />
+        </Field>
+        <Field
+          label="Prologue paragraphs"
+          hint="Shown inside the open-book modal, paginated automatically."
+        >
+          <StringListEditor
+            items={value.prologue_text}
+            onChange={(v) => set("prologue_text", v)}
+            placeholder="One paragraph per line"
+            addLabel="Add paragraph"
+          />
+        </Field>
       </div>
     </>
   );

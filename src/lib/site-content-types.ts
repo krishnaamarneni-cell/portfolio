@@ -72,6 +72,15 @@ export type BookSection = {
   cover_title_line_2: string;
   cover_subtitle: string;
   cover_author: string;
+  // Back cover
+  back_synopsis: string[];
+  back_praise_quote: string;
+  back_praise_attribution: string;
+  back_author_bio: string;
+  back_isbn: string;
+  // Inside (page spread modal)
+  prologue_title: string;
+  prologue_text: string[];
 };
 
 export type Holding = {

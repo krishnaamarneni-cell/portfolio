@@ -1,24 +1,33 @@
 "use client";
 
-import { FiDownload, FiBookOpen, FiArrowUpRight } from "react-icons/fi";
+import { useState, useEffect } from "react";
+import {
+  FiDownload,
+  FiBookOpen,
+  FiArrowUpRight,
+  FiRotateCw,
+  FiX,
+  FiChevronLeft,
+  FiChevronRight,
+} from "react-icons/fi";
 import ScrollReveal from "./ScrollReveal";
-import TiltCard from "./TiltCard";
 import HoverSpotlight from "./HoverSpotlight";
 import Parallax3D from "./Parallax3D";
 import { useSiteContent } from "./SiteContentProvider";
 import type { BookSection } from "@/lib/site-content-types";
 
-function BookCover({ book }: { book: BookSection }) {
+/* ───────────────────────── front cover (SVG) ───────────────────────── */
+
+function BookCoverFront({ book }: { book: BookSection }) {
   return (
     <svg
       viewBox="0 0 400 600"
-      className="w-full h-full"
+      className="w-full h-full block"
       xmlns="http://www.w3.org/2000/svg"
       preserveAspectRatio="xMidYMid slice"
-      aria-label={`${book.title} book cover`}
+      aria-label={`${book.title} front cover`}
     >
       <defs>
-        {/* Sky → horizon → asphalt vertical gradient */}
         <linearGradient id="bkSky" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#050505" />
           <stop offset="45%" stopColor="#1f0f04" />
@@ -27,34 +36,25 @@ function BookCover({ book }: { book: BookSection }) {
           <stop offset="72%" stopColor="#3a1505" />
           <stop offset="100%" stopColor="#0a0604" />
         </linearGradient>
-
         <linearGradient id="bkOrange" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="#ff6b00" />
           <stop offset="100%" stopColor="#ffb066" />
         </linearGradient>
-
-        {/* Sun disc at horizon */}
         <radialGradient id="bkSun" cx="0.5" cy="0.5" r="0.5">
           <stop offset="0%" stopColor="#fff2d6" />
           <stop offset="35%" stopColor="#ffb766" />
           <stop offset="65%" stopColor="#ff7a1f" stopOpacity="0.7" />
           <stop offset="100%" stopColor="#ff6b00" stopOpacity="0" />
         </radialGradient>
-
-        {/* Subtle road darkening */}
         <linearGradient id="bkRoad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#0a0604" stopOpacity="0" />
           <stop offset="30%" stopColor="#0a0604" stopOpacity="0.6" />
           <stop offset="100%" stopColor="#000000" stopOpacity="0.95" />
         </linearGradient>
-
-        {/* Faint paper grain */}
         <filter id="bkGrain">
           <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="5" />
           <feColorMatrix values="0 0 0 0 1  0 0 0 0 0.85  0 0 0 0 0.6  0 0 0 0.045 0" />
         </filter>
-
-        {/* Title text shadow */}
         <filter id="bkTitleShadow" x="-10%" y="-10%" width="120%" height="120%">
           <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
           <feOffset dx="0" dy="2" />
@@ -64,43 +64,29 @@ function BookCover({ book }: { book: BookSection }) {
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
-
         <clipPath id="bkRoadClip">
           <path d="M 200 372 L 30 600 L 370 600 Z" />
         </clipPath>
+        <radialGradient id="bkVignette" cx="0.5" cy="0.5" r="0.7">
+          <stop offset="60%" stopColor="#000000" stopOpacity="0" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.55" />
+        </radialGradient>
       </defs>
 
-      {/* Background sky + horizon */}
       <rect width="400" height="600" fill="url(#bkSky)" />
 
-      {/* Distant mountains layer 1 */}
-      <path
-        d="M 0 372 L 30 360 L 60 366 L 95 350 L 130 362 L 165 348 L 200 360 L 235 350 L 270 364 L 310 354 L 345 366 L 400 358 L 400 372 Z"
-        fill="#1a0b04"
-        opacity="0.85"
-      />
-      {/* Distant mountains layer 2 (closer, slightly lighter) */}
-      <path
-        d="M 0 374 L 40 368 L 85 374 L 130 366 L 175 376 L 220 368 L 270 378 L 320 370 L 370 376 L 400 372 L 400 380 L 0 380 Z"
-        fill="#2a1206"
-        opacity="0.7"
-      />
+      <path d="M 0 372 L 30 360 L 60 366 L 95 350 L 130 362 L 165 348 L 200 360 L 235 350 L 270 364 L 310 354 L 345 366 L 400 358 L 400 372 Z" fill="#1a0b04" opacity="0.85" />
+      <path d="M 0 374 L 40 368 L 85 374 L 130 366 L 175 376 L 220 368 L 270 378 L 320 370 L 370 376 L 400 372 L 400 380 L 0 380 Z" fill="#2a1206" opacity="0.7" />
 
-      {/* Sun glow at horizon center */}
       <ellipse cx="200" cy="372" rx="120" ry="60" fill="url(#bkSun)" />
-      {/* Sun disc */}
       <circle cx="200" cy="372" r="22" fill="#fff2d6" opacity="0.95" />
       <circle cx="200" cy="372" r="22" fill="url(#bkSun)" />
 
-      {/* Horizon line */}
       <line x1="0" y1="372" x2="400" y2="372" stroke="#ff8c38" strokeOpacity="0.4" strokeWidth="0.6" />
 
-      {/* Road surface (clipped to triangle) */}
       <g clipPath="url(#bkRoadClip)">
         <rect x="0" y="372" width="400" height="228" fill="#1a0e06" />
         <rect x="0" y="372" width="400" height="228" fill="url(#bkRoad)" />
-
-        {/* Center dashed lane line */}
         <g stroke="#ffd9a8" strokeLinecap="round" opacity="0.95">
           <line x1="200" y1="385" x2="200" y2="395" strokeWidth="1.4" />
           <line x1="200" y1="410" x2="200" y2="425" strokeWidth="1.8" />
@@ -108,12 +94,9 @@ function BookCover({ book }: { book: BookSection }) {
           <line x1="200" y1="488" x2="200" y2="512" strokeWidth="3.2" />
           <line x1="200" y1="540" x2="200" y2="572" strokeWidth="4.2" />
         </g>
-
-        {/* Subtle warm wash bouncing off road */}
         <ellipse cx="200" cy="500" rx="220" ry="120" fill="#ff7a1f" opacity="0.08" />
       </g>
 
-      {/* Header — publisher mark */}
       <g>
         <line x1="80" y1="50" x2="160" y2="50" stroke="#ff8c38" strokeOpacity="0.5" strokeWidth="0.8" />
         <line x1="240" y1="50" x2="320" y2="50" stroke="#ff8c38" strokeOpacity="0.5" strokeWidth="0.8" />
@@ -122,37 +105,14 @@ function BookCover({ book }: { book: BookSection }) {
         </text>
       </g>
 
-      {/* Title — DRIVE TO (smaller) */}
-      <text
-        x="200"
-        y="148"
-        textAnchor="middle"
-        fill="#ffd9a8"
-        fontFamily="Georgia, 'Times New Roman', serif"
-        fontSize="22"
-        fontWeight="400"
-        letterSpacing="14"
-        filter="url(#bkTitleShadow)"
-      >
+      <text x="200" y="148" textAnchor="middle" fill="#ffd9a8" fontFamily="Georgia, 'Times New Roman', serif" fontSize="22" fontWeight="400" letterSpacing="14" filter="url(#bkTitleShadow)">
         {book.cover_title_line_1}
       </text>
 
-      {/* Title — FREEDOM (huge, dramatic) */}
-      <text
-        x="200"
-        y="232"
-        textAnchor="middle"
-        fill="url(#bkOrange)"
-        fontFamily="Georgia, 'Times New Roman', serif"
-        fontSize="68"
-        fontWeight="700"
-        letterSpacing="2"
-        filter="url(#bkTitleShadow)"
-      >
+      <text x="200" y="232" textAnchor="middle" fill="url(#bkOrange)" fontFamily="Georgia, 'Times New Roman', serif" fontSize="68" fontWeight="700" letterSpacing="2" filter="url(#bkTitleShadow)">
         {book.cover_title_line_2}
       </text>
 
-      {/* Ornament divider */}
       <g transform="translate(200, 268)">
         <line x1="-70" y1="0" x2="-12" y2="0" stroke="#ff8c38" strokeWidth="0.6" />
         <circle cx="-6" cy="0" r="1.2" fill="#ff8c38" />
@@ -161,55 +121,25 @@ function BookCover({ book }: { book: BookSection }) {
         <line x1="12" y1="0" x2="70" y2="0" stroke="#ff8c38" strokeWidth="0.6" />
       </g>
 
-      {/* Subtitle */}
       {splitSubtitleLines(book.cover_subtitle).map((line, i, arr) => (
-        <text
-          key={i}
-          x="200"
-          y={296 + i * 22}
-          textAnchor="middle"
-          fill="#ede1d0"
-          fontFamily="Georgia, 'Times New Roman', serif"
-          fontSize={arr.length > 2 ? 13 : 15}
-          fontStyle="italic"
-          letterSpacing="0.5"
-        >
+        <text key={i} x="200" y={296 + i * 22} textAnchor="middle" fill="#ede1d0" fontFamily="Georgia, 'Times New Roman', serif" fontSize={arr.length > 2 ? 13 : 15} fontStyle="italic" letterSpacing="0.5">
           {line}
         </text>
       ))}
 
-      {/* Author block at bottom */}
       <g>
         <line x1="120" y1="546" x2="180" y2="546" stroke="#ff8c38" strokeOpacity="0.5" strokeWidth="0.6" />
         <line x1="220" y1="546" x2="280" y2="546" stroke="#ff8c38" strokeOpacity="0.5" strokeWidth="0.6" />
         <text x="200" y="550" textAnchor="middle" fill="#ffaa66" fontFamily="ui-monospace, SFMono-Regular, monospace" fontSize="8" letterSpacing="3">
           FIRST EDITION
         </text>
-        <text
-          x="200"
-          y="578"
-          textAnchor="middle"
-          fill="#ffffff"
-          fontFamily="Georgia, 'Times New Roman', serif"
-          fontSize="17"
-          fontWeight="700"
-          letterSpacing="4"
-        >
+        <text x="200" y="578" textAnchor="middle" fill="#ffffff" fontFamily="Georgia, 'Times New Roman', serif" fontSize="17" fontWeight="700" letterSpacing="4">
           {book.cover_author}
         </text>
       </g>
 
-      {/* Paper grain */}
       <rect width="400" height="600" filter="url(#bkGrain)" opacity="0.6" pointerEvents="none" />
-
-      {/* Vignette */}
       <rect width="400" height="600" fill="url(#bkVignette)" />
-      <defs>
-        <radialGradient id="bkVignette" cx="0.5" cy="0.5" r="0.7">
-          <stop offset="60%" stopColor="#000000" stopOpacity="0" />
-          <stop offset="100%" stopColor="#000000" stopOpacity="0.55" />
-        </radialGradient>
-      </defs>
     </svg>
   );
 }
@@ -217,7 +147,6 @@ function BookCover({ book }: { book: BookSection }) {
 function splitSubtitleLines(s: string): string[] {
   if (s.length <= 28) return [s];
   const words = s.split(" ");
-  // Try to find a natural breakpoint near the middle.
   const targetLen = Math.ceil(s.length / 2);
   let acc = 0;
   let breakAt = words.length;
@@ -231,8 +160,509 @@ function splitSubtitleLines(s: string): string[] {
   return [words.slice(0, breakAt).join(" "), words.slice(breakAt).join(" ")];
 }
 
+/* ───────────────────────── back cover (HTML) ───────────────────────── */
+
+function BookCoverBack({ book }: { book: BookSection }) {
+  return (
+    <div
+      className="w-full h-full relative overflow-hidden flex flex-col"
+      style={{
+        background:
+          "linear-gradient(180deg, #0a0604 0%, #1a0e06 30%, #2a1409 60%, #1a0a04 100%)",
+      }}
+    >
+      {/* subtle paper grain */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.35] mix-blend-overlay"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='9'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 0.85  0 0 0 0 0.6  0 0 0 0.06 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>\")",
+        }}
+      />
+
+      {/* vignette */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(circle at 50% 50%, transparent 55%, rgba(0,0,0,0.6) 100%)",
+        }}
+      />
+
+      <div className="relative px-8 pt-8 pb-6 flex-1 flex flex-col">
+        {/* publisher mark */}
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <span className="h-px w-10 bg-[#ff8c38]/50" />
+          <span
+            className="text-[#ffaa66] font-mono text-[8px] tracking-[0.35em]"
+          >
+            {book.cover_publisher_text}
+          </span>
+          <span className="h-px w-10 bg-[#ff8c38]/50" />
+        </div>
+
+        {/* praise pull-quote */}
+        {book.back_praise_quote && (
+          <blockquote className="text-center mb-6">
+            <p
+              className="text-[#ffd9a8] text-[13px] leading-relaxed italic"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              &ldquo;{book.back_praise_quote}&rdquo;
+            </p>
+            {book.back_praise_attribution && (
+              <p className="text-[#ff8c38] text-[10px] font-mono tracking-[0.2em] uppercase mt-2">
+                {book.back_praise_attribution}
+              </p>
+            )}
+          </blockquote>
+        )}
+
+        <div className="h-px bg-[#ff8c38]/20 mb-5" />
+
+        {/* synopsis */}
+        <div className="space-y-2.5 text-[#e0d4c0] text-[11px] leading-[1.55] flex-1 overflow-hidden">
+          {book.back_synopsis.map((p, i) => (
+            <p
+              key={i}
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              {p}
+            </p>
+          ))}
+        </div>
+
+        <div className="h-px bg-[#ff8c38]/20 my-4" />
+
+        {/* about author */}
+        <div className="mb-4">
+          <p className="text-[#ff8c38] text-[9px] font-mono tracking-[0.25em] uppercase mb-2">
+            About the Author
+          </p>
+          <p
+            className="text-[#c4b8a4] text-[10px] leading-[1.6]"
+            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
+            {book.back_author_bio}
+          </p>
+        </div>
+      </div>
+
+      {/* barcode footer */}
+      <div className="relative bg-[#f5ead4] mx-8 mb-8 rounded-[2px] px-3 py-2 flex items-center gap-3">
+        <Barcode />
+        <div className="text-right">
+          <p className="text-[#0a0604] text-[8px] font-mono leading-tight">
+            ISBN
+          </p>
+          <p className="text-[#0a0604] text-[10px] font-mono font-bold tracking-tight leading-tight">
+            {book.back_isbn}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Barcode() {
+  // Deterministic but varied bar widths.
+  const bars = "1011010110011010100101100110101011001011010110010110101101";
+  return (
+    <div className="flex items-end h-7 gap-[1px] flex-1">
+      {bars.split("").map((c, i) => (
+        <div
+          key={i}
+          className="bg-[#0a0604]"
+          style={{
+            width: c === "1" ? 2 : 1,
+            height: "100%",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────── 3D flippable book card ─────────────────── */
+
+function BookCard3D({
+  book,
+  onOpenInside,
+}: {
+  book: BookSection;
+  onOpenInside: () => void;
+}) {
+  const [flipped, setFlipped] = useState(false);
+  return (
+    <div className="relative mx-auto max-w-[360px]" style={{ perspective: "1800px" }}>
+      <button
+        type="button"
+        onClick={() => setFlipped((f) => !f)}
+        className="block w-full aspect-[2/3] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6b00] rounded-2xl"
+        style={{
+          transformStyle: "preserve-3d",
+          transition: "transform 0.9s cubic-bezier(0.4, 0, 0.2, 1)",
+          transform: flipped ? "rotateY(180deg)" : "rotateY(-3deg)",
+        }}
+        aria-label={flipped ? "Flip to front cover" : "Flip to back cover"}
+      >
+        {/* Front */}
+        <div
+          className="absolute inset-0 rounded-2xl overflow-hidden border border-white/[0.06]"
+          style={{
+            backfaceVisibility: "hidden",
+            boxShadow:
+              "0 30px 80px rgba(255,107,0,0.25), 0 10px 30px rgba(0,0,0,0.6)",
+          }}
+        >
+          <BookCoverFront book={book} />
+          {/* spine highlight */}
+          <div className="absolute inset-y-0 left-0 w-2 bg-gradient-to-r from-white/15 to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
+        </div>
+
+        {/* Back */}
+        <div
+          className="absolute inset-0 rounded-2xl overflow-hidden border border-white/[0.06]"
+          style={{
+            backfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+            boxShadow:
+              "0 30px 80px rgba(255,107,0,0.25), 0 10px 30px rgba(0,0,0,0.6)",
+          }}
+        >
+          <BookCoverBack book={book} />
+          <div className="absolute inset-y-0 right-0 w-2 bg-gradient-to-l from-white/15 to-transparent pointer-events-none" />
+        </div>
+      </button>
+
+      {/* Action buttons under cover */}
+      <div className="flex items-center justify-center gap-2 mt-5">
+        <button
+          type="button"
+          onClick={() => setFlipped((f) => !f)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10 text-[#ccc] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] transition-colors"
+        >
+          <FiRotateCw size={12} />
+          {flipped ? "See front" : "See back"}
+        </button>
+        <button
+          type="button"
+          onClick={onOpenInside}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black text-xs font-semibold hover:scale-[1.03] transition-transform shadow-[0_4px_15px_rgba(255,107,0,0.35)]"
+        >
+          <FiBookOpen size={12} />
+          Open inside
+        </button>
+      </div>
+      <p className="text-center text-[10px] text-[#666] mt-2 font-mono tracking-wider uppercase">
+        Click the cover to flip
+      </p>
+    </div>
+  );
+}
+
+/* ─────────────────── inside pages modal ─────────────────── */
+
+type Spread = {
+  leftKind: "toc" | "prologue" | "blank";
+  rightKind: "toc" | "prologue" | "blank";
+};
+
+function BookPagesModal({
+  book,
+  onClose,
+}: {
+  book: BookSection;
+  onClose: () => void;
+}) {
+  const [spread, setSpread] = useState(0);
+
+  // Split prologue into paginated chunks (so it doesn't overflow).
+  const prologueChunks = chunkParagraphs(book.prologue_text, 4);
+
+  const spreads: Spread[] = [
+    { leftKind: "blank", rightKind: "toc" },
+    ...prologueChunks.map(() => ({
+      leftKind: "prologue" as const,
+      rightKind: "prologue" as const,
+    })),
+  ];
+  // Pair prologue chunks two per spread
+  const tocSpread = spreads[0];
+  const prologueSpreadCount = Math.ceil(prologueChunks.length / 2);
+
+  const totalSpreads = 1 + prologueSpreadCount;
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") setSpread((s) => Math.min(totalSpreads - 1, s + 1));
+      if (e.key === "ArrowLeft") setSpread((s) => Math.max(0, s - 1));
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, totalSpreads]);
+
+  function renderLeft() {
+    if (spread === 0) {
+      // First spread: blank left page (inside front cover)
+      return <BlankPage />;
+    }
+    const idx = (spread - 1) * 2;
+    const chunk = prologueChunks[idx];
+    if (!chunk) return <BlankPage />;
+    return (
+      <ProloguePage
+        title={spread === 1 && idx === 0 ? book.prologue_title : undefined}
+        paragraphs={chunk}
+        pageNumber={spread * 2}
+      />
+    );
+  }
+  function renderRight() {
+    if (spread === 0) {
+      // Right page: Table of contents
+      return <TOCPage chapters={book.chapters} title={book.title} />;
+    }
+    const idx = (spread - 1) * 2 + 1;
+    const chunk = prologueChunks[idx];
+    if (!chunk) return <BlankPage />;
+    return (
+      <ProloguePage paragraphs={chunk} pageNumber={spread * 2 + 1} />
+    );
+  }
+
+  void tocSpread; // silence unused
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-8 overflow-y-auto"
+      style={{
+        background: "rgba(0,0,0,0.85)",
+        backdropFilter: "blur(8px)",
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-5xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* close */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute -top-12 right-0 w-10 h-10 rounded-full bg-white/[0.06] border border-white/10 text-white hover:bg-white/[0.12] flex items-center justify-center"
+          aria-label="Close"
+        >
+          <FiX size={18} />
+        </button>
+
+        {/* Open-book spread */}
+        <div
+          className="relative grid grid-cols-1 sm:grid-cols-2 rounded-2xl overflow-hidden shadow-[0_40px_120px_rgba(255,107,0,0.15),0_20px_60px_rgba(0,0,0,0.8)] border border-white/[0.06]"
+          style={{ aspectRatio: "2 / 1.4" }}
+        >
+          <div className="hidden sm:block relative">
+            {renderLeft()}
+            {/* center spine shadow on right edge of left page */}
+            <div
+              className="absolute inset-y-0 right-0 w-6 pointer-events-none"
+              style={{
+                background:
+                  "linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.45) 100%)",
+              }}
+            />
+          </div>
+          <div className="relative">
+            {renderRight()}
+            {/* center spine shadow on left edge of right page (mobile shows only right) */}
+            <div
+              className="absolute inset-y-0 left-0 w-6 pointer-events-none hidden sm:block"
+              style={{
+                background:
+                  "linear-gradient(270deg, transparent 0%, rgba(0,0,0,0.45) 100%)",
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Pagination */}
+        <div className="mt-6 flex items-center justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => setSpread((s) => Math.max(0, s - 1))}
+            disabled={spread === 0}
+            className="w-10 h-10 rounded-full bg-white/[0.06] border border-white/10 text-white hover:bg-white/[0.12] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+            aria-label="Previous"
+          >
+            <FiChevronLeft size={18} />
+          </button>
+          <span className="text-[#888] text-xs font-mono">
+            Spread {spread + 1} / {totalSpreads}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setSpread((s) => Math.min(totalSpreads - 1, s + 1))
+            }
+            disabled={spread === totalSpreads - 1}
+            className="w-10 h-10 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black hover:scale-105 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shadow-[0_4px_15px_rgba(255,107,0,0.35)]"
+            aria-label="Next"
+          >
+            <FiChevronRight size={18} />
+          </button>
+        </div>
+
+        {/* hint */}
+        <p className="text-center text-[10px] text-[#666] mt-3 font-mono tracking-wider uppercase">
+          Use ← / → keys to turn pages · Esc to close
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function chunkParagraphs(paragraphs: string[], perPage: number): string[][] {
+  const out: string[][] = [];
+  for (let i = 0; i < paragraphs.length; i += perPage) {
+    out.push(paragraphs.slice(i, i + perPage));
+  }
+  return out;
+}
+
+const pageBg =
+  "linear-gradient(180deg, #f6ecd6 0%, #efe3c6 100%)";
+
+function BlankPage() {
+  return (
+    <div
+      className="w-full h-full p-8 sm:p-12 flex items-end justify-end"
+      style={{ background: pageBg }}
+    >
+      <span className="text-[#a89373] font-mono text-xs italic">
+        — facing page —
+      </span>
+    </div>
+  );
+}
+
+function TOCPage({
+  chapters,
+  title,
+}: {
+  chapters: string[];
+  title: string;
+}) {
+  return (
+    <div
+      className="w-full h-full p-8 sm:p-12 overflow-hidden relative"
+      style={{
+        background: pageBg,
+      }}
+    >
+      <div className="text-center mb-6">
+        <p className="text-[#a89373] text-[10px] font-mono tracking-[0.3em] uppercase">
+          {title}
+        </p>
+        <h3
+          className="text-[#3a2810] text-2xl sm:text-3xl font-bold mt-2"
+          style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+        >
+          Contents
+        </h3>
+        <div className="flex items-center justify-center mt-3">
+          <span className="h-px w-12 bg-[#a89373]/40" />
+          <span className="mx-2 text-[#a89373]">✦</span>
+          <span className="h-px w-12 bg-[#a89373]/40" />
+        </div>
+      </div>
+      <ol className="space-y-2.5">
+        {chapters.map((ch, i) => (
+          <li
+            key={i}
+            className="flex items-baseline gap-2 text-[#3a2810] text-[12px]"
+            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
+            <span className="font-mono text-[#a89373] text-[10px] w-7 shrink-0">
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            <span className="flex-1 truncate">{ch}</span>
+            <span
+              className="border-b border-dotted border-[#a89373]/40 flex-shrink mx-1 mb-1"
+              style={{ minWidth: "20px", flex: "1 1 auto" }}
+            />
+            <span className="font-mono text-[#a89373] text-[10px]">
+              {String(8 + i * 12).padStart(3, " ")}
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      {/* page number */}
+      <div className="absolute bottom-6 right-8 text-[#a89373] font-mono text-[10px]">
+        ii
+      </div>
+    </div>
+  );
+}
+
+function ProloguePage({
+  title,
+  paragraphs,
+  pageNumber,
+}: {
+  title?: string;
+  paragraphs: string[];
+  pageNumber: number;
+}) {
+  return (
+    <div
+      className="w-full h-full p-8 sm:p-12 overflow-hidden relative"
+      style={{ background: pageBg }}
+    >
+      {title && (
+        <div className="text-center mb-6">
+          <p className="text-[#a89373] text-[10px] font-mono tracking-[0.3em] uppercase">
+            Prologue
+          </p>
+          <h3
+            className="text-[#3a2810] text-2xl sm:text-3xl font-bold mt-2"
+            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
+            {title}
+          </h3>
+          <div className="flex items-center justify-center mt-3">
+            <span className="h-px w-10 bg-[#a89373]/40" />
+            <span className="mx-2 text-[#a89373]">✦</span>
+            <span className="h-px w-10 bg-[#a89373]/40" />
+          </div>
+        </div>
+      )}
+      <div className="space-y-3">
+        {paragraphs.map((p, i) => (
+          <p
+            key={i}
+            className="text-[#3a2810] text-[12px] leading-[1.7]"
+            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
+            {p}
+          </p>
+        ))}
+      </div>
+      <div className="absolute bottom-6 left-8 right-8 flex items-center justify-between text-[#a89373] font-mono text-[10px]">
+        <span>Drive to Freedom</span>
+        <span>{pageNumber}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────── main section ─────────────────────── */
+
 export default function Book() {
   const { book } = useSiteContent();
+  const [pagesOpen, setPagesOpen] = useState(false);
 
   return (
     <section id="book" className="relative py-28 lg:py-36 px-6 lg:px-10 overflow-hidden">
@@ -253,10 +683,7 @@ export default function Book() {
           </ScrollReveal>
 
           <ScrollReveal direction="flipX" delay={0.1}>
-            <HoverSpotlight
-              as="h2"
-              className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6 cursor-default"
-            >
+            <HoverSpotlight as="h2" className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6 cursor-default">
               {book.heading_pre} <span className="text-gradient">{book.heading_accent}</span>
             </HoverSpotlight>
           </ScrollReveal>
@@ -269,22 +696,16 @@ export default function Book() {
         <div className="grid lg:grid-cols-12 gap-12 lg:gap-16 items-center">
           <div className="lg:col-span-5">
             <ScrollReveal direction="flipY" delay={0.2}>
-              <TiltCard className="rounded-2xl mx-auto max-w-[360px]" intensity={14}>
-                <div
-                  className="aspect-[2/3] rounded-2xl overflow-hidden shadow-[0_30px_80px_rgba(255,107,0,0.25),0_10px_30px_rgba(0,0,0,0.6)] border border-white/[0.06] relative"
-                  style={{ transform: "perspective(1200px) rotateY(-3deg)" }}
-                >
-                  <BookCover book={book} />
-                  <div className="absolute inset-y-0 left-0 w-2 bg-gradient-to-r from-white/15 to-transparent" />
-                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-white/30 to-transparent" />
-                </div>
-              </TiltCard>
+              <BookCard3D
+                book={book}
+                onOpenInside={() => setPagesOpen(true)}
+              />
             </ScrollReveal>
           </div>
 
           <div className="lg:col-span-7">
             <ScrollReveal direction="flipX" delay={0.25}>
-              <div className="flex items-center gap-3 mb-5">
+              <div className="flex items-center gap-3 mb-5 flex-wrap">
                 <span className="px-3 py-1 rounded-full bg-[#ff6b00] text-black text-[10px] font-bold tracking-[0.2em] uppercase">
                   {book.status_badge}
                 </span>
@@ -296,10 +717,7 @@ export default function Book() {
               <h3 className="text-3xl md:text-4xl font-black text-white mb-3 leading-tight">
                 {book.title}
               </h3>
-              <p
-                className="text-[#ff6b00] text-lg mb-6"
-                style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}
-              >
+              <p className="text-[#ff6b00] text-lg mb-6" style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}>
                 {book.subtitle}
               </p>
 
@@ -328,19 +746,15 @@ export default function Book() {
               )}
 
               <div className="flex flex-wrap items-center gap-3">
-                <a
-                  href={book.pdf_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() => setPagesOpen(true)}
                   className="group inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-bold text-sm shadow-[0_8px_30px_rgba(255,107,0,0.45)] hover:scale-[1.03] active:scale-95 transition-transform"
                 >
                   <FiBookOpen size={16} />
                   Read Excerpt
-                  <FiArrowUpRight
-                    size={14}
-                    className="group-hover:rotate-45 transition-transform"
-                  />
-                </a>
+                  <FiArrowUpRight size={14} className="group-hover:rotate-45 transition-transform" />
+                </button>
                 <a
                   href={book.pdf_url}
                   download
@@ -354,6 +768,10 @@ export default function Book() {
           </div>
         </div>
       </div>
+
+      {pagesOpen && (
+        <BookPagesModal book={book} onClose={() => setPagesOpen(false)} />
+      )}
     </section>
   );
 }

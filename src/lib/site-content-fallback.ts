@@ -166,6 +166,29 @@ export const SITE_CONTENT_FALLBACK: SiteContent = {
     cover_title_line_2: "FREEDOM",
     cover_subtitle: "A Farmer's Son's Guide to Building Wealth",
     cover_author: "KRISHNA AMARNENI",
+    back_synopsis: [
+      "If you were never taught about money, this book is for you.",
+      "Krishna Amarneni grew up watching his father break his back farming for $2 a day in a small village in India. He learned about wealth the way most of us do — by getting it wrong, paying for it, and slowly figuring out what nobody taught us.",
+      "Through one simple idea — money is like cars — Drive to Freedom turns the intimidating world of personal finance into something you can actually understand. No jargon. No formulas you'll never use. Just ten short chapters that take you from one paycheck to a self-driving fleet.",
+      "Whether you're the first in your family to think about investing, or the immigrant kid carrying the weight of everyone's dreams, this is the book you needed ten years ago.",
+    ],
+    back_praise_quote:
+      "A book for everyone who was told 'just work hard and you'll be fine,' and discovered that wasn't enough.",
+    back_praise_attribution: "— From the dedication",
+    back_author_bio:
+      "Krishna Amarneni is a SAP consultant turned full-stack builder living in New Jersey. He is the founder of WealthClaude, an AI-powered portfolio platform, and writes about money, immigration, and the things they don't teach you in school.",
+    back_isbn: "978-0-0000-0000-0",
+    prologue_title: "The Cold Apple",
+    prologue_text: [
+      "I was eight years old when I learned that money changes everything.",
+      "My friend Ravi had a refrigerator in his house. We didn't. In the summer heat of our small village in India, this wasn't just some convenience. It was a luxury I dreamed about.",
+      "One afternoon, I walked to Ravi's house. Not to play. Just to drink cold water. The summer was brutal, and the thought of cool water on my throat was all I could think about.",
+      "When I arrived, Ravi's mother looked at me the way people look at stray dogs. She didn't say anything, but her eyes said everything: Why are you here? You don't belong.",
+      "I drank my water quickly and left.",
+      "That evening, I asked my mother why we didn't have a refrigerator. She looked at me with the tired eyes of a woman who worked from sunrise to sunset, whose husband broke his back farming for $2 a day, and said, \"Beta, someday. Someday we will.\"",
+      "Someday.",
+      "That word haunted me. It was full of hope and emptiness at the same time.",
+    ],
   },
   investments: {
     eyebrow: "// My Top Investments",
