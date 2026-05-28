@@ -98,22 +98,40 @@ export default function ThoughtsEditor({ onSuccess, onError }: Props) {
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 className="text-xl font-bold">Thoughts</h2>
           <p className="text-xs text-[#666] mt-1">
             Drop raw thoughts in. Have Groq clean them up. Publish to{" "}
-            <code className="text-[#ff8c38]">/thoughts</code> when ready.
+            <a
+              href="/thoughts"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#ff8c38] hover:underline"
+            >
+              /thoughts
+            </a>{" "}
+            when ready.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditing("new")}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-semibold text-sm shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.03] transition-transform"
-        >
-          <FiPlus size={14} />
-          New thought
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="/thoughts"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10 text-[#ccc] text-sm hover:border-[#ff6b00]/40 hover:text-[#ff6b00] transition-colors"
+          >
+            View live page
+          </a>
+          <button
+            type="button"
+            onClick={() => setEditing("new")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-semibold text-sm shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.03] transition-transform"
+          >
+            <FiPlus size={14} />
+            New thought
+          </button>
+        </div>
       </div>
 
       {loading ? (

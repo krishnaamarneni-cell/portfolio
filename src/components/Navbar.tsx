@@ -12,6 +12,7 @@ const navLinks = [
   { name: "Skills", href: "/#skills", id: "skills" },
   { name: "Projects", href: "/#projects", id: "projects" },
   { name: "Book", href: "/#book", id: "book" },
+  { name: "Thoughts", href: "/thoughts", id: "thoughts" },
   { name: "Notes", href: "/notes", id: "notes" },
 ];
 
@@ -54,6 +55,16 @@ export default function Navbar() {
     // If on a non-home route, set active based on path
     if (pathname?.startsWith("/notes")) {
       setActive("notes");
+      setVisible(true);
+      return;
+    }
+    if (pathname?.startsWith("/thoughts")) {
+      setActive("thoughts");
+      setVisible(true);
+      return;
+    }
+    if (pathname?.startsWith("/investments")) {
+      setActive("investments");
       setVisible(true);
       return;
     }
