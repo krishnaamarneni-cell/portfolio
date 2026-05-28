@@ -3,7 +3,7 @@ import Link from "next/link";
 import { FiArrowLeft, FiArrowUpRight, FiLock, FiTrendingUp } from "react-icons/fi";
 import { fetchSiteContent } from "@/lib/content";
 import type { Holding } from "@/lib/site-content-types";
-import { holdingLogoUrl } from "@/lib/logo";
+import HoldingLogoImg from "./HoldingLogoImg";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
@@ -121,15 +121,11 @@ function HoldingRow({ h, isPrivate }: { h: Holding; isPrivate?: boolean }) {
           style={{ backgroundColor: h.brand_color }}
         >
           {h.logo_domain ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={holdingLogoUrl(h.logo_domain) ?? ""}
-                alt={`${h.name} logo`}
-                className="w-11 h-11 object-contain relative z-10"
-                loading="lazy"
-              />
-            </>
+            <HoldingLogoImg
+              domain={h.logo_domain}
+              alt={`${h.name} logo`}
+              className="w-11 h-11 object-contain relative z-10"
+            />
           ) : isPrivate ? (
             <FiLock size={20} className="text-white" />
           ) : (

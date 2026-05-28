@@ -15,7 +15,7 @@ import {
 import HoverSpotlight from "./HoverSpotlight";
 import { useSiteContent } from "./SiteContentProvider";
 import type { Holding as HoldingDB } from "@/lib/site-content-types";
-import { holdingLogoUrl } from "@/lib/logo";
+import { holdingLogoUrl, holdingLogoFallbackUrl } from "@/lib/logo";
 
 type Holding = {
   ticker: string;
@@ -75,10 +75,16 @@ function HoldingCard({ h, index }: { h: Holding; index: number }) {
                         <img
                           src={holdingLogoUrl(h.logoDomain) ?? ""}
                           alt={`${h.name} logo`}
-                          className="w-9 h-9 object-contain"
+                          className="w-10 h-10 object-contain"
                           loading="lazy"
                           onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).style.display = "none";
+                            const img = e.currentTarget as HTMLImageElement;
+                            const fallback = holdingLogoFallbackUrl(h.logoDomain);
+                            if (fallback && img.src !== fallback) {
+                              img.src = fallback;
+                            } else {
+                              img.style.display = "none";
+                            }
                           }}
                         />
                         <span className="absolute inset-0 -z-10 flex items-center justify-center">
