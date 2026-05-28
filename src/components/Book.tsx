@@ -449,14 +449,23 @@ function Barcode() {
  */
 const BOOK_W = 340;
 const BOOK_H = 470;
-const BOOK_D = 72; // spine thickness in px
+const BOOK_D = 90; // spine thickness in px — thick enough to read the spine artwork
 
-// Calibrated background-position-x for each face based on where the slice
-// sits in Bookcover.png (1774×887 spread with back / spine / front).
+/**
+ * Bookcover.png is 1774×887 laid out as BACK | SPINE | FRONT.
+ * Measured directly from the source image:
+ *   - back content:  x ≈   80 → 620   (center ~20%)
+ *   - spine strip:   x ≈  770 → 940   (center ~48%, width ~170px)
+ *   - front content: x ≈  960 → 1700  (center ~75%)
+ *
+ * Front/back use background-size: auto 100% (image fills the face height,
+ * horizontal crop is small). The spine face is much narrower so we scale
+ * the image up ~10× and shift bg-position to center on the spine strip.
+ */
 const FACE_BG = {
-  front: "82% center",
-  back: "4% center",
-  spine: "38% center",
+  front: { size: "auto 100%", position: "89% center" },
+  back: { size: "auto 100%", position: "3% center" },
+  spine: { size: "1040% auto", position: "47.8% center" },
 } as const;
 
 function BookGlobe3D({ onOpenInside }: { onOpenInside: () => void }) {
@@ -515,7 +524,8 @@ function BookGlobe3D({ onOpenInside }: { onOpenInside: () => void }) {
               width: BOOK_W,
               height: BOOK_H,
               transform: `translate(-50%, -50%) translateZ(${BOOK_D / 2}px)`,
-              backgroundPosition: FACE_BG.front,
+              backgroundSize: FACE_BG.front.size,
+              backgroundPosition: FACE_BG.front.position,
             }}
           />
           {/* Back cover */}
@@ -525,7 +535,8 @@ function BookGlobe3D({ onOpenInside }: { onOpenInside: () => void }) {
               width: BOOK_W,
               height: BOOK_H,
               transform: `translate(-50%, -50%) rotateY(180deg) translateZ(${BOOK_D / 2}px)`,
-              backgroundPosition: FACE_BG.back,
+              backgroundSize: FACE_BG.back.size,
+              backgroundPosition: FACE_BG.back.position,
             }}
           />
           {/* Left side — spine */}
@@ -535,8 +546,8 @@ function BookGlobe3D({ onOpenInside }: { onOpenInside: () => void }) {
               width: BOOK_D,
               height: BOOK_H,
               transform: `translate(-50%, -50%) rotateY(-90deg) translateZ(${BOOK_W / 2}px)`,
-              backgroundPosition: FACE_BG.spine,
-              backgroundSize: "auto 100%",
+              backgroundSize: FACE_BG.spine.size,
+              backgroundPosition: FACE_BG.spine.position,
             }}
           />
           {/* Right side — page edges */}
