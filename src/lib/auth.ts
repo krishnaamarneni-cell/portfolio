@@ -1,8 +1,24 @@
 import { createHmac, timingSafeEqual, createHash } from "node:crypto";
 import { cookies } from "next/headers";
+import {
+  createSupabaseServerClient,
+  isSupabaseAuthConfigured,
+} from "./supabase-ssr";
 
 const COOKIE_NAME = "ka_admin_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
+
+function adminEmail(): string {
+  return (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+}
+
+/**
+ * Returns true if Supabase Auth should be the primary auth backend.
+ * When false, the legacy env-based password hash is used.
+ */
+export function useSupabaseAuth(): boolean {
+  return isSupabaseAuthConfigured();
+}
 
 function getSecret(): string {
   const secret = process.env.SESSION_SECRET;
@@ -68,6 +84,26 @@ export function parseSessionToken(token: string | undefined | null): {
 }
 
 export async function getSession(): Promise<{ email: string } | null> {
+  // Try Supabase Auth first if configured.
+  if (useSupabaseAuth()) {
+    try {
+      const supabase = await createSupabaseServerClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user?.email) {
+        const expected = adminEmail();
+        // If ADMIN_EMAIL is set, only that user is the admin. Otherwise any
+        // authenticated Supabase user counts (single-tenant deployments).
+        if (!expected || user.email.toLowerCase() === expected) {
+          return { email: user.email };
+        }
+      }
+    } catch {
+      // fall through to legacy
+    }
+  }
+  // Legacy HMAC cookie fallback (works when Supabase isn't configured).
   const store = await cookies();
   const raw = store.get(COOKIE_NAME)?.value;
   return parseSessionToken(raw);

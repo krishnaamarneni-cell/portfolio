@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { verifyCredentials, setSessionCookie } from "@/lib/auth";
+import {
+  verifyCredentials,
+  setSessionCookie,
+  useSupabaseAuth,
+} from "@/lib/auth";
+import { createSupabaseServerClient } from "@/lib/supabase-ssr";
 
 export async function POST(request: Request) {
   let body: { email?: string; password?: string };
@@ -19,15 +24,44 @@ export async function POST(request: Request) {
     );
   }
 
+  const expectedAdmin = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+
+  if (useSupabaseAuth()) {
+    if (expectedAdmin && email.toLowerCase() !== expectedAdmin) {
+      await new Promise((r) => setTimeout(r, 500));
+      return NextResponse.json(
+        { error: "This email is not the admin." },
+        { status: 403 }
+      );
+    }
+    try {
+      const supabase = await createSupabaseServerClient();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error || !data.session) {
+        await new Promise((r) => setTimeout(r, 500));
+        return NextResponse.json(
+          { error: error?.message || "Invalid email or password" },
+          { status: 401 }
+        );
+      }
+      return NextResponse.json({ ok: true, source: "supabase" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sign-in failed";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  }
+
+  // Legacy env-based auth
   if (!verifyCredentials(email, password)) {
-    // Slow down brute-force attempts a touch.
     await new Promise((r) => setTimeout(r, 500));
     return NextResponse.json(
       { error: "Invalid email or password" },
       { status: 401 }
     );
   }
-
   await setSessionCookie(email);
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, source: "env" });
 }
