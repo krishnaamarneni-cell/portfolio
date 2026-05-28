@@ -10,6 +10,7 @@ import {
   FiChevronLeft,
   FiChevronRight,
 } from "react-icons/fi";
+import { FaStar } from "react-icons/fa6";
 import ScrollReveal from "./ScrollReveal";
 import HoverSpotlight from "./HoverSpotlight";
 import Parallax3D from "./Parallax3D";
@@ -163,66 +164,140 @@ function splitSubtitleLines(s: string): string[] {
 /* ───────────────────────── back cover (HTML) ───────────────────────── */
 
 function BookCoverBack({ book }: { book: BookSection }) {
+  const firstSynopsis = book.back_synopsis[0] ?? "";
+  const restSynopsis = book.back_synopsis.slice(1);
+  // Drop cap: take first character only if it's a letter; else fall back to whole paragraph.
+  const firstChar = /^[A-Za-z]/.test(firstSynopsis) ? firstSynopsis[0] : "";
+  const firstBody = firstChar ? firstSynopsis.slice(1) : firstSynopsis;
+  const authorInitials = (book.cover_author || "K A")
+    .split(/\s+/)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("");
+
   return (
     <div
       className="w-full h-full relative overflow-hidden flex flex-col"
       style={{
         background:
-          "linear-gradient(180deg, #0a0604 0%, #1a0e06 30%, #2a1409 60%, #1a0a04 100%)",
+          "linear-gradient(180deg, #0a0604 0%, #1a0e06 35%, #20100a 65%, #0d0805 100%)",
       }}
     >
-      {/* subtle paper grain */}
+      {/* paper grain */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-[0.35] mix-blend-overlay"
+        className="absolute inset-0 pointer-events-none opacity-[0.32] mix-blend-overlay"
         style={{
           backgroundImage:
             "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='9'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 0.85  0 0 0 0 0.6  0 0 0 0.06 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>\")",
         }}
       />
 
+      {/* corner ornaments — gives a designed-cover feel */}
+      <div className="absolute top-0 left-0 w-10 h-10 pointer-events-none">
+        <div className="absolute top-3 left-3 w-5 h-px bg-[#ff8c38]/40" />
+        <div className="absolute top-3 left-3 w-px h-5 bg-[#ff8c38]/40" />
+      </div>
+      <div className="absolute top-0 right-0 w-10 h-10 pointer-events-none">
+        <div className="absolute top-3 right-3 w-5 h-px bg-[#ff8c38]/40" />
+        <div className="absolute top-3 right-3 w-px h-5 bg-[#ff8c38]/40" />
+      </div>
+      <div className="absolute bottom-0 left-0 w-10 h-10 pointer-events-none">
+        <div className="absolute bottom-3 left-3 w-5 h-px bg-[#ff8c38]/40" />
+        <div className="absolute bottom-3 left-3 w-px h-5 bg-[#ff8c38]/40" />
+      </div>
+      <div className="absolute bottom-0 right-0 w-10 h-10 pointer-events-none">
+        <div className="absolute bottom-3 right-3 w-5 h-px bg-[#ff8c38]/40" />
+        <div className="absolute bottom-3 right-3 w-px h-5 bg-[#ff8c38]/40" />
+      </div>
+
       {/* vignette */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(circle at 50% 50%, transparent 55%, rgba(0,0,0,0.6) 100%)",
+            "radial-gradient(circle at 50% 50%, transparent 60%, rgba(0,0,0,0.6) 100%)",
         }}
       />
 
-      <div className="relative px-8 pt-8 pb-6 flex-1 flex flex-col">
+      <div className="relative px-7 pt-7 pb-4 flex-1 flex flex-col">
         {/* publisher mark */}
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <span className="h-px w-10 bg-[#ff8c38]/50" />
-          <span
-            className="text-[#ffaa66] font-mono text-[8px] tracking-[0.35em]"
-          >
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <span className="h-px w-8 bg-[#ff8c38]/50" />
+          <span className="text-[#ffaa66] font-mono text-[8px] tracking-[0.35em]">
             {book.cover_publisher_text}
           </span>
-          <span className="h-px w-10 bg-[#ff8c38]/50" />
+          <span className="h-px w-8 bg-[#ff8c38]/50" />
         </div>
 
-        {/* praise pull-quote */}
+        {/* 5-star rating */}
+        <div className="flex items-center justify-center gap-1.5 mb-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <FaStar key={i} size={10} className="text-[#ff8c38]" />
+          ))}
+        </div>
+
+        {/* praise pull-quote — large drop quote with framing */}
         {book.back_praise_quote && (
-          <blockquote className="text-center mb-6">
+          <blockquote className="relative text-center mb-5 px-2">
+            <span
+              aria-hidden="true"
+              className="absolute -top-2 left-0 text-[#ff6b00]/30 font-bold leading-none select-none"
+              style={{ fontFamily: "Georgia, serif", fontSize: 28 }}
+            >
+              &ldquo;
+            </span>
             <p
-              className="text-[#ffd9a8] text-[13px] leading-relaxed italic"
+              className="text-[#ffd9a8] text-[12px] leading-[1.45] italic relative z-10"
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
             >
-              &ldquo;{book.back_praise_quote}&rdquo;
+              {book.back_praise_quote}
             </p>
+            <span
+              aria-hidden="true"
+              className="absolute -bottom-3 right-0 text-[#ff6b00]/30 font-bold leading-none select-none"
+              style={{ fontFamily: "Georgia, serif", fontSize: 28 }}
+            >
+              &rdquo;
+            </span>
             {book.back_praise_attribution && (
-              <p className="text-[#ff8c38] text-[10px] font-mono tracking-[0.2em] uppercase mt-2">
+              <p className="text-[#ff8c38] text-[9px] font-mono tracking-[0.2em] uppercase mt-2">
                 {book.back_praise_attribution}
               </p>
             )}
           </blockquote>
         )}
 
-        <div className="h-px bg-[#ff8c38]/20 mb-5" />
+        {/* genre divider */}
+        <div className="flex items-center justify-center gap-2 mb-4">
+          <span className="h-px flex-1 max-w-[60px] bg-[#ff8c38]/30" />
+          <span className="text-[#ff8c38] font-mono text-[8px] tracking-[0.3em] uppercase whitespace-nowrap">
+            Non-Fiction · Memoir · Finance
+          </span>
+          <span className="h-px flex-1 max-w-[60px] bg-[#ff8c38]/30" />
+        </div>
 
-        {/* synopsis */}
-        <div className="space-y-2.5 text-[#e0d4c0] text-[11px] leading-[1.55] flex-1 overflow-hidden">
-          {book.back_synopsis.map((p, i) => (
+        {/* synopsis with drop cap */}
+        <div className="space-y-2 text-[#e0d4c0] text-[10.5px] leading-[1.55] flex-1 overflow-hidden">
+          {firstSynopsis && (
+            <p style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+              {firstChar && (
+                <span
+                  className="float-left text-[#ff8c38] mr-1.5 leading-[0.85]"
+                  style={{
+                    fontFamily: "Georgia, 'Times New Roman', serif",
+                    fontSize: 34,
+                    fontWeight: 700,
+                    marginTop: 2,
+                  }}
+                >
+                  {firstChar}
+                </span>
+              )}
+              {firstBody}
+            </p>
+          )}
+          {restSynopsis.map((p, i) => (
             <p
               key={i}
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
@@ -232,32 +307,69 @@ function BookCoverBack({ book }: { book: BookSection }) {
           ))}
         </div>
 
-        <div className="h-px bg-[#ff8c38]/20 my-4" />
+        {/* ornament divider */}
+        <div className="flex items-center justify-center gap-2 my-3.5">
+          <span className="h-px w-12 bg-[#ff8c38]/20" />
+          <span className="text-[#ff8c38]/60 text-[8px]">✦</span>
+          <span className="h-px w-12 bg-[#ff8c38]/20" />
+        </div>
 
-        {/* about author */}
-        <div className="mb-4">
-          <p className="text-[#ff8c38] text-[9px] font-mono tracking-[0.25em] uppercase mb-2">
-            About the Author
-          </p>
-          <p
-            className="text-[#c4b8a4] text-[10px] leading-[1.6]"
-            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+        {/* about author with avatar */}
+        <div className="flex gap-3 items-start">
+          <div
+            className="w-11 h-11 rounded-full flex items-center justify-center shrink-0 relative"
+            style={{
+              background: "linear-gradient(135deg, #ff6b00, #ff8c38)",
+              boxShadow:
+                "0 0 0 1px rgba(255,170,102,0.5), 0 4px 12px rgba(255,107,0,0.3)",
+            }}
           >
-            {book.back_author_bio}
-          </p>
+            <span
+              className="text-[#0a0604] font-bold text-sm tracking-wider"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              {authorInitials}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[#ff8c38] text-[8px] font-mono tracking-[0.25em] uppercase mb-1">
+              About the Author
+            </p>
+            <p
+              className="text-[#c4b8a4] text-[9.5px] leading-[1.55]"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              {book.back_author_bio}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* barcode footer */}
-      <div className="relative bg-[#f5ead4] mx-8 mb-8 rounded-[2px] px-3 py-2 flex items-center gap-3">
-        <Barcode />
-        <div className="text-right">
-          <p className="text-[#0a0604] text-[8px] font-mono leading-tight">
-            ISBN
-          </p>
-          <p className="text-[#0a0604] text-[10px] font-mono font-bold tracking-tight leading-tight">
-            {book.back_isbn}
-          </p>
+      {/* barcode + price + publisher block at bottom */}
+      <div className="relative mx-7 mb-5">
+        <div className="rounded-[3px] bg-[#f5ead4] px-3 py-2 flex items-stretch gap-3 shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
+          <div className="flex flex-col justify-between flex-1 min-w-0">
+            <Barcode />
+            <p className="text-[#0a0604] text-[7px] font-mono tracking-[0.1em] mt-1">
+              {book.back_isbn}
+            </p>
+          </div>
+          <div className="w-px bg-[#0a0604]/15 self-stretch" />
+          <div className="text-right flex flex-col justify-between shrink-0">
+            <p className="text-[#0a0604] text-[7px] font-mono tracking-[0.15em] uppercase">
+              ISBN
+            </p>
+            <p
+              className="text-[#0a0604] font-bold text-[14px] leading-tight"
+              style={{ fontFamily: "Georgia, serif" }}
+            >
+              $24.99
+              <span className="text-[8px] font-normal ml-0.5">US</span>
+            </p>
+            <p className="text-[#0a0604]/70 text-[7px] font-mono">
+              $32.99 CAN
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -265,17 +377,17 @@ function BookCoverBack({ book }: { book: BookSection }) {
 }
 
 function Barcode() {
-  // Deterministic but varied bar widths.
-  const bars = "1011010110011010100101100110101011001011010110010110101101";
+  // Deterministic but varied bar widths to look like a real EAN barcode.
+  const bars = "1011010110011010100101100110101011001011010110010110101101101101010";
   return (
-    <div className="flex items-end h-7 gap-[1px] flex-1">
+    <div className="flex items-end h-5 gap-[1px]">
       {bars.split("").map((c, i) => (
         <div
           key={i}
           className="bg-[#0a0604]"
           style={{
             width: c === "1" ? 2 : 1,
-            height: "100%",
+            height: i % 7 === 0 ? "100%" : "92%",
           }}
         />
       ))}
