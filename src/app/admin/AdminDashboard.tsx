@@ -21,6 +21,7 @@ import {
   FiActivity,
   FiLink,
   FiMessageSquare,
+  FiShare2,
 } from "react-icons/fi";
 import {
   EMPTY_JOB,
@@ -35,8 +36,16 @@ import SiteContentEditor from "./SiteContentEditor";
 import ThoughtsEditor from "./ThoughtsEditor";
 import ConnectorsEditor from "./ConnectorsEditor";
 import AdminChat from "./AdminChat";
+import SocialEditor from "./SocialEditor";
 
-type Tab = "content" | "thoughts" | "jobs" | "projects" | "connectors" | "chat";
+type Tab =
+  | "content"
+  | "thoughts"
+  | "jobs"
+  | "projects"
+  | "social"
+  | "connectors"
+  | "chat";
 
 type Props = {
   session: { email: string };
@@ -168,7 +177,8 @@ export default function AdminDashboard({
     { id: "thoughts" as const, label: "Notes", icon: FiZap, hint: "Quick takes + AI formatting" },
     { id: "jobs" as const, label: "Jobs", icon: FiBriefcase, count: jobs.length, hint: "Experience timeline" },
     { id: "projects" as const, label: "Projects", icon: FiFolder, count: projects.length, hint: "Featured work" },
-    { id: "connectors" as const, label: "Connectors", icon: FiLink, hint: "WealthClaude + other APIs" },
+    { id: "social" as const, label: "Social", icon: FiShare2, hint: "Compose & post via Buffer" },
+    { id: "connectors" as const, label: "Connectors", icon: FiLink, hint: "Buffer + WealthClaude" },
     { id: "chat" as const, label: "Chat", icon: FiMessageSquare, hint: "Talk to your data with Groq" },
   ];
 
@@ -310,6 +320,11 @@ export default function AdminDashboard({
               />
             ) : tab === "thoughts" ? (
               <ThoughtsEditor
+                onSuccess={(m) => flash("ok", m)}
+                onError={(m) => flash("err", m)}
+              />
+            ) : tab === "social" ? (
+              <SocialEditor
                 onSuccess={(m) => flash("ok", m)}
                 onError={(m) => flash("err", m)}
               />
