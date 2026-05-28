@@ -136,21 +136,29 @@ export default function AdminLoginPage() {
             {error && (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                 {error}
-                <button
-                  type="button"
-                  onClick={() => setShowHelp(true)}
-                  className="block text-xs underline mt-1 text-red-300/80 hover:text-red-200"
-                >
-                  Forgot password?
-                </button>
               </div>
             )}
 
+            {/* Always-visible forgot password link */}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-[#666]">
+                {submitting ? "Authenticating…" : ""}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowHelp((s) => !s)}
+                className="inline-flex items-center gap-1.5 text-[#888] hover:text-[#ff8c38] transition-colors"
+              >
+                <FiHelpCircle size={12} />
+                {showHelp ? "Hide help" : "Forgot password?"}
+              </button>
+            </div>
+
             {showHelp && (
-              <div className="rounded-xl border border-[#ff6b00]/30 bg-[#ff6b00]/[0.06] p-4 text-xs leading-relaxed text-[#ccc] space-y-2">
+              <div className="rounded-xl border border-[#ff6b00]/30 bg-[#ff6b00]/[0.06] p-4 text-xs leading-relaxed text-[#ccc] space-y-2.5">
                 <div className="flex items-start gap-2">
                   <FiHelpCircle className="text-[#ff8c38] mt-0.5 shrink-0" size={14} />
-                  <p className="font-bold text-[#ff8c38]">How to reset your password</p>
+                  <p className="font-bold text-[#ff8c38]">Reset your password</p>
                 </div>
                 <p>
                   Open a terminal in the project folder and run:
@@ -162,9 +170,10 @@ export default function AdminLoginPage() {
                   Then restart <code className="text-[#ff8c38]">npm run dev</code> and sign in
                   with the new password.
                 </p>
-                <p className="text-[#888]">
-                  Common typos: the password is case-sensitive. Special characters like{" "}
-                  <code className="text-[#ff8c38]">#</code> count. Avoid browser autofill — try an
+                <p className="pt-1 border-t border-white/[0.06] text-[#888]">
+                  <strong className="text-[#ccc]">Common gotchas:</strong> the password is
+                  case-sensitive, special characters like <code className="text-[#ff8c38]">#</code>
+                  {" "}count, and browser autofill may be inserting a stale password — try an
                   incognito window if a saved password is interfering.
                 </p>
               </div>

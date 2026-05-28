@@ -14,6 +14,7 @@ import { FaStar } from "react-icons/fa6";
 import ScrollReveal from "./ScrollReveal";
 import HoverSpotlight from "./HoverSpotlight";
 import Parallax3D from "./Parallax3D";
+import ShareMenu from "./ShareMenu";
 import { useSiteContent } from "./SiteContentProvider";
 import type { BookSection } from "@/lib/site-content-types";
 
@@ -775,6 +776,13 @@ function ProloguePage({
 export default function Book() {
   const { book } = useSiteContent();
   const [pagesOpen, setPagesOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setShareUrl(`${window.location.origin}/#book`);
+    }
+  }, []);
 
   return (
     <section id="book" className="relative py-28 lg:py-36 px-6 lg:px-10 overflow-hidden">
@@ -875,6 +883,11 @@ export default function Book() {
                   <FiDownload size={16} />
                   Download PDF
                 </a>
+                <ShareMenu
+                  title={`${book.title} — ${book.subtitle}`}
+                  description={book.intro}
+                  url={shareUrl}
+                />
               </div>
             </ScrollReveal>
           </div>
