@@ -443,68 +443,156 @@ function Barcode() {
 
 /* ─────────────────── 3D flippable book card ─────────────────── */
 
-function BookCard3D({
-  book,
-  onOpenInside,
-}: {
-  book: BookSection;
-  onOpenInside: () => void;
-}) {
-  const [flipped, setFlipped] = useState(false);
-  return (
-    <div className="relative mx-auto max-w-[360px]" style={{ perspective: "1800px" }}>
-      <button
-        type="button"
-        onClick={() => setFlipped((f) => !f)}
-        className="block w-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6b00] rounded-2xl"
-        style={{
-          aspectRatio: COVER_FACE_ASPECT,
-          transformStyle: "preserve-3d",
-          transition: "transform 0.9s cubic-bezier(0.4, 0, 0.2, 1)",
-          transform: flipped ? "rotateY(180deg)" : "rotateY(-3deg)",
-        }}
-        aria-label={flipped ? "Flip to front cover" : "Flip to back cover"}
-      >
-        {/* Front */}
-        <div
-          className="absolute inset-0 rounded-2xl overflow-hidden border border-white/[0.06]"
-          style={{
-            backfaceVisibility: "hidden",
-            boxShadow:
-              "0 30px 80px rgba(255,107,0,0.25), 0 10px 30px rgba(0,0,0,0.6)",
-          }}
-        >
-          <BookCoverFront book={book} />
-          {/* spine highlight */}
-          <div className="absolute inset-y-0 left-0 w-2 bg-gradient-to-r from-white/15 to-transparent pointer-events-none" />
-          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
-        </div>
+/**
+ * 3D rotating book — front/back/spine all visible as it spins.
+ * Hover or click to pause; click again to open the inside-pages modal.
+ */
+const BOOK_W = 260;
+const BOOK_H = 360;
+const BOOK_D = 56; // spine thickness in px
 
-        {/* Back */}
+// Calibrated background-position-x for each face based on where the slice
+// sits in Bookcover.png (1774×887 spread with back / spine / front).
+const FACE_BG = {
+  front: "82% center",
+  back: "4% center",
+  spine: "38% center",
+} as const;
+
+function BookGlobe3D({ onOpenInside }: { onOpenInside: () => void }) {
+  const [paused, setPaused] = useState(false);
+
+  const baseFace: React.CSSProperties = {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    backgroundImage: `url(${COVER_IMAGE_SRC})`,
+    backgroundRepeat: "no-repeat",
+    backgroundSize: "auto 100%",
+    backgroundColor: "#0a0604",
+    boxShadow: "inset 0 0 40px rgba(0,0,0,0.3)",
+    backfaceVisibility: "hidden",
+    border: "1px solid rgba(255,255,255,0.06)",
+    borderRadius: 4,
+  };
+
+  return (
+    <div className="mx-auto" style={{ width: BOOK_W + 80 }}>
+      <div
+        className="relative mx-auto"
+        style={{
+          width: BOOK_W,
+          height: BOOK_H,
+          perspective: 2000,
+          cursor: "pointer",
+        }}
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onClick={onOpenInside}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpenInside();
+          }
+        }}
+        aria-label="Open inside the book"
+      >
         <div
-          className="absolute inset-0 rounded-2xl overflow-hidden border border-white/[0.06]"
+          className="absolute inset-0"
           style={{
-            backfaceVisibility: "hidden",
-            transform: "rotateY(180deg)",
-            boxShadow:
-              "0 30px 80px rgba(255,107,0,0.25), 0 10px 30px rgba(0,0,0,0.6)",
+            transformStyle: "preserve-3d",
+            animation: "bookGlobeSpin 20s linear infinite",
+            animationPlayState: paused ? "paused" : "running",
+            transformOrigin: "center center",
           }}
         >
-          <BookCoverBack book={book} />
-          <div className="absolute inset-y-0 right-0 w-2 bg-gradient-to-l from-white/15 to-transparent pointer-events-none" />
+          {/* Front cover */}
+          <div
+            style={{
+              ...baseFace,
+              width: BOOK_W,
+              height: BOOK_H,
+              transform: `translate(-50%, -50%) translateZ(${BOOK_D / 2}px)`,
+              backgroundPosition: FACE_BG.front,
+            }}
+          />
+          {/* Back cover */}
+          <div
+            style={{
+              ...baseFace,
+              width: BOOK_W,
+              height: BOOK_H,
+              transform: `translate(-50%, -50%) rotateY(180deg) translateZ(${BOOK_D / 2}px)`,
+              backgroundPosition: FACE_BG.back,
+            }}
+          />
+          {/* Left side — spine */}
+          <div
+            style={{
+              ...baseFace,
+              width: BOOK_D,
+              height: BOOK_H,
+              transform: `translate(-50%, -50%) rotateY(-90deg) translateZ(${BOOK_W / 2}px)`,
+              backgroundPosition: FACE_BG.spine,
+              backgroundSize: "auto 100%",
+            }}
+          />
+          {/* Right side — page edges */}
+          <div
+            style={{
+              ...baseFace,
+              width: BOOK_D,
+              height: BOOK_H,
+              transform: `translate(-50%, -50%) rotateY(90deg) translateZ(${BOOK_W / 2}px)`,
+              backgroundImage: "none",
+              background:
+                "repeating-linear-gradient(90deg, #f5ead4 0px, #efe1bc 2px, #d4c08a 3px, #efe1bc 4px), linear-gradient(180deg, #f5ead4 0%, #c4ad7a 50%, #f5ead4 100%)",
+            }}
+          />
+          {/* Top edge */}
+          <div
+            style={{
+              ...baseFace,
+              width: BOOK_W,
+              height: BOOK_D,
+              transform: `translate(-50%, -50%) rotateX(90deg) translateZ(${BOOK_H / 2}px)`,
+              backgroundImage: "none",
+              background:
+                "repeating-linear-gradient(0deg, #f5ead4 0px, #efe1bc 1.5px, #d4c08a 3px), linear-gradient(90deg, #d4c08a 0%, #efe1bc 8%, #f5ead4 50%, #efe1bc 92%, #d4c08a 100%)",
+            }}
+          />
+          {/* Bottom edge */}
+          <div
+            style={{
+              ...baseFace,
+              width: BOOK_W,
+              height: BOOK_D,
+              transform: `translate(-50%, -50%) rotateX(-90deg) translateZ(${BOOK_H / 2}px)`,
+              backgroundImage: "none",
+              background:
+                "repeating-linear-gradient(0deg, #f5ead4 0px, #efe1bc 1.5px, #d4c08a 3px), linear-gradient(90deg, #d4c08a 0%, #efe1bc 8%, #f5ead4 50%, #efe1bc 92%, #d4c08a 100%)",
+            }}
+          />
         </div>
-      </button>
+        {/* Soft floor shadow */}
+        <div
+          aria-hidden="true"
+          className="absolute left-1/2 bottom-[-32px] -translate-x-1/2 pointer-events-none"
+          style={{
+            width: BOOK_W * 0.9,
+            height: 28,
+            borderRadius: "50%",
+            background:
+              "radial-gradient(ellipse at center, rgba(255,107,0,0.25) 0%, rgba(0,0,0,0) 70%)",
+            filter: "blur(6px)",
+          }}
+        />
+      </div>
 
       {/* Action buttons under cover */}
-      <div className="flex items-center justify-center gap-2 mt-5">
-        <button
-          type="button"
-          onClick={() => setFlipped((f) => !f)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10 text-[#ccc] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] transition-colors"
-        >
-          <FiRotateCw size={12} />
-          {flipped ? "See front" : "See back"}
-        </button>
+      <div className="flex items-center justify-center gap-2 mt-12">
         <button
           type="button"
           onClick={onOpenInside}
@@ -513,9 +601,17 @@ function BookCard3D({
           <FiBookOpen size={12} />
           Open inside
         </button>
+        <button
+          type="button"
+          onClick={() => setPaused((p) => !p)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10 text-[#ccc] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] transition-colors"
+        >
+          <FiRotateCw size={12} className={paused ? "" : "animate-spin"} style={{ animationDuration: "3s" }} />
+          {paused ? "Resume" : "Pause"}
+        </button>
       </div>
       <p className="text-center text-[10px] text-[#666] mt-2 font-mono tracking-wider uppercase">
-        Click the cover to flip
+        Hover to pause · Click to open
       </p>
     </div>
   );
@@ -862,10 +958,7 @@ export default function Book() {
         <div className="grid lg:grid-cols-12 gap-12 lg:gap-16 items-center">
           <div className="lg:col-span-5">
             <ScrollReveal direction="flipY" delay={0.2}>
-              <BookCard3D
-                book={book}
-                onOpenInside={() => setPagesOpen(true)}
-              />
+              <BookGlobe3D onOpenInside={() => setPagesOpen(true)} />
             </ScrollReveal>
           </div>
 
