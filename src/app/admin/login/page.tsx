@@ -12,15 +12,17 @@ import {
   FiEyeOff,
   FiHelpCircle,
   FiCheck,
+  FiShield,
 } from "react-icons/fi";
 
-type Mode = "sign-in" | "forgot";
+type Mode = "sign-in" | "forgot" | "otp";
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -41,6 +43,38 @@ export default function AdminLoginPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error || "Login failed");
+        setSubmitting(false);
+        return;
+      }
+      // If 2FA is on, the server granted a 5-minute pre-auth cookie and
+      // told us to collect the 6-digit code before the session is real.
+      if (data.requires_otp) {
+        setMode("otp");
+        setOtp("");
+        setSubmitting(false);
+        return;
+      }
+      router.push("/admin");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error");
+      setSubmitting(false);
+    }
+  }
+
+  async function onVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/login/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: otp.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Code didn't match");
         setSubmitting(false);
         return;
       }
@@ -189,6 +223,88 @@ export default function AdminLoginPage() {
                   {submitting ? "Signing in…" : "Sign in"}
                   {!submitting && <FiArrowRight size={14} />}
                 </button>
+              </form>
+            </>
+          ) : mode === "otp" ? (
+            <>
+              <div className="mb-8">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("sign-in");
+                    setError(null);
+                    setOtp("");
+                    setPassword("");
+                  }}
+                  className="inline-flex items-center gap-2 text-[#777] text-xs hover:text-white transition-colors mb-4"
+                >
+                  <FiArrowLeft size={12} />
+                  Back to password
+                </button>
+                <p className="text-[#ff6b00] text-xs font-mono tracking-[0.3em] uppercase mb-3">
+                  ✦ Two-factor
+                </p>
+                <h1 className="text-3xl font-black tracking-tight">
+                  Enter your code
+                </h1>
+                <p className="text-[#888] text-sm mt-2 leading-relaxed">
+                  Password accepted. Now enter the 6-digit code from your
+                  authenticator app to finish signing in.
+                </p>
+              </div>
+
+              <form onSubmit={onVerifyOtp} className="space-y-5">
+                <div>
+                  <label
+                    htmlFor="otp"
+                    className="block text-xs font-mono tracking-[0.2em] uppercase text-[#888] mb-2"
+                  >
+                    Authenticator code
+                  </label>
+                  <div className="relative">
+                    <FiShield
+                      size={16}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-[#666]"
+                    />
+                    <input
+                      id="otp"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      autoFocus
+                      required
+                      maxLength={11}
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none transition-colors text-white placeholder:text-[#555] font-mono text-lg tracking-[0.4em]"
+                      placeholder="123 456"
+                    />
+                  </div>
+                  <p className="text-[10px] text-[#666] mt-2 leading-relaxed">
+                    Lost your phone? Paste one of your backup codes here
+                    instead (10 hex chars).
+                  </p>
+                </div>
+
+                {error && (
+                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submitting || !otp.trim()}
+                  className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-bold text-sm shadow-[0_8px_30px_rgba(255,107,0,0.4)] hover:scale-[1.01] active:scale-[0.99] transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? "Verifying…" : "Verify"}
+                  {!submitting && <FiArrowRight size={14} />}
+                </button>
+
+                <p className="text-[10px] text-[#666] leading-relaxed">
+                  This pre-auth session lasts 5 minutes. If you take longer,
+                  go back and enter your password again.
+                </p>
               </form>
             </>
           ) : (

@@ -13,6 +13,7 @@ import {
   FiLogOut,
 } from "react-icons/fi";
 import type { Connector } from "@/lib/content-types";
+import TwoFactorCard from "./TwoFactorCard";
 
 type Props = {
   onSuccess: (msg: string) => void;
@@ -174,8 +175,13 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
         </p>
       </div>
 
+      {/* 2FA — top of the page so it's never missed */}
+      <TwoFactorCard onSuccess={onSuccess} onError={onError} />
+
       {/* Gmail — handled separately because it uses OAuth, not a static bearer token */}
-      <GmailCard onSuccess={onSuccess} onError={onError} />
+      <div className="mt-6">
+        <GmailCard onSuccess={onSuccess} onError={onError} />
+      </div>
 
       {/* Existing connectors */}
       {loading ? (

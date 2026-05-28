@@ -5,6 +5,7 @@ import {
   useSupabaseAuth,
 } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-ssr";
+import { getTotpStatus, setPreauthCookie } from "@/lib/totp";
 
 export async function POST(request: Request) {
   let body: { email?: string; password?: string };
@@ -25,6 +26,9 @@ export async function POST(request: Request) {
   }
 
   const expectedAdmin = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+
+  // ── Check 2FA status up front so the response can ask for the code ──
+  const totp = await getTotpStatus().catch(() => null);
 
   if (useSupabaseAuth()) {
     if (expectedAdmin && email.toLowerCase() !== expectedAdmin) {
@@ -47,6 +51,18 @@ export async function POST(request: Request) {
           { status: 401 }
         );
       }
+      // ── If 2FA is on, immediately sign out so the Supabase session ISN'T
+      //    granted yet. Set a short-lived pre-auth cookie instead — the OTP
+      //    verification step will re-establish the session. ──
+      if (totp?.enabled) {
+        await supabase.auth.signOut().catch(() => undefined);
+        await setPreauthCookie(email);
+        return NextResponse.json({
+          ok: true,
+          requires_otp: true,
+          source: "supabase",
+        });
+      }
       return NextResponse.json({ ok: true, source: "supabase" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sign-in failed";
@@ -61,6 +77,14 @@ export async function POST(request: Request) {
       { error: "Invalid email or password" },
       { status: 401 }
     );
+  }
+  if (totp?.enabled) {
+    await setPreauthCookie(email);
+    return NextResponse.json({
+      ok: true,
+      requires_otp: true,
+      source: "env",
+    });
   }
   await setSessionCookie(email);
   return NextResponse.json({ ok: true, source: "env" });

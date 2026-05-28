@@ -152,6 +152,13 @@ alter table public.admin_settings
   add column if not exists sunday_reflection_last_status text,
   add column if not exists sunday_reflection_last_subject text;
 
+-- TOTP 2FA columns (added later — idempotent).
+alter table public.admin_settings
+  add column if not exists totp_enabled boolean not null default false,
+  add column if not exists totp_secret text,
+  add column if not exists totp_backup_codes_hashed text[] not null default '{}',
+  add column if not exists totp_setup_at timestamptz;
+
 -- ============ Personal facts (central truths agents inject into every prompt) ============
 create table if not exists public.personal_facts (
   id uuid primary key default gen_random_uuid(),
