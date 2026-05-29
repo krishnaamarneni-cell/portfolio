@@ -74,9 +74,9 @@ export default function AgentsTab({
   const [oppState, setOppState] = useState<AgentState | null>(null);
   const [oppBusy, setOppBusy] = useState(false);
   const [oppError, setOppError] = useState<string | null>(null);
-  const [companiesText, setCompaniesText] = useState(
-    "PepsiCo, Walmart, Anthropic, OpenAI, Stripe, Databricks"
-  );
+  // Empty by default = broad market scan (the agent now runs without
+  // specific companies). User can paste a comma-separated list to narrow.
+  const [companiesText, setCompaniesText] = useState("");
   const [targetRole, setTargetRole] = useState("");
   const [profile, setProfile] = useState<"software" | "sap" | "both">("both");
   const [location, setLocation] = useState("");
@@ -359,12 +359,13 @@ export default function AgentsTab({
           <div className="grid sm:grid-cols-2 gap-2">
             <div>
               <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
-                Target companies (comma separated)
+                Target companies <span className="text-[#444]">(optional)</span>
               </label>
               <input
                 value={companiesText}
                 onChange={(e) => setCompaniesText(e.target.value)}
-                className="w-full px-4 py-2 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-xs text-white"
+                placeholder="leave blank for a broad market scan"
+                className="w-full px-4 py-2 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-xs text-white placeholder:text-[#555]"
               />
             </div>
             <div>

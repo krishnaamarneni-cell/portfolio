@@ -28,15 +28,6 @@ type Body = {
   remoteOk?: boolean;
 };
 
-const DEFAULT_COMPANIES = [
-  "PepsiCo",
-  "Walmart",
-  "Anthropic",
-  "OpenAI",
-  "Stripe",
-  "Databricks",
-];
-
 /** Keyword bags that drive the per-company web search. */
 const PROFILE_KEYWORDS: Record<Profile, string[]> = {
   software: [
@@ -59,6 +50,34 @@ const PROFILE_KEYWORDS: Record<Profile, string[]> = {
     "software engineer",
     "AI engineer",
     "solutions architect",
+  ],
+};
+
+/** When the user doesn't pick specific companies, we run a broad market
+ *  scan with a curated set of role-shaped queries per profile. These are
+ *  designed to land on actual job boards (LinkedIn, Indeed, Dice, etc.)
+ *  rather than company landing pages. */
+const BROAD_MARKET_QUERIES: Record<Profile, string[]> = {
+  sap: [
+    "senior SAP S/4HANA consultant job 2025",
+    "SAP Ariba implementation contractor opening",
+    "SAP MM SD analyst remote",
+    "SAP procure-to-pay lead role hiring",
+    "SAP functional consultant master data hiring",
+  ],
+  software: [
+    "senior AI engineer remote 2025",
+    "full-stack engineer hiring next.js typescript",
+    "AI agent developer job opening",
+    "solutions architect AI platform hiring",
+    "senior software engineer LLM tools hiring",
+  ],
+  both: [
+    "senior SAP S/4HANA consultant hiring 2025",
+    "SAP Ariba functional analyst remote",
+    "senior AI engineer hiring",
+    "full-stack engineer LLM hiring",
+    "solutions architect SAP AI hiring",
   ],
 };
 
@@ -85,34 +104,49 @@ export async function POST(request: Request) {
     body = (await request.json().catch(() => ({}))) as Body;
   } catch {}
 
-  const companies =
-    body.companies && body.companies.length > 0
-      ? body.companies.slice(0, 12)
-      : DEFAULT_COMPANIES;
+  const companies = (body.companies ?? [])
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .slice(0, 12);
   const profile: Profile = body.profile ?? "both";
   const location = (body.location ?? "").trim();
   const keywords = PROFILE_KEYWORDS[profile];
 
+  // ── Pull the user's FULL resume from the Jobs table + skills + facts ──
+  // Previously we only fed 6 jobs and dropped highlights. Now the agent sees
+  // every role with full description + highlights, so its "match to Krishna's
+  // experience" line actually reflects what's in the database.
   const [jobs, site] = await Promise.all([
     fetchJobs().catch(() => []),
     fetchSiteContent(),
   ]);
   const experience = jobs
-    .slice(0, 6)
-    .map(
-      (j) =>
-        `- ${j.title} @ ${j.company} (${j.period}): ${j.description}${j.highlights?.length ? " · " + j.highlights.join("; ") : ""}`
-    )
-    .join("\n");
+    .map((j) => {
+      const head = `- **${j.title}** @ ${j.company} (${j.period}, ${j.location})`;
+      const desc = j.description ? `\n  ${j.description}` : "";
+      const highlights = j.highlights?.length
+        ? "\n  Highlights:\n" + j.highlights.map((h) => `    • ${h}`).join("\n")
+        : "";
+      const tags = j.tags?.length ? `\n  Tags: ${j.tags.join(", ")}` : "";
+      return head + desc + highlights + tags;
+    })
+    .join("\n\n");
   const skills = (site.skills?.skills ?? []).slice(0, 40);
 
-  // Build one search query per company. Use a tight keyword + careers hint so
-  // the search engine lands on actual postings, not company landing pages.
-  const queries: string[] = companies.map((c) => {
-    const kw = keywords.slice(0, 2).join(" OR ");
-    const locClause = location ? ` ${location}` : "";
-    return `${c} careers (${kw})${locClause} 2024 2025`;
-  });
+  // ── Build the search queries ──
+  // If user picked companies → per-company search (existing behaviour).
+  // If they didn't → broad market scan using role-shaped keyword queries
+  //   so the scout works "even with no specific companies selected".
+  const isBroadMarket = companies.length === 0;
+  const queries: string[] = isBroadMarket
+    ? BROAD_MARKET_QUERIES[profile].map(
+        (q) => `${q}${location ? ` ${location}` : ""}`
+      )
+    : companies.map((c) => {
+        const kw = keywords.slice(0, 2).join(" OR ");
+        const locClause = location ? ` ${location}` : "";
+        return `${c} careers (${kw})${locClause} 2024 2025`;
+      });
 
   // Fire all searches in parallel.
   let searchResults: SearchResult[] = [];
@@ -149,7 +183,7 @@ export async function POST(request: Request) {
   if (totalHits === 0) {
     return NextResponse.json({
       markdown:
-        "## No matches\n\nThe web-search provider returned 0 results across all target companies. Try broadening the keyword profile or removing the location filter.",
+        "## No matches\n\nThe web-search provider returned 0 results. Try a different profile, remove the location filter, or set TAVILY_API_KEY / BRAVE_API_KEY in env.",
       context: { companies, profile, location, hitsByCompany: {}, model: body.model },
     });
   }
@@ -168,44 +202,53 @@ export async function POST(request: Request) {
   const searchBlock = searchResultsToContext(searchResults);
 
   const factsBlock = await buildFactsContext();
-  const system = `You are Krishna Amarneni's job-hunting agent. You are given a block of REAL web-search results below — actual URLs and snippets from public job boards and company career sites. Your only job is to:
+  const system = `You are Krishna Amarneni's job-hunting agent. You have his FULL RESUME below (every job he's held, with descriptions + highlights + skills + tags) — read it like you're his recruiter who has actually seen his CV. You also have a block of REAL web-search results from public job boards and company career sites.
+
+Your job:
 ${factsBlock ? `\n${factsBlock}\n` : ""}
 
-1. Read the snippets.
-2. Pick the entries that are clearly job postings (titles like "Senior Engineer", "SAP Analyst", an Apply CTA, etc.) — IGNORE company homepages, news articles, blog posts.
-3. Match them to Krishna's background.
-4. Output a Markdown brief.
+1. Read Krishna's resume. Internalise his years of experience, his current clients, his SAP module specialisations, his AI/software skills.
+2. Read the search-result snippets.
+3. Pick the entries that are clearly job postings — IGNORE company homepages, news articles, blog posts.
+4. Match each posting to Krishna's actual resume. Cite specific roles or skills from his CV in the "why this fits" line.
+5. Output a Markdown brief.
 
 HARD RULES — break any of these and the result is unusable:
 - NEVER invent a URL. Only use URLs that appear literally in the search results below.
 - NEVER invent a job title. Only use titles from the snippets.
-- If a company has zero real postings in the search results, say exactly: \`No matching open roles in today's results.\` under its H2.
+- NEVER claim Krishna has experience he doesn't have. Only reference skills/clients/roles that appear in his resume below.
+- In broad-market mode (no specific companies), group postings under the EMPLOYER from each snippet. Don't make up sections.
+- In per-company mode, order companies as they were given. If a company has zero matches, say exactly: \`No matching open roles in today's results.\`
 - Do not paste fake "posted X days ago" — only use dates if they're in the snippet text.
 
-Output format:
+Output format per posting:
 \`\`\`
-## <Company>
-- **<Exact job title from snippet>** — <location or 'Remote' if in snippet> · <one short skill phrase>
-  <one sentence on why it fits Krishna's experience>
+## <Employer / Company>
+- **<Exact job title from snippet>** — <location or 'Remote' if in snippet> · <skill phrase>
+  Fit: <one sentence citing a SPECIFIC line from Krishna's resume that matches>
   [Apply](<exact URL from search results>)
 \`\`\`
 
-Order companies as they were given. No filler. No emojis.`;
+No filler. No emojis. Cap at 12 postings total — quality over quantity.`;
+
+  const modeBlurb = isBroadMarket
+    ? "MODE: Broad market scan — no specific companies. Surface the best 8-12 postings across whoever's hiring right now that fit Krishna's resume."
+    : `MODE: Per-company scan. Companies (in this order): ${companies.join(", ")}.`;
 
   const userPrompt = `${profileBlurb}
+${modeBlurb}
 Target role: ${targetRole}
 ${location ? `Location filter: ${location}` : "Location filter: none (remote or anywhere)"}
 ${body.remoteOk === false ? "On-site/hybrid only." : ""}
 
-Krishna's experience:
-${experience || "(none on file)"}
+═══════════════════════ KRISHNA'S RESUME ═══════════════════════
+${experience || "(no jobs on file — use facts above for context)"}
 
-Krishna's skills: ${skills.join(", ") || "(none on file)"}
+Skills bag: ${skills.join(", ") || "(none on file)"}
+═══════════════════════════════════════════════════════════════
 
-Web-search results:
-${searchBlock}
-
-Companies to cover (in this order): ${companies.join(", ")}`;
+Web-search results from job boards:
+${searchBlock}`;
 
   const model = resolveAgentModel(body.model);
   const result = await runAgent({
@@ -222,18 +265,20 @@ Companies to cover (in this order): ${companies.join(", ")}`;
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
 
-  const hitsByCompany: Record<string, number> = {};
-  companies.forEach((c, i) => {
-    hitsByCompany[c] = searchResults[i]?.hits.length ?? 0;
+  const hitsByQuery: Record<string, number> = {};
+  queries.forEach((q, i) => {
+    hitsByQuery[q] = searchResults[i]?.hits.length ?? 0;
   });
 
   return NextResponse.json({
     markdown: result.content,
     context: {
+      mode: isBroadMarket ? "broad-market" : "per-company",
       companies,
       profile,
       location: location || null,
-      hitsByCompany,
+      resumeJobs: jobs.length,
+      hitsByQuery,
       model: result.modelUsed ?? model,
       modelRequested: model,
       provider: whichSearchProvider(),
