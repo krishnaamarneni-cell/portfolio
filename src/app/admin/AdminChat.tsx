@@ -10,7 +10,8 @@ import {
   FiStar,
 } from "react-icons/fi";
 import { modelsFor, DEFAULT_CHAT_MODEL } from "@/lib/groq-models";
-import VoiceMic from "./VoiceMic";
+import { FiMic } from "react-icons/fi";
+import VoiceModePage from "./VoiceModePage";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -41,6 +42,7 @@ export default function AdminChat({
   const [model, setModel] = useState<string>(DEFAULT_CHAT_MODEL);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   const chatOptions = modelsFor("chat");
@@ -344,18 +346,16 @@ export default function AdminChat({
 
             <div className="flex-1" />
 
-            <VoiceMic
-              size="sm"
-              mode="live"
-              onText={(text, isFinal) => {
-                if (isFinal) {
-                  setDraft((d) => (d ? `${d} ${text}` : text));
-                } else {
-                  setDraft(text);
-                }
-              }}
-              onError={(msg) => onError(msg)}
-            />
+            {/* Mic button opens the Perplexity-style full-screen voice page.
+                Transcript comes back via onSend → fires send() directly. */}
+            <button
+              type="button"
+              onClick={() => setVoiceOpen(true)}
+              className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.06] text-[#888] hover:text-[#ff6b00] hover:border-[#ff6b00]/30 flex items-center justify-center shrink-0 active:scale-95 transition-transform"
+              title="Voice mode"
+            >
+              <FiMic size={14} />
+            </button>
 
             <button
               type="submit"
@@ -368,6 +368,18 @@ export default function AdminChat({
           </div>
         </form>
       </div>
+
+      {/* Full-screen voice mode — Perplexity-style. Renders nothing until
+          opened, fills the entire viewport when on. */}
+      <VoiceModePage
+        isOpen={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+        onSend={(text) => {
+          setVoiceOpen(false);
+          send(text);
+        }}
+        onError={(msg) => onError(msg)}
+      />
     </section>
   );
 }
