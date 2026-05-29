@@ -9,6 +9,7 @@ import {
   FiAlertTriangle,
   FiClock,
   FiCpu,
+  FiTarget,
 } from "react-icons/fi";
 import { AGENT_MODELS, DEFAULT_AGENT_MODEL } from "@/lib/agents";
 
@@ -18,7 +19,7 @@ type AgentState = {
   context?: Record<string, unknown>;
 };
 
-type AgentKey = "news" | "jobs";
+type AgentKey = "news" | "jobs" | "opportunities";
 
 const CACHE_PREFIX = "krishna_admin_agent_";
 
@@ -68,6 +69,11 @@ export default function AgentsTab({
   const [jobsState, setJobsState] = useState<AgentState | null>(null);
   const [jobsBusy, setJobsBusy] = useState(false);
   const [jobsError, setJobsError] = useState<string | null>(null);
+
+  // Atlas Opportunities — Lucy-era agent for portfolio candidates.
+  const [oppState, setOppState] = useState<AgentState | null>(null);
+  const [oppBusy, setOppBusy] = useState(false);
+  const [oppError, setOppError] = useState<string | null>(null);
   const [companiesText, setCompaniesText] = useState(
     "PepsiCo, Walmart, Anthropic, OpenAI, Stripe, Databricks"
   );
@@ -78,6 +84,7 @@ export default function AgentsTab({
   useEffect(() => {
     setNewsState(loadCached("news"));
     setJobsState(loadCached("jobs"));
+    setOppState(loadCached("opportunities"));
     try {
       const saved = window.localStorage.getItem("krishna_admin_agent_model");
       if (saved) setModel(saved);
@@ -172,6 +179,37 @@ export default function AgentsTab({
       onError(msg);
     }
     setJobsBusy(false);
+  }
+
+  async function runOpportunities() {
+    setOppBusy(true);
+    setOppError(null);
+    try {
+      const r = await fetch("/api/admin/agents/atlas/opportunities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setOppError(data.error || "Atlas Opportunities failed");
+        onError(data.error || "Atlas Opportunities failed");
+      } else {
+        const next: AgentState = {
+          markdown: data.markdown || "",
+          runAt: Date.now(),
+          context: data.context,
+        };
+        setOppState(next);
+        persistCached("opportunities", next);
+        onSuccess("Opportunities scan done");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      setOppError(msg);
+      onError(msg);
+    }
+    setOppBusy(false);
   }
 
   return (
@@ -363,6 +401,53 @@ export default function AgentsTab({
           </div>
         ) : !jobsState && !jobsBusy && !jobsError ? (
           <EmptyHint icon={FiBriefcase} text="No run yet — set companies and hit Run." />
+        ) : null}
+      </div>
+
+      {/* Atlas Opportunities — Lucy-era portfolio scout */}
+      <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5 space-y-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="w-9 h-9 rounded-xl bg-fuchsia-500/15 text-fuchsia-300 flex items-center justify-center">
+            <FiTarget size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-white">Atlas — Opportunities</h3>
+            <p className="text-[11px] text-[#666]">
+              Buffett-scored picks that fill your portfolio gaps. HIGH ·
+              WATCH · MAYBE tiering, sector-gap analysis at the bottom.
+            </p>
+          </div>
+          {oppState && (
+            <span className="text-[10px] font-mono text-[#666] flex items-center gap-1">
+              <FiClock size={10} />
+              {relTime(oppState.runAt)}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={runOpportunities}
+            disabled={oppBusy}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white font-bold text-xs shadow-[0_4px_15px_rgba(217,70,239,0.35)] hover:scale-[1.03] disabled:opacity-60"
+          >
+            <FiZap size={12} />
+            {oppBusy ? "Scanning…" : oppState ? "Re-run" : "Scan"}
+          </button>
+        </div>
+
+        {oppError && (
+          <ErrorBox
+            msg={oppError}
+            hint="Atlas needs a search provider (Tavily / Brave / SearXNG / DDG fallback). Holdings are pulled from any MCP connector exposing get_holdings — wire WealthClaude under Settings for sharper picks."
+          />
+        )}
+
+        {oppState && !oppBusy ? (
+          <div className="mt-2 rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-5">
+            <ContextChips context={oppState.context} />
+            <Markdown text={oppState.markdown} />
+          </div>
+        ) : !oppState && !oppBusy && !oppError ? (
+          <EmptyHint icon={FiTarget} text="No scan yet — hit Scan." />
         ) : null}
       </div>
 

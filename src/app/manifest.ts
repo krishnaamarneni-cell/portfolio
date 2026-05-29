@@ -2,10 +2,10 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Krishna Admin",
-    short_name: "K Admin",
+    name: "Lucy",
+    short_name: "Lucy",
     description:
-      "Krishna Amarneni's personal admin — notes, agents, briefings, social, chat.",
+      "Krishna's personal AI cockpit — notes, agents, briefings, social, chat.",
     start_url: "/admin",
     scope: "/",
     display: "standalone",

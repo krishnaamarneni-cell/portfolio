@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Krishna Admin",
+    title: "Lucy",
   },
   openGraph: {
     title: "Krishna Amarneni — SAP Expert, AI Builder, Author",

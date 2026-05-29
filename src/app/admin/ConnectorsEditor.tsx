@@ -16,10 +16,12 @@ import type { Connector } from "@/lib/content-types";
 import TwoFactorCard from "./TwoFactorCard";
 import FaceLockCard from "./FaceLockCard";
 import LucyImportCard from "./LucyImportCard";
+import SignOutCard from "./SignOutCard";
 
 type Props = {
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
+  sessionEmail?: string;
 };
 
 const inputClass =
@@ -63,7 +65,7 @@ const DEFAULT_DRAFT = {
   enabled: true,
 };
 
-export default function ConnectorsEditor({ onSuccess, onError }: Props) {
+export default function ConnectorsEditor({ onSuccess, onError, sessionEmail }: Props) {
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState({ ...DEFAULT_DRAFT });
@@ -517,6 +519,10 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
       </form>
         </>
       )}
+
+      {/* Sign-out always at the very bottom of Settings so mobile users can
+          find it without rolling the dice. */}
+      {sessionEmail && <SignOutCard email={sessionEmail} />}
     </section>
   );
 }

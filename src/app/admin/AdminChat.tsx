@@ -230,38 +230,15 @@ export default function AdminChat({
 
       {/* Main pane */}
       <div className="flex flex-col min-w-0">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        {/* Minimal header — just title on desktop, hidden on mobile (the
+            tab name shows in the global header on phones). */}
+        <div className="hidden lg:flex items-center justify-between mb-4 gap-3">
           <div>
             <h2 className="text-xl font-bold">Chat</h2>
             <p className="text-xs text-[#666] mt-1">
-              Threads + facts auto-loaded. Pick a past conversation on the left
-              to resume.
+              Threads + facts auto-loaded. Pick a past conversation on the
+              left to resume.
             </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
-              Model
-            </span>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={sending}
-              className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs text-[#ccc] focus:outline-none max-w-[280px] disabled:opacity-60"
-            >
-              {chatOptions.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label} · ${m.inputPerM}/${m.outputPerM}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={newChat}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00]"
-            >
-              <FiPlus size={11} />
-              New chat
-            </button>
           </div>
         </div>
 
@@ -314,12 +291,16 @@ export default function AdminChat({
           </p>
         )}
 
+        {/* Composer — iMessage-style. Textarea, then a toolbar inside the
+            same wrapper with [+] [model picker] ... [mic] [send]. Mic is
+            always visible. New-chat + model live here on mobile because the
+            top header used to push them off-screen. */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             send(draft);
           }}
-          className="mt-4 flex items-end gap-2"
+          className="mt-3 rounded-2xl bg-[#1a1a1a] border border-white/[0.08] focus-within:border-[#ff6b00]/40 transition-colors"
         >
           <textarea
             value={draft}
@@ -332,32 +313,59 @@ export default function AdminChat({
             }}
             rows={2}
             disabled={sending}
-            className="flex-1 px-4 py-3 rounded-2xl bg-[#1a1a1a] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-sm text-white placeholder:text-[#555] resize-none disabled:opacity-60"
-            placeholder='Ask something… or tap the mic to talk'
+            className="w-full px-4 pt-3 pb-2 bg-transparent focus:outline-none text-sm text-white placeholder:text-[#555] resize-none disabled:opacity-60"
+            placeholder="Ask Lucy… or tap the mic"
           />
-          {/* Live voice — same Web Speech API path as PersonalTab. Live updates
-              flow into the draft as you speak; final transcript gets baked in.
-              No auto-send so the user can review before hitting Send. */}
-          <VoiceMic
-            size="md"
-            mode="live"
-            onText={(text, isFinal) => {
-              if (isFinal) {
-                setDraft((d) => (d ? `${d} ${text}` : text));
-              } else {
-                setDraft(text);
-              }
-            }}
-            onError={(msg) => onError(msg)}
-          />
-          <button
-            type="submit"
-            disabled={sending || !draft.trim()}
-            className="shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-bold text-sm shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FiSend size={14} />
-            <span className="hidden sm:inline">Send</span>
-          </button>
+          <div className="flex items-center gap-1.5 px-2 py-2 border-t border-white/[0.05]">
+            {/* New chat */}
+            <button
+              type="button"
+              onClick={newChat}
+              className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.06] text-[#888] hover:text-[#ff6b00] hover:border-[#ff6b00]/30 flex items-center justify-center shrink-0"
+              title="New chat"
+            >
+              <FiPlus size={14} />
+            </button>
+
+            {/* Model picker */}
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={sending}
+              className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-xs text-[#bbb] focus:outline-none focus:border-[#ff6b00]/40 disabled:opacity-60 max-w-[180px] truncate"
+              title="Model"
+            >
+              {chatOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label.replace(/Llama /, "").replace(/Versatile/, "")}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex-1" />
+
+            <VoiceMic
+              size="sm"
+              mode="live"
+              onText={(text, isFinal) => {
+                if (isFinal) {
+                  setDraft((d) => (d ? `${d} ${text}` : text));
+                } else {
+                  setDraft(text);
+                }
+              }}
+              onError={(msg) => onError(msg)}
+            />
+
+            <button
+              type="submit"
+              disabled={sending || !draft.trim()}
+              className="w-9 h-9 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black shadow-[0_4px_15px_rgba(255,107,0,0.4)] hover:scale-105 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0 transition-transform"
+              title="Send"
+            >
+              <FiSend size={14} />
+            </button>
+          </div>
         </form>
       </div>
     </section>

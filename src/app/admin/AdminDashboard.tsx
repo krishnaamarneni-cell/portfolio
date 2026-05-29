@@ -245,7 +245,7 @@ export default function AdminDashboard({
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-mono tracking-[0.2em] uppercase text-[#ff6b00] leading-none">
-                Admin
+                Lucy
               </p>
               {/* On mobile, show the current tab. On desktop, show the email handle. */}
               <p className="text-[11px] text-[#aaa] lg:text-[10px] lg:text-[#666] mt-1 font-mono leading-none truncate">
@@ -265,13 +265,15 @@ export default function AdminDashboard({
             <span className="hidden md:inline text-xs text-[#777] font-mono">
               {session.email}
             </span>
+            {/* Logout lives in Settings on mobile (per your request). Keep
+                the header button on lg+ for desktop muscle memory. */}
             <button
               onClick={logout}
-              className="inline-flex items-center gap-2 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full bg-white/[0.04] border border-white/10 text-xs lg:text-sm hover:border-red-500/40 hover:text-red-300 transition-colors"
+              className="hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10 text-sm hover:border-red-500/40 hover:text-red-300 transition-colors"
               aria-label="Logout"
             >
               <FiLogOut size={13} />
-              <span className="hidden sm:inline">Logout</span>
+              <span>Logout</span>
             </button>
           </div>
         </div>
@@ -394,6 +396,7 @@ export default function AdminDashboard({
               <ConnectorsEditor
                 onSuccess={(m) => flash("ok", m)}
                 onError={(m) => flash("err", m)}
+                sessionEmail={session.email}
               />
             ) : tab === "chat" ? (
               <AdminChat onError={(m) => flash("err", m)} />

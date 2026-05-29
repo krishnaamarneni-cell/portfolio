@@ -223,6 +223,83 @@ const LUCY_FACTS: Array<{
     category: "general",
     reasoning: "From learnings/krishna_tech_stack.md",
   },
+
+  // ─── From our build conversations (Lucy v2 baseline) ───
+  // The vault said Delaware but Krishna mentioned NJ in our chats — flag both.
+  {
+    key: "current_state_recent",
+    value: "New Jersey (Lucy vault still lists Delaware — verify which is current)",
+    category: "location",
+    reasoning: "From build conversations 2026-05. Lucy vault may be stale.",
+  },
+  {
+    key: "target_city",
+    value: "Tampa, FL",
+    category: "location",
+    expires_at: "2026-07-30",
+    reasoning: "Planned move from build conversations",
+  },
+  {
+    key: "planned_move_date",
+    value: "July 30, 2026",
+    category: "location",
+    expires_at: "2026-07-30",
+    reasoning: "From Krishna's notes in build conversations",
+  },
+  {
+    key: "spouse",
+    value: "Married. Wife's birthday April 12.",
+    category: "family",
+    reasoning: "Mentioned in build conversations",
+  },
+  {
+    key: "family_origin",
+    value: "Hyderabad, India (HYD airport code)",
+    category: "family",
+    reasoning: "Flight planning HYD-JFK in build conversations",
+  },
+  {
+    key: "planned_international_travel",
+    value: "HYD ↔ JFK round trip, target June 2027",
+    category: "general",
+    reasoning: "From personal notes in build conversations",
+  },
+  {
+    key: "published_book",
+    value: "Drive to Freedom: A Farmer's Son's Guide to Building Wealth (PDF in /public/drive-to-freedom.pdf)",
+    category: "work",
+    reasoning: "Featured on portfolio site",
+  },
+  {
+    key: "active_products",
+    value: "WealthClaude (AI portfolio platform), Lucy AI (this admin), Drive to Freedom (book), Saint Francis Medical site, North Falmouth Pharmacy site",
+    category: "work",
+    reasoning: "Aggregated across vault + site + build conversations",
+  },
+  {
+    key: "preferred_llm_for_writing",
+    value: "Groq llama-3.1-8b-instant (cheap default, ~10× cheaper than 70B). 70B available via picker.",
+    category: "preferences",
+    reasoning: "From model-picker work — Krishna asked to default to cheapest model that works.",
+  },
+  {
+    key: "preferred_llm_for_chat",
+    value: "Groq Llama 4 Scout 17B (tool-calling, ~4× cheaper than 70B)",
+    category: "preferences",
+    reasoning: "From model-picker work in build conversations",
+  },
+  {
+    key: "preferred_search_provider",
+    value: "Tavily → Brave → SearXNG → DuckDuckGo (chain falls back automatically)",
+    category: "preferences",
+    reasoning: "Open-source fallback chain wired in build conversations",
+  },
+  {
+    key: "image_generation_provider",
+    value: "fal.ai Flux Schnell (no reference) or Flux Redux (with reference URLs); Unsplash fallback for stock photos",
+    category: "preferences",
+    reasoning: "From image-gen + campaign-mode work",
+  },
 ];
 
 const LUCY_NOTES: Array<{
