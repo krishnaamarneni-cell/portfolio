@@ -8,9 +8,10 @@ import {
   FiPlus,
   FiClock,
   FiStar,
+  FiMic,
+  FiChevronDown,
 } from "react-icons/fi";
 import { modelsFor, DEFAULT_CHAT_MODEL } from "@/lib/groq-models";
-import { FiMic } from "react-icons/fi";
 import VoiceModePage from "./VoiceModePage";
 
 type Message = { role: "user" | "assistant"; content: string };
@@ -302,7 +303,7 @@ export default function AdminChat({
             e.preventDefault();
             send(draft);
           }}
-          className="mt-3 rounded-2xl bg-[#1a1a1a] border border-white/[0.08] focus-within:border-[#ff6b00]/40 transition-colors"
+          className="mt-3 rounded-3xl bg-[#1a1a1a] border border-white/[0.08] focus-within:border-white/[0.18] transition-colors"
         >
           <textarea
             value={draft}
@@ -315,55 +316,74 @@ export default function AdminChat({
             }}
             rows={2}
             disabled={sending}
-            className="w-full px-4 pt-3 pb-2 bg-transparent focus:outline-none text-sm text-white placeholder:text-[#555] resize-none disabled:opacity-60"
-            placeholder="Ask Lucy… or tap the mic"
+            className="w-full px-4 pt-4 pb-2 bg-transparent focus:outline-none text-[15px] text-white placeholder:text-[#666] resize-none disabled:opacity-60"
+            placeholder="Ask Lucy…"
           />
-          <div className="flex items-center gap-1.5 px-2 py-2 border-t border-white/[0.05]">
-            {/* New chat */}
+          <div className="flex items-center gap-2 px-3 pb-3 pt-1">
+            {/* New chat — bare circle, hover-fills */}
             <button
               type="button"
               onClick={newChat}
-              className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.06] text-[#888] hover:text-[#ff6b00] hover:border-[#ff6b00]/30 flex items-center justify-center shrink-0"
+              className="w-9 h-9 rounded-full bg-white/[0.05] text-[#aaa] hover:text-white hover:bg-white/[0.09] flex items-center justify-center shrink-0 active:scale-95 transition-all"
               title="New chat"
             >
-              <FiPlus size={14} />
+              <FiPlus size={16} />
             </button>
 
-            {/* Model picker */}
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={sending}
-              className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-xs text-[#bbb] focus:outline-none focus:border-[#ff6b00]/40 disabled:opacity-60 max-w-[180px] truncate"
-              title="Model"
-            >
-              {chatOptions.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label.replace(/Llama /, "").replace(/Versatile/, "")}
-                </option>
-              ))}
-            </select>
+            {/* Model picker — custom-styled select. appearance-none hides the
+                ugly native chevron; we draw our own FiChevronDown so it
+                matches the other icons. Native picker still opens on tap. */}
+            <div className="relative">
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={sending}
+                className="appearance-none pl-3.5 pr-7 h-9 rounded-full bg-white/[0.05] text-[13px] text-[#bbb] focus:outline-none focus:bg-white/[0.09] disabled:opacity-60 cursor-pointer max-w-[200px] truncate"
+                title="Model"
+              >
+                {chatOptions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label
+                      .replace(/^Llama /, "")
+                      .replace(/^Meta /, "")
+                      .replace(/ Versatile/, "")
+                      .replace(/ Instant/, "")}
+                  </option>
+                ))}
+              </select>
+              <FiChevronDown
+                size={11}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#888] pointer-events-none"
+              />
+            </div>
 
             <div className="flex-1" />
 
-            {/* Mic button opens the Perplexity-style full-screen voice page.
-                Transcript comes back via onSend → fires send() directly. */}
+            {/* Voice mode — opens full-screen orb. Bare icon, hover-bg fills. */}
             <button
               type="button"
               onClick={() => setVoiceOpen(true)}
-              className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.06] text-[#888] hover:text-[#ff6b00] hover:border-[#ff6b00]/30 flex items-center justify-center shrink-0 active:scale-95 transition-transform"
+              className="w-9 h-9 rounded-full text-[#aaa] hover:text-white hover:bg-white/[0.05] flex items-center justify-center shrink-0 active:scale-95 transition-all"
               title="Voice mode"
+              aria-label="Voice mode"
             >
-              <FiMic size={14} />
+              <FiMic size={17} />
             </button>
 
+            {/* Send — orange glow when there's text, ghost-disabled otherwise.
+                This mimics Perplexity's "primary action gets the colour" pattern. */}
             <button
               type="submit"
               disabled={sending || !draft.trim()}
-              className="w-9 h-9 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black shadow-[0_4px_15px_rgba(255,107,0,0.4)] hover:scale-105 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0 transition-transform"
+              className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                draft.trim() && !sending
+                  ? "bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] text-black shadow-[0_4px_15px_rgba(255,107,0,0.45)] hover:scale-105 active:scale-95"
+                  : "bg-white/[0.04] text-[#555] cursor-not-allowed"
+              }`}
               title="Send"
+              aria-label="Send"
             >
-              <FiSend size={14} />
+              <FiSend size={15} />
             </button>
           </div>
         </form>
