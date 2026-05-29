@@ -15,6 +15,7 @@ import {
 import type { Connector } from "@/lib/content-types";
 import TwoFactorCard from "./TwoFactorCard";
 import FaceLockCard from "./FaceLockCard";
+import LucyImportCard from "./LucyImportCard";
 
 type Props = {
   onSuccess: (msg: string) => void;
@@ -182,6 +183,9 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
 
       {/* Face Lock + Trusted devices */}
       <FaceLockCard onSuccess={onSuccess} onError={onError} />
+
+      {/* Lucy vault import + knowledge library */}
+      <LucyImportCard onSuccess={onSuccess} onError={onError} />
 
       {/* Gmail — handled separately because it uses OAuth, not a static bearer token */}
       <div className="mt-6">

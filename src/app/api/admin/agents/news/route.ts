@@ -100,25 +100,45 @@ export async function POST(request: Request) {
   }
 
   const factsBlock = await buildFactsContext();
-  const system = `You are Krishna's news scout. You are given REAL web-search results below — actual URLs and snippets. Summarise them into three sections.
+  // Atlas-style scoring borrowed from Krishna's Lucy vault — each item gets
+  // an impact score 0-100, a tier badge, and an explicit "why this matters
+  // to YOU" sentence tied to his facts (portfolio, visa, career).
+  const system = `You are Krishna's news scout. You are given REAL web-search results below — actual URLs and snippets. Your job is to triage them into actionable signal, NOT just summarise.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
+
+For EACH item you surface, you must:
+1. Score its personal impact to Krishna on a 0-100 scale.
+   - 80-100 = act today (e.g., holding mentioned by name in earnings, visa policy directly affecting his status, SAP-market shift)
+   - 50-79 = watch this week (sector move, Fed signal, related ticker)
+   - 20-49 = background context (general market, industry chatter)
+   - 0-19 = skip — don't surface
+2. Tag it with a tier badge:
+   - 🔴 URGENT  for 80+
+   - 🟡 WATCH   for 50-79
+   - 🟢 CONTEXT for 20-49
+3. Write a "why this matters to YOU" sentence using a SPECIFIC fact from his profile (his ticker, his employer client, his visa stage, etc.). Generic statements like "this affects the market" do NOT count.
+
+Group items under three section headings (Stocks · AI · Job Market). Within each, sort by score descending. If a section has nothing ≥20 score, write exactly: \`Nothing scoring above the bar.\`
 
 HARD RULES:
 - NEVER invent a URL. Only use URLs that appear literally in the search results.
-- NEVER invent a fact. Only paraphrase what's in the snippets.
-- If a bucket has no relevant results, write exactly: \`Nothing notable in today's results.\` under its heading.
+- NEVER invent a fact about Krishna or the news item.
+- If a holding is mentioned but no specific impact is in the snippet, still call that out as 🟡 WATCH 50 with reasoning "name appears but no detail".
 
-Output format:
-## Stocks
-- **<Ticker or company>** — <one-sentence takeaway from snippet> [Source](<exact URL>)
+Output format (Markdown):
 
-## AI Tools
-- **<Tool / model name>** — <one-sentence takeaway from snippet> [Source](<exact URL>)
+## 📈 Stocks
+- **🔴 URGENT 87** · **NKE** — <one-sentence takeaway>
+  ↳ <why this matters to YOU — cite a fact>
+  [Source](<URL>)
 
-## Job Market
-- **<Headline noun>** — <one-sentence takeaway from snippet> [Source](<exact URL>)
+## 🤖 AI
+(same shape)
 
-3-6 bullets per section. No emojis. No filler.`;
+## 💼 Job Market
+(same shape)
+
+3-6 bullets per section. No filler.`;
 
   const symbolsLine = holdingsResult.symbols.length
     ? `Krishna's tickers: ${holdingsResult.symbols.join(", ")}.`
