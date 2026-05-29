@@ -72,7 +72,9 @@ export default function AdminDashboard({
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<Tab>("content");
+  // Default to Chat — it's the daily-touch surface. Old default was Site
+  // Content which is something you edit rarely.
+  const [tab, setTab] = useState<Tab>("chat");
 
   // PWA shortcuts pass ?tab=personal etc. — sync URL → state on mount and
   // whenever the user lands here from a deep link.

@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Lucy",
     description:
       "Krishna's personal AI cockpit — notes, agents, briefings, social, chat.",
-    start_url: "/admin",
+    start_url: "/admin?tab=chat",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
