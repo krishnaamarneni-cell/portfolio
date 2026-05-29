@@ -22,7 +22,6 @@ import {
   FiLink,
   FiMessageSquare,
   FiShare2,
-  FiBarChart2,
   FiCpu,
   FiHeart,
 } from "react-icons/fi";
@@ -40,7 +39,6 @@ import ThoughtsEditor from "./ThoughtsEditor";
 import ConnectorsEditor from "./ConnectorsEditor";
 import AdminChat from "./AdminChat";
 import SocialEditor from "./SocialEditor";
-import SocialAnalytics from "./SocialAnalytics";
 import AgentsTab from "./AgentsTab";
 import PersonalTab from "./PersonalTab";
 import MobileBottomNav, { tabLabel } from "./MobileBottomNav";
@@ -51,7 +49,6 @@ type Tab =
   | "jobs"
   | "projects"
   | "social"
-  | "analytics"
   | "agents"
   | "personal"
   | "connectors"
@@ -86,7 +83,6 @@ export default function AdminDashboard({
       t === "jobs" ||
       t === "projects" ||
       t === "social" ||
-      t === "analytics" ||
       t === "agents" ||
       t === "personal" ||
       t === "connectors" ||
@@ -211,7 +207,6 @@ export default function AdminDashboard({
     { id: "jobs" as const, label: "Jobs", icon: FiBriefcase, count: jobs.length, hint: "Experience timeline" },
     { id: "projects" as const, label: "Projects", icon: FiFolder, count: projects.length, hint: "Featured work" },
     { id: "social" as const, label: "Social", icon: FiShare2, hint: "Compose & post via Buffer" },
-    { id: "analytics" as const, label: "Analytics", icon: FiBarChart2, hint: "Buffer post performance" },
     { id: "agents" as const, label: "Agents", icon: FiCpu, hint: "News + Jobs scouts" },
     { id: "personal" as const, label: "Life", icon: FiHeart, hint: "Notepad + Life agent" },
     { id: "connectors" as const, label: "Settings", icon: FiLink, hint: "2FA, Face Lock, connectors, devices" },
@@ -388,8 +383,6 @@ export default function AdminDashboard({
                 onSuccess={(m) => flash("ok", m)}
                 onError={(m) => flash("err", m)}
               />
-            ) : tab === "analytics" ? (
-              <SocialAnalytics onError={(m) => flash("err", m)} />
             ) : tab === "agents" ? (
               <AgentsTab
                 onSuccess={(m) => flash("ok", m)}

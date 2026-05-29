@@ -11,7 +11,6 @@ import {
   FiBriefcase,
   FiFolder,
   FiShare2,
-  FiBarChart2,
   FiLink,
   FiX,
 } from "react-icons/fi";
@@ -22,7 +21,6 @@ export type Tab =
   | "jobs"
   | "projects"
   | "social"
-  | "analytics"
   | "agents"
   | "personal"
   | "connectors"
@@ -43,7 +41,6 @@ const SECONDARY: Array<{ id: Tab; label: string; icon: React.ComponentType<{ siz
   { id: "thoughts", label: "Notes", icon: FiZap },
   { id: "jobs", label: "Jobs", icon: FiBriefcase },
   { id: "projects", label: "Projects", icon: FiFolder },
-  { id: "analytics", label: "Analytics", icon: FiBarChart2 },
   { id: "connectors", label: "Settings", icon: FiLink },
 ];
 
