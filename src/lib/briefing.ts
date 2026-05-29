@@ -7,8 +7,8 @@ import {
   type PersonalNote,
 } from "@/lib/personal";
 import { fetchHoldingSymbols, fetchPortfolioSnapshot, runAgent } from "@/lib/agents";
-import { search, searchResultsToContext, whichSearchProvider } from "@/lib/search";
-import { fetchTickerNews, rssItemsToSearchResult, FINANCE_FEEDS, fetchManyFeeds, filterByQuery } from "@/lib/rss";
+import { search, searchResultsToContext, whichSearchProvider, type SearchResult } from "@/lib/search";
+import { fetchTickerNews, rssItemsToSearchResult, FINANCE_FEEDS, fetchManyFeeds, filterByQuery, fetchJobRss } from "@/lib/rss";
 import { sendEmailUnified } from "@/lib/resend";
 import { buildFactsContext } from "@/lib/facts";
 import { habitsWithStreaks } from "@/lib/habits";
@@ -345,54 +345,61 @@ async function runJobsAgent(apiKey: string): Promise<string> {
     .join("\n");
   const skills = (site.skills?.skills ?? []).slice(0, 40);
 
-  // Search for jobs
-  const jobQueries = [
-    "senior AI engineer remote hiring 2025",
-    "SAP S/4HANA consultant hiring 2025",
-    "full-stack engineer LLM hiring remote",
-    "solutions architect AI platform hiring",
+  // Indeed RSS — actual job listings, not search pages.
+  const indeedQueries = [
+    "SAP S/4HANA consultant",
+    "senior AI engineer",
+    "full stack engineer",
+    "SAP Ariba analyst",
   ];
-  const searchBlock = await safeSearchBlock(jobQueries);
+  const [indeedJobs, gmailBlock] = await Promise.all([
+    fetchJobRss(indeedQueries, "remote"),
+    (async () => {
+      try {
+        const { messages } = await listRecentMessages({
+          query: "subject:(job OR hiring OR opportunity OR role OR position OR engineer OR consultant) newer_than:3d",
+          maxResults: 15,
+        });
+        if (messages.length > 0) {
+          return messages
+            .map((m) => `- From: ${m.from ?? "?"} | Subject: ${m.subject ?? "?"} | ${m.snippet ?? ""}`)
+            .join("\n");
+        }
+        return "";
+      } catch {
+        return "";
+      }
+    })(),
+  ]);
 
-  // Scan Gmail for job-related emails (last 3 days)
-  let gmailBlock = "";
-  try {
-    const { messages } = await listRecentMessages({
-      query: "subject:(job OR hiring OR opportunity OR role OR position OR engineer OR consultant) newer_than:3d",
-      maxResults: 15,
-    });
-    if (messages.length > 0) {
-      gmailBlock = messages
-        .map((m) => `- From: ${m.from ?? "?"} | Subject: ${m.subject ?? "?"} | ${m.snippet ?? ""}`)
-        .join("\n");
-    }
-  } catch {
-    // Gmail not connected — that's fine
-  }
+  const indeedResult = rssItemsToSearchResult(
+    `Indeed job listings (${indeedJobs.length} found)`,
+    indeedJobs.slice(0, 15)
+  );
+  const searchResults: SearchResult[] = [indeedResult].map((r) => ({
+    ...r,
+    hits: r.hits.filter((h) => h.url && /^https?:\/\//i.test(h.url)),
+  }));
+  const searchBlock = searchResultsToContext(searchResults);
 
   const factsBlock = await buildFactsContext();
 
-  const system = `Phone-screen job radar. Only real postings with URLs from search results.
+  const system = `Job radar for morning briefing. Every item below is a REAL job listing from Indeed with an apply link.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
-If a search result is NOT a job posting (homepage, article, blog) — skip it.
-If ZERO real postings: "No matching jobs today." and STOP. Never invent jobs.
+Match each job to Krishna's resume. Only include >70% match. Use [Apply](url) markdown links.
 
-## From Job Boards
-**SAP Consultant** at Deloitte — Remote. 85% match: 4yr S/4HANA + Ariba. [Apply](url)
+**SAP S/4HANA Consultant** at Deloitte — Remote. 85% match: 4yr S/4HANA + Ariba. [Apply](url)
 **AI Engineer** at Stripe — SF. 75% match: LLM + Next.js. [Apply](url)
 
-## From Inbox
-**RE: Senior role** from recruiter@acme.com — 80% match: SAP MM/SD experience.
+Max 6 jobs. If nothing matches >70%: "No strong matches today."`;
 
-One line per job. Only >70% match. Max 6 total.`;
-
-  const userPrompt = `KRISHNA'S RESUME:
+  const userPrompt = `RESUME:
 ${experience || "(no jobs on file)"}
 
 Skills: ${skills.join(", ") || "(none)"}
 
-Web search results (job postings):
-${searchBlock || "(no search results)"}
+JOB LISTINGS:
+${searchBlock || "(no listings found)"}
 
 ${gmailBlock ? `Recent Gmail inbox (job-related):\n${gmailBlock}` : "Gmail: not connected or no recent job emails"}`;
 

@@ -188,6 +188,37 @@ export async function fetchTickerNews(tickers: string[]): Promise<RssItem[]> {
   return fetchManyFeeds(feeds);
 }
 
+/* ─────────────────────────── Job board RSS ─────────────────────────── */
+
+/** Indeed RSS feed URL for a given query + optional location. */
+export function indeedRssFeedUrl(query: string, location: string = ""): string {
+  const params = new URLSearchParams({ q: query });
+  if (location) params.set("l", location);
+  params.set("sort", "date");
+  return `https://www.indeed.com/rss?${params.toString()}`;
+}
+
+/** Fetch job listings from Indeed RSS for multiple queries in parallel.
+ *  Returns actual individual job postings with apply links — no rate limits. */
+export async function fetchJobRss(
+  queries: string[],
+  location: string = ""
+): Promise<RssItem[]> {
+  if (queries.length === 0) return [];
+  const feeds = queries.slice(0, 8).map((q) => ({
+    url: indeedRssFeedUrl(q, location),
+    source: "indeed",
+  }));
+  const items = await fetchManyFeeds(feeds);
+  // Deduplicate by URL.
+  const seen = new Set<string>();
+  return items.filter((it) => {
+    if (seen.has(it.link)) return false;
+    seen.add(it.link);
+    return true;
+  });
+}
+
 /* ─────────────────────────── Keyword filter ─────────────────────────── */
 
 /** Score an item against query keywords. Used by the search.ts integration to
