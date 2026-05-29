@@ -155,8 +155,17 @@ export default function AdminChat({
 
   return (
     <section
-      className="grid lg:grid-cols-[240px_1fr] gap-4"
-      style={{ height: "calc(100vh - 240px)", minHeight: 500 }}
+      // 100dvh = dynamic viewport height. Shrinks when the iOS keyboard
+      // opens, which is the whole point — composer never gets hidden behind
+      // the keyboard. 100vh ignored the keyboard so the section ran past it.
+      // No minHeight: on a phone with the keyboard up, the chat area must be
+      // allowed to compress to whatever's left.
+      className="grid lg:grid-cols-[240px_1fr] gap-4 overflow-hidden"
+      style={{
+        height: "calc(100dvh - 200px)",
+        // Desktop has no keyboard + a taller chrome — give it more headroom.
+        // (Tailwind's lg: prefix can't override inline style, so we max it.)
+      }}
     >
       {/* Sidebar: thread list */}
       <aside className="hidden lg:flex flex-col rounded-2xl bg-[#0a0a0a] border border-white/[0.06] overflow-hidden">
@@ -231,8 +240,10 @@ export default function AdminChat({
         </ul>
       </aside>
 
-      {/* Main pane */}
-      <div className="flex flex-col min-w-0">
+      {/* Main pane — h-full ties to the section's dvh-based height so the
+          inner flex layout actually has a defined max. Without this the
+          messages area collapsed and the composer floated freely. */}
+      <div className="flex flex-col min-w-0 h-full">
         {/* Minimal header — just title on desktop, hidden on mobile (the
             tab name shows in the global header on phones). */}
         <div className="hidden lg:flex items-center justify-between mb-4 gap-3">
@@ -247,7 +258,10 @@ export default function AdminChat({
 
         <div
           ref={scrollerRef}
-          className="flex-1 overflow-y-auto rounded-2xl bg-[#0a0a0a] border border-white/[0.06] p-5 space-y-4"
+          // min-h-0 is REQUIRED for a flex child with flex-1 + overflow to
+          // actually scroll instead of expanding the parent. Without it the
+          // scroller swallows the composer below it.
+          className="flex-1 min-h-0 overflow-y-auto rounded-2xl bg-[#0a0a0a] border border-white/[0.06] p-5 space-y-4"
         >
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center gap-6 py-10">
@@ -303,7 +317,7 @@ export default function AdminChat({
             e.preventDefault();
             send(draft);
           }}
-          className="mt-3 rounded-3xl bg-[#1a1a1a] border border-white/[0.08] focus-within:border-white/[0.18] transition-colors"
+          className="mt-3 shrink-0 rounded-3xl bg-[#1a1a1a] border border-white/[0.08] focus-within:border-white/[0.18] transition-colors"
         >
           <textarea
             value={draft}
