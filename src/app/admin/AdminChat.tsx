@@ -155,16 +155,19 @@ export default function AdminChat({
 
   return (
     <section
-      // 100dvh = dynamic viewport height. Shrinks when the iOS keyboard
-      // opens, which is the whole point — composer never gets hidden behind
-      // the keyboard. 100vh ignored the keyboard so the section ran past it.
-      // No minHeight: on a phone with the keyboard up, the chat area must be
-      // allowed to compress to whatever's left.
+      // 100dvh shrinks with the iOS keyboard, which is the whole point.
+      // The subtraction has to clear ALL the chrome below the chat:
+      //   sticky header     ~52px  + safe-top (~59px on iPhone 15)
+      //   page padding-top  20px
+      //   page padding-bottom  20px
+      //   bottom nav         72px + safe-bottom (~34px)
+      //   visible gap above nav so composer doesn't kiss it
+      // = ~280px of chrome total. 260 gives a small intentional buffer.
       className="grid lg:grid-cols-[240px_1fr] gap-4 overflow-hidden"
       style={{
-        height: "calc(100dvh - 200px)",
-        // Desktop has no keyboard + a taller chrome — give it more headroom.
-        // (Tailwind's lg: prefix can't override inline style, so we max it.)
+        // Use the bigger subtraction on mobile (lots of chrome eats into the
+        // viewport). Desktop has no bottom nav, so let it have more room.
+        height: "calc(100dvh - 260px)",
       }}
     >
       {/* Sidebar: thread list */}
@@ -317,7 +320,7 @@ export default function AdminChat({
             e.preventDefault();
             send(draft);
           }}
-          className="mt-3 shrink-0 rounded-3xl bg-[#1a1a1a] border border-white/[0.08] focus-within:border-white/[0.18] transition-colors"
+          className="mt-3 mb-1 shrink-0 rounded-3xl bg-[#1a1a1a] border border-white/[0.08] focus-within:border-white/[0.18] transition-colors shadow-[0_8px_30px_rgba(0,0,0,0.4)]"
         >
           <textarea
             value={draft}
