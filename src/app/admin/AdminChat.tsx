@@ -156,18 +156,17 @@ export default function AdminChat({
   return (
     <section
       // 100dvh shrinks with the iOS keyboard, which is the whole point.
-      // The subtraction has to clear ALL the chrome below the chat:
-      //   sticky header     ~52px  + safe-top (~59px on iPhone 15)
-      //   page padding-top  20px
-      //   page padding-bottom  20px
-      //   bottom nav         72px + safe-bottom (~34px)
-      //   visible gap above nav so composer doesn't kiss it
-      // = ~280px of chrome total. 260 gives a small intentional buffer.
-      className="grid lg:grid-cols-[240px_1fr] gap-4 overflow-hidden"
+      // NO overflow-hidden here — that was clipping the composer's drop
+      // shadow on some viewport sizes and (worse) hiding the toolbar row
+      // entirely when the section's height math came up a few pixels short.
+      // The inner messages div handles its own scroll; the composer is
+      // shrink-0 so it always retains its natural height.
+      className="grid lg:grid-cols-[240px_1fr] gap-4"
       style={{
-        // Use the bigger subtraction on mobile (lots of chrome eats into the
-        // viewport). Desktop has no bottom nav, so let it have more room.
-        height: "calc(100dvh - 260px)",
+        height: "calc(100dvh - 240px)",
+        // Lower bound so even when the keyboard shrinks dvh aggressively,
+        // there's enough room to render messages + composer.
+        minHeight: "320px",
       }}
     >
       {/* Sidebar: thread list */}
@@ -311,16 +310,16 @@ export default function AdminChat({
           </p>
         )}
 
-        {/* Composer — iMessage-style. Textarea, then a toolbar inside the
-            same wrapper with [+] [model picker] ... [mic] [send]. Mic is
-            always visible. New-chat + model live here on mobile because the
-            top header used to push them off-screen. */}
+        {/* Composer — Perplexity-style. Textarea on top, [+] [model] [mic]
+            [send] toolbar inside the same rounded wrapper. shrink-0 +
+            sticky-bottom is belt-and-suspenders so the toolbar can never
+            get hidden under any viewport pressure. */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             send(draft);
           }}
-          className="mt-3 mb-1 shrink-0 rounded-3xl bg-[#1a1a1a] border border-white/[0.08] focus-within:border-white/[0.18] transition-colors shadow-[0_8px_30px_rgba(0,0,0,0.4)]"
+          className="mt-3 mb-1 shrink-0 sticky bottom-0 rounded-3xl bg-[#1a1a1a] border border-white/[0.08] focus-within:border-white/[0.18] transition-colors shadow-[0_8px_30px_rgba(0,0,0,0.4)] z-10"
         >
           <textarea
             value={draft}
