@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   FiBriefcase,
   FiFolder,
@@ -43,6 +43,7 @@ import SocialEditor from "./SocialEditor";
 import SocialAnalytics from "./SocialAnalytics";
 import AgentsTab from "./AgentsTab";
 import PersonalTab from "./PersonalTab";
+import MobileBottomNav, { tabLabel } from "./MobileBottomNav";
 
 type Tab =
   | "content"
@@ -70,7 +71,28 @@ export default function AdminDashboard({
   initialSiteContent,
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("content");
+
+  // PWA shortcuts pass ?tab=personal etc. — sync URL → state on mount and
+  // whenever the user lands here from a deep link.
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (
+      t === "content" ||
+      t === "thoughts" ||
+      t === "jobs" ||
+      t === "projects" ||
+      t === "social" ||
+      t === "analytics" ||
+      t === "agents" ||
+      t === "personal" ||
+      t === "connectors" ||
+      t === "chat"
+    ) {
+      setTab(t);
+    }
+  }, [searchParams]);
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [siteContent, setSiteContent] = useState<SiteContent>(initialSiteContent);
@@ -195,53 +217,69 @@ export default function AdminDashboard({
   ];
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white relative">
+    <main
+      className="min-h-screen bg-[#050505] text-white relative"
+      // The bottom nav (mobile only) is ~70px tall + safe-area-bottom; pad the
+      // page so content can scroll all the way without being hidden behind it.
+      style={{
+        paddingBottom: "calc(72px + env(safe-area-inset-bottom))",
+      }}
+    >
       {/* Ambient background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-20%] left-1/4 w-[700px] h-[700px] bg-[#ff6b00]/[0.04] rounded-full blur-[180px]" />
         <div className="absolute bottom-[-10%] right-0 w-[500px] h-[500px] bg-[#ff3d00]/[0.03] rounded-full blur-[150px]" />
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-[#050505]/85 backdrop-blur-xl border-b border-white/[0.06]">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+      {/* Header — compact on mobile, full on desktop */}
+      <header
+        className="sticky top-0 z-30 bg-[#050505]/85 backdrop-blur-xl border-b border-white/[0.06]"
+        // Respect the iPhone notch / status bar.
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
+        <div className="max-w-7xl mx-auto px-4 lg:px-8 py-2.5 lg:py-3.5 flex items-center justify-between gap-3">
+          {/* Mobile: show current tab name in the header */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-black font-black text-sm shadow-[0_4px_15px_rgba(255,107,0,0.4)] shrink-0">
+              K
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-mono tracking-[0.2em] uppercase text-[#ff6b00] leading-none">
+                Admin
+              </p>
+              {/* On mobile, show the current tab. On desktop, show the email handle. */}
+              <p className="text-[11px] text-[#aaa] lg:text-[10px] lg:text-[#666] mt-1 font-mono leading-none truncate">
+                <span className="lg:hidden">{tabLabel(tab)}</span>
+                <span className="hidden lg:inline">krishna-amarneni</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
             <Link
               href="/"
-              className="inline-flex items-center gap-2 text-[#888] text-sm hover:text-white transition-colors"
+              className="hidden sm:inline-flex items-center gap-2 text-[#888] text-sm hover:text-white transition-colors"
             >
               <FiArrowLeft size={14} />
               <span className="hidden sm:inline">Site</span>
             </Link>
-            <span className="hidden sm:block w-px h-5 bg-white/10" />
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-black font-black text-sm shadow-[0_4px_15px_rgba(255,107,0,0.4)]">
-                K
-              </div>
-              <div>
-                <p className="text-xs font-mono tracking-[0.2em] uppercase text-[#ff6b00] leading-none">Admin</p>
-                <p className="text-[10px] text-[#666] mt-1 font-mono leading-none">krishna-amarneni</p>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
             <span className="hidden md:inline text-xs text-[#777] font-mono">
               {session.email}
             </span>
             <button
               onClick={logout}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10 text-sm hover:border-red-500/40 hover:text-red-300 transition-colors"
+              className="inline-flex items-center gap-2 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full bg-white/[0.04] border border-white/10 text-xs lg:text-sm hover:border-red-500/40 hover:text-red-300 transition-colors"
+              aria-label="Logout"
             >
-              <FiLogOut size={14} />
-              Logout
+              <FiLogOut size={13} />
+              <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         </div>
       </header>
 
-      <div className="relative max-w-7xl mx-auto px-6 lg:px-8 py-8 lg:py-12">
-        {/* Title row + quick stats */}
-        <div className="flex items-start justify-between flex-wrap gap-6 mb-8">
+      <div className="relative max-w-7xl mx-auto px-4 lg:px-8 py-5 lg:py-12">
+        {/* Title row + quick stats — desktop only, takes too much real estate on phone */}
+        <div className="hidden lg:flex items-start justify-between flex-wrap gap-6 mb-8">
           <div>
             <h1 className="text-3xl lg:text-4xl font-black tracking-tight">
               Welcome back,{" "}
@@ -276,10 +314,10 @@ export default function AdminDashboard({
           </div>
         )}
 
-        {/* Main grid: sidebar + content */}
+        {/* Main grid: sidebar + content. Sidebar hidden on mobile (bottom nav replaces it). */}
         <div className="grid lg:grid-cols-[240px_1fr] gap-6 lg:gap-10">
-          {/* Sidebar nav */}
-          <nav className="lg:sticky lg:top-24 lg:self-start space-y-1.5">
+          {/* Sidebar nav — desktop only */}
+          <nav className="hidden lg:block lg:sticky lg:top-24 lg:self-start space-y-1.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = tab === item.id;
@@ -437,15 +475,22 @@ export default function AdminDashboard({
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-2xl border ${
+          className={`fixed right-4 lg:right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-2xl border ${
             toast.kind === "ok"
               ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
               : "bg-red-500/15 border-red-500/40 text-red-300"
           }`}
+          // On mobile, float above the bottom nav. On desktop, the usual spot.
+          style={{
+            bottom: "calc(88px + env(safe-area-inset-bottom))",
+          }}
         >
           {toast.msg}
         </div>
       )}
+
+      {/* Mobile bottom tab bar — only renders on screens < lg */}
+      <MobileBottomNav active={tab} onSelect={(t) => setTab(t)} />
     </main>
   );
 }

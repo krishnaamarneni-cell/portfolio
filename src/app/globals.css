@@ -28,6 +28,33 @@
   scrollbar-color: rgba(255, 107, 0, 0.3) transparent;
 }
 
+/* ─── Mobile / PWA tweaks ───
+ * - Prevent iOS Safari from zooming in when an input is focused (any
+ *   text input under 16px triggers the zoom). Bumping the minimum size
+ *   on touch devices fixes that without affecting desktop.
+ * - Disable the 300ms touch-tap delay on buttons/links.
+ * - Hide the long-press context menu's text selection on tap.
+ */
+@media (max-width: 1023px) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 0.875rem);
+  }
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Allow drawing into the iPhone notch / home-indicator area. */
+html,
+body {
+  overscroll-behavior: contain;
+}
+
 html {
   scroll-behavior: smooth;
 }

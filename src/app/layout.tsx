@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -38,6 +38,12 @@ export const metadata: Metadata = {
     icon: "/favicon.svg",
     apple: "/favicon.svg",
   },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Krishna Admin",
+  },
   openGraph: {
     title: "Krishna Amarneni — SAP Expert, AI Builder, Author",
     description:
@@ -62,6 +68,18 @@ export const metadata: Metadata = {
     images: ["/og-image.png"],
     creator: "@Kp26W39306",
   },
+};
+
+export const viewport: Viewport = {
+  // Allow the user to pinch-zoom (better than maximumScale=1) but prevent
+  // page-zoom-on-focus jitter on iOS Safari with userScalable.
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover", // lets the page draw under the iPhone notch
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#050505" },
+    { media: "(prefers-color-scheme: dark)", color: "#050505" },
+  ],
 };
 
 export default function RootLayout({
