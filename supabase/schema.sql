@@ -195,6 +195,29 @@ create table if not exists public.webauthn_credentials (
 );
 alter table public.webauthn_credentials enable row level security;
 
+-- ============ Memory agent — suggestions surfaced from chats + notes ============
+create table if not exists public.memory_suggestions (
+  id uuid primary key default gen_random_uuid(),
+  source_kind text not null check (source_kind in ('chat','note','manual')),
+  source_id text,
+  suggested_kind text not null check (suggested_kind in ('fact','note')),
+  suggested_data jsonb not null,
+  confidence real,
+  reasoning text,
+  status text not null default 'pending' check (status in ('pending','accepted','rejected')),
+  resolved_at timestamptz,
+  resolved_resource_id text, -- id of the row created when accepted
+  created_at timestamptz not null default now()
+);
+create index if not exists memory_suggestions_pending_idx
+  on public.memory_suggestions (status, created_at)
+  where status = 'pending';
+alter table public.memory_suggestions enable row level security;
+
+-- Track the cursor so successive scans only look at new material.
+alter table public.admin_settings
+  add column if not exists memory_scan_last_at timestamptz;
+
 -- ============ Personal facts (central truths agents inject into every prompt) ============
 create table if not exists public.personal_facts (
   id uuid primary key default gen_random_uuid(),

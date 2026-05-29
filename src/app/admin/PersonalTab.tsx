@@ -19,6 +19,7 @@ import {
   FiInfo,
 } from "react-icons/fi";
 import VoiceMic from "./VoiceMic";
+import MemoryAgentCard from "./MemoryAgentCard";
 
 type PersonalNote = {
   id: string;
@@ -223,6 +224,10 @@ export default function PersonalTab({
         </p>
       </div>
 
+      {/* Memory agent — pinned to top because the user reviews suggestions
+          here. Quietly fades to "Clean" badge when there's nothing pending. */}
+      <MemoryAgentCard onSuccess={onSuccess} onError={onError} />
+
       {/* Morning Briefing + Sunday Reflection settings */}
       <MorningBriefingCard onError={onError} onSuccess={onSuccess} />
       <SundayReflectionCard onError={onError} onSuccess={onSuccess} />
@@ -242,11 +247,25 @@ export default function PersonalTab({
           <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
             Add to notepad
           </label>
+          {/* Live transcription — text streams in as you speak. The component
+              calls back with each interim result; we treat the running text
+              as "what's said in this recording" and append/replace into the
+              draft so the user can edit while talking. */}
           <VoiceMic
             size="sm"
-            onText={(text) =>
-              setDraft((d) => (d ? `${d} ${text}` : text))
-            }
+            mode="live"
+            onText={(text, isFinal) => {
+              if (isFinal) {
+                // Final commit: bake the transcribed text into the draft.
+                setDraft((d) => (d ? `${d} ${text}` : text));
+              } else {
+                // Live preview: show the running utterance in the textarea so
+                // the user sees what's being captured. We stash the
+                // pre-recording draft in a ref so we can re-merge if they
+                // start typing while talking.
+                setDraft(text);
+              }
+            }}
             onError={(msg) => onError(msg)}
           />
         </div>

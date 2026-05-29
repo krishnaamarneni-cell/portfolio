@@ -10,6 +10,7 @@ import {
   FiStar,
 } from "react-icons/fi";
 import { modelsFor, DEFAULT_CHAT_MODEL } from "@/lib/groq-models";
+import VoiceMic from "./VoiceMic";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -318,7 +319,7 @@ export default function AdminChat({
             e.preventDefault();
             send(draft);
           }}
-          className="mt-4 flex items-end gap-3"
+          className="mt-4 flex items-end gap-2"
         >
           <textarea
             value={draft}
@@ -332,7 +333,22 @@ export default function AdminChat({
             rows={2}
             disabled={sending}
             className="flex-1 px-4 py-3 rounded-2xl bg-[#1a1a1a] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-sm text-white placeholder:text-[#555] resize-none disabled:opacity-60"
-            placeholder='Ask something… ("show my net worth", "summarise my work")'
+            placeholder='Ask something… or tap the mic to talk'
+          />
+          {/* Live voice — same Web Speech API path as PersonalTab. Live updates
+              flow into the draft as you speak; final transcript gets baked in.
+              No auto-send so the user can review before hitting Send. */}
+          <VoiceMic
+            size="md"
+            mode="live"
+            onText={(text, isFinal) => {
+              if (isFinal) {
+                setDraft((d) => (d ? `${d} ${text}` : text));
+              } else {
+                setDraft(text);
+              }
+            }}
+            onError={(msg) => onError(msg)}
           />
           <button
             type="submit"
@@ -340,7 +356,7 @@ export default function AdminChat({
             className="shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-bold text-sm shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FiSend size={14} />
-            Send
+            <span className="hidden sm:inline">Send</span>
           </button>
         </form>
       </div>
