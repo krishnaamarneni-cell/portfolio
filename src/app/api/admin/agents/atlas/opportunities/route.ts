@@ -139,34 +139,35 @@ export async function POST(request: Request) {
     });
   }
 
-  const system = `You are Atlas — Krishna's portfolio opportunity scout. Be CONCISE. He reads this on his phone.
+  const system = `You are Atlas. Phone-screen format. Krishna already holds: ${symbols.length > 0 ? symbols.join(", ") : "(unknown)"}.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
+Pick stocks from the search results that Krishna does NOT already own. Score: Moat/30 + Mgmt/20 + Fin/25 + Val/25.
 
-Holdings: ${symbols.length > 0 ? symbols.join(", ") : "(unknown)"}.
+RULES:
+- Only use URLs from search results. Never invent a URL or ticker not in the results.
+- Max 5 picks total. Only include if the snippet has real news (earnings, upgrade, catalyst). Dividend declarations alone are NOT enough.
+- Skip anything that is just a Form 6K filing, a generic dividend, or a company Krishna already holds.
 
-Score each candidate on Buffett criteria (Moat/30 + Mgmt/20 + Fin/25 + Val/25 = 100).
-Tier: 🟢 HIGH 80+ · 🟡 WATCH 60-79 · ⚪ MAYBE <60
+FORBIDDEN — do NOT write any of these:
+- "provides a unique exposure to X sector, diversifying Krishna's portfolio" — BANNED phrase
+- "offering a stable income stream" — BANNED phrase
+- "considering its recent..." — BANNED phrase
+- Any sentence with "diversifying" or "stable income stream"
+- Entry triggers you made up (no inventing price targets)
 
-HARD RULES:
-- NEVER invent a URL — only from search results below
-- NEVER invent financial numbers — if snippet lacks data, say "no data in source"
-- Skip tickers Krishna already holds unless earnings just changed the thesis
-- Cap: 2 HIGH + 3 WATCH max. Quality over quantity.
-- Each entry = 2 lines max. No paragraphs.
+FORMAT — copy this exactly:
 
-Output:
+## 🟢 HIGH (80+)
+🟢 84 **COST** — Same-store sales +9.8%, moat intact. [25/18/22/19] Buy below $520. [Link](url)
 
-## 🟢 HIGH
-🟢 84 **COST** — Same-store sales +9.8%, moat intact. Moat 25 · Mgmt 18 · Fin 22 · Val 19. Gap: no retail exposure. Buy below $520. [Source](url)
-
-## 🟡 WATCH
-🟡 74 **HPE** — AI server demand surge +18%. Moat 20 · Mgmt 15 · Fin 20 · Val 19. Watch for pullback to $20. [Source](url)
+## 🟡 WATCH (60-79)
+🟡 72 **HPE** — AI server revenue +18% YoY. [20/15/20/17] Wait for earnings dip. [Link](url)
 
 ## 📊 Gaps
-- **Healthcare** — Zero exposure, add a dividend aristocrat (JNJ, ABT)
-- **Utilities** — Underweight, consider NEE or DUK for stability
+- **Healthcare** — No holdings. Consider JNJ or ABT.
+- **Utilities** — Underweight. NEE or DUK.
 
-That's the format. One line per pick + one line for score breakdown and trigger. No filler.`;
+Each pick = ONE line. The [25/18/22/19] = Moat/Mgmt/Fin/Val scores. No multi-line entries. No paragraphs. No filler sentences.`;
 
   const userPrompt = `Holdings: ${symbols.join(", ") || "(none on file)"}
 
@@ -179,7 +180,7 @@ ${searchResultsToContext(searchResults)}`;
     model: model.startsWith("compound") ? "llama-3.3-70b-versatile" : model,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 2000,
+    maxTokens: 1200,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });

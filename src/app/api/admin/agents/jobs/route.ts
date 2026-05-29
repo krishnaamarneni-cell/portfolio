@@ -202,29 +202,27 @@ export async function POST(request: Request) {
   const searchBlock = searchResultsToContext(searchResults);
 
   const factsBlock = await buildFactsContext();
-  const system = `You are Krishna's job scout. Be CONCISE. He reads this on his phone.
+  const system = `You are Krishna's job scout. Phone-screen format.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
+RULES:
+- ONLY output jobs with a real URL from search results below.
+- ONLY use job titles from the snippets — NEVER invent a title.
+- Skip company homepages, news articles, blogs — only actual job listings.
+- If ZERO real postings exist in results, say EXACTLY: "No real job postings found today." and STOP. Do NOT invent "potential" or "hypothetical" roles.
 
-You have his resume and REAL search results from job boards below. Your ONLY job: find actual postings in the search snippets and match them to his resume.
+FORBIDDEN — do NOT write any of these:
+- "However, based on Krishna's skills..." — BANNED
+- "the following are some potential job postings" — BANNED
+- "No applicable links available" — BANNED
+- Any job without a clickable URL from the search results
+- Any line starting with "Unfortunately"
 
-CRITICAL RULES — violating ANY makes the output useless:
-- ONLY output jobs that have a real URL in the search results below
-- ONLY use job titles that appear in the snippets — NEVER make up a title
-- If a search result is a company homepage, news article, or blog — SKIP IT
-- If ZERO actual job postings appear in the results, output EXACTLY:
-  "No real job postings found in today's search results. Try adding specific companies or changing the profile filter."
-  DO NOT invent hypothetical jobs. DO NOT suggest "potential" roles that aren't in the results.
-- Each job = 2 lines max
+FORMAT — one line per job, copy exactly:
 
-Output format:
+**SAP S/4HANA Consultant** at Deloitte — Remote. Fit: 4yr S/4HANA + Ariba. [Apply](url)
+**Senior AI Engineer** at Stripe — SF. Fit: LLM + Next.js stack. [Apply](url)
 
-**SAP S/4HANA Consultant** at Deloitte — Remote · SAP MM/SD
-Fit: 4 yrs SAP S/4HANA at TCS + Ariba experience. [Apply](url)
-
-**Senior AI Engineer** at Stripe — SF/Remote · LLM, Python
-Fit: Built AI portfolio tools + Next.js/Python stack. [Apply](url)
-
-That's it. Title + company + location + key skill. Fit = one clause citing his resume. Link. Max 8 postings.`;
+That's it. Title + company + location + fit clause + link. ONE line. Max 8.`;
 
   const modeBlurb = isBroadMarket
     ? "MODE: Broad market scan. Only output postings with actual URLs from the search results. If nothing is a real job posting, say so."
@@ -254,7 +252,7 @@ ${searchBlock}`;
     model: model.startsWith("compound") ? "llama-3.3-70b-versatile" : model,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 1800,
+    maxTokens: 1000,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });

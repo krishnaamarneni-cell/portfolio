@@ -239,35 +239,28 @@ async function runNewsAgent(apiKey: string): Promise<string> {
     return "## Markets & AI\n\n(no search provider configured)";
   }
 
-  const system = `You are Krishna's news scout. Summarise the search results into a tight market + AI + job market briefing for his morning email.
-
-Format:
+  const system = `Phone-screen news briefing. One line per item. Only URLs from search results.
 
 ## Markets
-- **<Ticker / company>** - one-line takeaway. [Source](url)
-(3-5 bullets, prioritise his tickers)
+**AAPL** — Earnings beat +12%, guidance raised. [Source](url)
+**AMD** — Sector rally, tech up 3%. [Source](url)
 
 ## AI
-- **<Tool / model>** - what shipped + why he should care. [Source](url)
-(2-4 bullets)
+**Opus 4.8** — New agent workflow tools shipped. [Source](url)
 
 ## Job Market
-- one-liner about layoffs, hiring freezes, or market shifts. [Source](url)
-(1-3 bullets, focus on tech + enterprise/SAP sector)
+**SAP hiring +15%** — S/4HANA demand up globally. [Source](url)
 
-HARD RULES: only URLs that appear literally in the search results below. No invented facts. Under 350 words.`;
+Max 3 per section. One line each. No explanation paragraphs.`;
 
-  const userPrompt = `Krishna's tickers: ${symbols.join(", ") || "(unknown)"}.
-
-Search results:
-${searchBlock}`;
+  const userPrompt = `Tickers: ${symbols.join(", ") || "(unknown)"}.\n\n${searchBlock}`;
 
   const result = await runAgent({
     apiKey,
     model: GROQ_MODEL_FOR_BRIEFING,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 2000,
+    maxTokens: 1000,
   });
   return result.content || "## Markets & AI\n\n(empty model response)";
 }
@@ -294,30 +287,21 @@ async function runWealthAgent(apiKey: string): Promise<string> {
   const cryptoBlock = cryptoNews.map((i) => `- ${i.title}: ${i.description} (${i.link})`).join("\n");
   const indianBlock = indianNews.map((i) => `- ${i.title}: ${i.description} (${i.link})`).join("\n");
 
-  const system = `You are Krishna's wealth briefing agent. You have his FULL portfolio data from WealthClaude — holdings with current values, assets, debts. Summarise it into a tight net-worth snapshot he can read before coffee.
+  const system = `Phone-screen wealth briefing. Use EXACT numbers from portfolio data — never round or invent.
 
-Write these sections in Markdown:
+## Net Worth
+Total: $X (assets $Y - debts $Z). Change: [from data or "not available"].
 
-## Net Worth Snapshot
-- Total net worth (assets - debts)
-- Change since yesterday / this week (if data shows historical)
+## Holdings (top movers only, max 8)
+**AAPL** $12,500 +2.3% | **BTC** $8,200 -1.1% | **RELIANCE.NS** Rs 45,000 +0.5%
 
-## Holdings Performance
-For each major holding (stocks, crypto, Indian stocks), show:
-- **<Ticker>** - current value, gain/loss indication
-Group by: US Stocks | Crypto | Indian Stocks | Real Estate | Other
+## Good News (max 3, only from news data below)
+**AAPL** — Earnings beat, stock up 5%. [Source](url)
 
-## Good News
-Bullet points of positive developments about his specific holdings. Use the news feed data below. Each bullet must cite a URL.
+## Bad News (max 3, only from news data below)
+**TSLA** — Recall 500k vehicles. [Source](url)
 
-## Bad News / Watch
-Bullet points of negative developments, risks, or warnings about his holdings. Each bullet must cite a URL.
-
-HARD RULES:
-- Only cite URLs from the news data below
-- Use EXACT numbers from the portfolio data — do not round or invent
-- If you can't calculate change (no historical data), say "change not available"
-- Under 500 words`;
+One line per item. Only URLs from the data below. No filler.`;
 
   const userPrompt = `Portfolio data from WealthClaude:
 HOLDINGS: ${JSON.stringify(snapshot.holdings, null, 2) ?? "(not available)"}
@@ -338,7 +322,7 @@ ${indianBlock || "(no Indian market news)"}`;
     model: GROQ_MODEL_FOR_BRIEFING,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 2500,
+    maxTokens: 1200,
   });
   return result.content || "## Net Worth\n\n(agent returned nothing)";
 }
@@ -388,37 +372,19 @@ async function runJobsAgent(apiKey: string): Promise<string> {
 
   const factsBlock = await buildFactsContext();
 
-  const system = `You are Krishna's job radar agent for his morning briefing. You have his FULL resume + a web search of current openings + his recent Gmail inbox.
-
-Your job:
+  const system = `Phone-screen job radar. Only real postings with URLs from search results.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
+If a search result is NOT a job posting (homepage, article, blog) — skip it.
+If ZERO real postings: "No matching jobs today." and STOP. Never invent jobs.
 
-1. Review the web-search results for actual job postings (ignore news articles, company homepages).
-2. Match each posting against Krishna's resume. Only include if the match is 70% or higher.
-3. Also review his Gmail inbox for recruiter emails or job-related messages. If any match >70%, include them.
-4. Output a tight section for his morning email.
+## From Job Boards
+**SAP Consultant** at Deloitte — Remote. 85% match: 4yr S/4HANA + Ariba. [Apply](url)
+**AI Engineer** at Stripe — SF. 75% match: LLM + Next.js. [Apply](url)
 
-Format:
+## From Inbox
+**RE: Senior role** from recruiter@acme.com — 80% match: SAP MM/SD experience.
 
-## Job Radar (>70% match)
-
-### From Job Boards
-- **<Job title>** at <Company> - <Location>
-  Match: <X>% — <one sentence citing specific resume match>
-  [Apply](<exact URL from search>)
-
-### From Your Inbox
-- **<Subject line>** from <Sender>
-  Match: <X>% — <why this matches your background>
-
-If no matches at >70%, say: "No strong matches today. Checked X job postings and Y emails."
-
-HARD RULES:
-- Only use URLs from the search results below
-- Only reference skills/experience from Krishna's actual resume
-- Minimum 70% match threshold — be honest, don't inflate
-- Cap at 8 postings total
-- Under 400 words`;
+One line per job. Only >70% match. Max 6 total.`;
 
   const userPrompt = `KRISHNA'S RESUME:
 ${experience || "(no jobs on file)"}
@@ -435,7 +401,7 @@ ${gmailBlock ? `Recent Gmail inbox (job-related):\n${gmailBlock}` : "Gmail: not 
     model: GROQ_MODEL_FOR_BRIEFING,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 2000,
+    maxTokens: 800,
   });
   return result.content || "## Job Radar\n\n(agent returned nothing)";
 }
