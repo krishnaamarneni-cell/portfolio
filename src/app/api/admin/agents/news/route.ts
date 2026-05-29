@@ -93,9 +93,15 @@ export async function POST(request: Request) {
 
   const totalHits = searchResults.reduce((n, r) => n + r.hits.length, 0);
   if (totalHits === 0) {
+    const allErrors = searchResults.flatMap((r) => r.providerErrors ?? []);
+    const distinct = Array.from(new Set(allErrors));
     return NextResponse.json({
-      markdown: "## No results\n\nWeb search returned nothing. Try a more focused extra-query.",
-      context: { symbols: holdingsResult.symbols, model: body.model },
+      markdown: `## ⚠️ Search chain returned 0 hits\n\n**Per-query attempts:**\n${distinct.map((e) => `- ${e}`).join("\n") || "- (no error details captured)"}\n\nProbe each provider at \`/api/admin/search/probe?q=test\`.`,
+      context: {
+        symbols: holdingsResult.symbols,
+        model: body.model,
+        providerErrors: distinct,
+      },
     });
   }
 

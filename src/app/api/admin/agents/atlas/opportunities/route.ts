@@ -99,10 +99,17 @@ export async function POST(request: Request) {
 
   const totalHits = searchResults.reduce((n, r) => n + r.hits.length, 0);
   if (totalHits === 0) {
+    // Surface the actual per-provider failures so you don't waste a refresh
+    // wondering whether to add a search key.
+    const allErrors = searchResults.flatMap((r) => r.providerErrors ?? []);
+    const distinct = Array.from(new Set(allErrors));
+    const provider = whichSearchProvider();
+    const setupHint = provider
+      ? `Active provider: ${provider}. If you're hitting quota, set a different key in env (TAVILY_API_KEY / BRAVE_API_KEY / SEARXNG_URL).`
+      : "No search provider configured. Set TAVILY_API_KEY (free 1000/mo at tavily.com) or BRAVE_API_KEY (free 2000/mo) in Vercel env, then redeploy.";
     return NextResponse.json({
-      markdown:
-        "## No candidates\n\nWeb search returned nothing. Try again later or broaden TAVILY/BRAVE quota.",
-      context: { symbols, model: body.model },
+      markdown: `## ⚠️ Search chain returned 0 hits across all queries\n\n${setupHint}\n\n**Per-query attempts:**\n${distinct.map((e) => `- ${e}`).join("\n") || "- (no error details captured)"}\n\nVisit \`/api/admin/search/probe?q=test\` to probe each provider individually.`,
+      context: { symbols, model: body.model, providerErrors: distinct },
     });
   }
 

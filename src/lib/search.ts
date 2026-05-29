@@ -26,6 +26,9 @@ export type SearchResult = {
   query: string;
   hits: SearchHit[];
   provider?: ProviderName;
+  /** When the chain returns empty, this carries the per-provider reason so
+   *  the caller can show useful diagnostics instead of "no candidates". */
+  providerErrors?: string[];
 };
 
 export type ProviderName = "tavily" | "brave" | "searxng" | "duckduckgo";
@@ -73,19 +76,27 @@ export async function search(opts: {
 }): Promise<SearchResult> {
   const errors: string[] = [];
   for (const p of PROVIDER_CHAIN) {
-    if (!isProviderConfigured(p)) continue;
+    if (!isProviderConfigured(p)) {
+      // Skip silently — not configured isn't an error, it's a choice.
+      continue;
+    }
     try {
       const r = await callProvider(p, opts);
       if (r.hits.length > 0) {
         return { ...r, provider: p };
       }
-      errors.push(`${p}: empty`);
+      errors.push(`${p}: 0 hits`);
     } catch (err) {
-      errors.push(`${p}: ${err instanceof Error ? err.message : "failed"}`);
+      errors.push(
+        `${p}: ${err instanceof Error ? err.message.slice(0, 160) : "failed"}`
+      );
     }
   }
-  // All providers tried — return empty result so callers can render gracefully.
-  return { query: opts.query, hits: [] };
+  return {
+    query: opts.query,
+    hits: [],
+    providerErrors: errors.length > 0 ? errors : ["all providers returned empty"],
+  };
 }
 
 async function callProvider(
@@ -250,9 +261,11 @@ async function searxngSearch(opts: {
 
 /* ─────────────────────────── DuckDuckGo ─────────────────────────── */
 
-/** DuckDuckGo HTML scraper — no key, no setup, generous rate limits for
- *  personal-scale use. Parses the same HTML their lite/html endpoints emit.
- *  This is the bottom-of-chain fallback so the agents always have something. */
+/** DuckDuckGo — no key, no setup. We try two endpoints in order: the rich
+ *  html.duckduckgo.com/html/ page (current parser), then the lite/lite/
+ *  endpoint (super-simple HTML, very stable). If both come back empty we
+ *  throw so the chain can report the failure honestly instead of pretending
+ *  silence is success. */
 async function duckduckgoSearch(opts: {
   query: string;
   maxResults?: number;
@@ -262,26 +275,59 @@ async function duckduckgoSearch(opts: {
     ? ` ${opts.includeDomains.map((d) => `site:${d}`).join(" OR ")}`
     : "";
   const q = (opts.query + domainsClause).trim();
-  const url = new URL("https://html.duckduckgo.com/html/");
-  url.searchParams.set("q", q);
-  const r = await fetch(url.toString(), {
-    method: "POST",
-    body: new URLSearchParams({ q }),
-    headers: {
-      // DDG returns sparse/empty results without a real-looking UA.
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml",
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    cache: "no-store",
-  });
-  if (!r.ok) {
-    throw new Error(`DDG ${r.status}`);
+  const max = Math.min(10, opts.maxResults ?? 6);
+
+  // ── First attempt: classic html endpoint ──
+  const errors: string[] = [];
+  try {
+    const url = new URL("https://html.duckduckgo.com/html/");
+    url.searchParams.set("q", q);
+    const r = await fetch(url.toString(), {
+      method: "POST",
+      body: new URLSearchParams({ q }),
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      cache: "no-store",
+    });
+    if (r.ok) {
+      const hits = parseDuckDuckGoHtml(await r.text(), max);
+      if (hits.length > 0) return { query: opts.query, hits };
+      errors.push("html: 0 hits parsed");
+    } else {
+      errors.push(`html: ${r.status}`);
+    }
+  } catch (err) {
+    errors.push(`html: ${err instanceof Error ? err.message : "failed"}`);
   }
-  const html = await r.text();
-  const hits = parseDuckDuckGoHtml(html, Math.min(10, opts.maxResults ?? 6));
-  return { query: opts.query, hits };
+
+  // ── Second attempt: LITE endpoint. Plain HTML table, very stable. ──
+  try {
+    const liteUrl = new URL("https://lite.duckduckgo.com/lite/");
+    liteUrl.searchParams.set("q", q);
+    const r = await fetch(liteUrl.toString(), {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html",
+      },
+      cache: "no-store",
+    });
+    if (r.ok) {
+      const hits = parseDuckDuckGoLiteHtml(await r.text(), max);
+      if (hits.length > 0) return { query: opts.query, hits };
+      errors.push("lite: 0 hits parsed");
+    } else {
+      errors.push(`lite: ${r.status}`);
+    }
+  } catch (err) {
+    errors.push(`lite: ${err instanceof Error ? err.message : "failed"}`);
+  }
+
+  throw new Error(`DDG returned no usable results — ${errors.join(" · ")}`);
 }
 
 /** Parse DDG's HTML result page. Defensive — DDG can tweak markup, so each
@@ -307,6 +353,29 @@ function parseDuckDuckGoHtml(html: string, max: number): SearchHit[] {
     );
     const snippet = snippetMatch ? stripHtml(snippetMatch[1]) : "";
     out.push({ title, url: rawUrl, snippet: snippet.slice(0, 320) });
+  }
+  return out;
+}
+
+/** LITE endpoint: results sit in a flat <table>. Each result is 3 rows —
+ *  one with the title link, one with the snippet, one with the URL footer.
+ *  We pluck the anchor href + text, and the snippet row that follows it. */
+function parseDuckDuckGoLiteHtml(html: string, max: number): SearchHit[] {
+  const out: SearchHit[] = [];
+  // Find every <a class="result-link" href="...">title</a>
+  const linkRx = /<a[^>]+class="result-link"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = linkRx.exec(html)) && out.length < max) {
+    const url = decodeDdgUrl(m[1]);
+    if (!/^https?:\/\//i.test(url)) continue;
+    const title = stripHtml(m[2]);
+    // Pull the snippet that follows in the next sibling <td class="result-snippet">.
+    const after = html.slice(m.index + m[0].length, m.index + m[0].length + 3000);
+    const snipMatch =
+      /<td[^>]*class="result-snippet[^"]*"[^>]*>([\s\S]*?)<\/td>/i.exec(after) ||
+      /<a[^>]*class="result-snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i.exec(after);
+    const snippet = snipMatch ? stripHtml(snipMatch[1]) : "";
+    out.push({ title, url, snippet: snippet.slice(0, 320) });
   }
   return out;
 }
