@@ -204,6 +204,64 @@ export async function runAgent(opts: {
   };
 }
 
+/** Pull full portfolio snapshot from WealthClaude MCP — holdings with current
+ *  values, assets, debts. Returns raw JSON so the briefing agent can summarise. */
+export async function fetchPortfolioSnapshot(): Promise<{
+  holdings: unknown;
+  assetsDebts: unknown;
+  source: string | null;
+}> {
+  const connectors = await fetchConnectors().catch<Connector[]>(() => []);
+  for (const c of connectors) {
+    if (!c.enabled || !c.bearer_token) continue;
+    const { url } = resolveConnectorCall(c);
+    if (!url) continue;
+    if (!looksLikeMcp(url)) continue;
+    try {
+      await mcpInitialize(url, c.bearer_token).catch(() => undefined);
+      const tools = await mcpListTools(url, c.bearer_token);
+
+      // Get holdings (stocks, crypto, etc.)
+      const holdingsTool = pickTool(tools, [
+        "get_holdings",
+        "holdings",
+        "list_holdings",
+        "get_portfolio",
+      ]);
+      const holdings = holdingsTool
+        ? await mcpCallTool(url, c.bearer_token, holdingsTool.name, {}).catch(
+            () => null
+          )
+        : null;
+
+      // Get assets & debts (real estate, bank accounts, etc.)
+      const assetsTool = pickTool(tools, [
+        "get_assets_and_debts",
+        "assets_debts",
+        "get_net_worth",
+        "net_worth",
+        "get_assets",
+      ]);
+      const assetsDebts = assetsTool
+        ? await mcpCallTool(url, c.bearer_token, assetsTool.name, {}).catch(
+            () => null
+          )
+        : null;
+
+      if (holdings?.ok || assetsDebts?.ok) {
+        return {
+          holdings: holdings?.parsed ?? null,
+          assetsDebts: assetsDebts?.parsed ?? null,
+          source: c.label,
+        };
+      }
+    } catch {
+      // try next connector
+    }
+  }
+  return { holdings: null, assetsDebts: null, source: null };
+}
+
 function buildFallbackChain(requested: string): string[] {
   const chain: string[] = [requested];
   // If the user picked a compound model, fall back to compound-mini, then 70B.
