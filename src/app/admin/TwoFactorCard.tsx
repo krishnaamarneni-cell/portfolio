@@ -9,6 +9,7 @@ import {
   FiLock,
   FiUnlock,
   FiDownload,
+  FiDatabase,
 } from "react-icons/fi";
 
 type Status = {
@@ -307,6 +308,30 @@ export default function TwoFactorCard({
           </div>
         </div>
       )}
+
+      {/* Backup-everything action — same security card so it's together */}
+      <div className="mt-4 pt-4 border-t border-white/[0.06] flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-300 flex items-center justify-center shrink-0">
+            <FiDatabase size={14} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white">Backup everything</p>
+            <p className="text-[11px] text-[#666]">
+              Downloads a full JSON snapshot of every admin table — notes, facts,
+              jobs, projects, briefings, chat history. Store it somewhere safe.
+            </p>
+          </div>
+        </div>
+        <a
+          href="/api/admin/backup"
+          download
+          className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs hover:bg-blue-500/25"
+        >
+          <FiDownload size={11} />
+          Download backup
+        </a>
+      </div>
     </div>
   );
 }

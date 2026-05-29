@@ -6,8 +6,27 @@ import {
 } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase-ssr";
 import { getTotpStatus, setPreauthCookie } from "@/lib/totp";
+import { checkRateLimit, clientIpFromRequest } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
+  // Per-IP rate-limit BEFORE any expensive work — prevents brute-force
+  // burning Supabase / TOTP cycles. 5 attempts per 5 minutes per IP.
+  const ip = clientIpFromRequest(request);
+  const rl = await checkRateLimit({ ip, max: 5, windowSeconds: 300 }).catch(
+    () => ({ allowed: true, remaining: 999, retryAfter: 0 })
+  );
+  if (!rl.allowed) {
+    return NextResponse.json(
+      {
+        error: `Too many login attempts. Try again in ${rl.retryAfter}s.`,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rl.retryAfter) },
+      }
+    );
+  }
+
   let body: { email?: string; password?: string };
   try {
     body = await request.json();

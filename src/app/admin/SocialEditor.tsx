@@ -116,6 +116,14 @@ function defaultScheduleAt(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function parseReferenceUrls(text: string): string[] {
+  return text
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter((s) => /^https?:\/\//i.test(s))
+    .slice(0, 3);
+}
+
 function shortPreview(s: string, n = 60) {
   const trimmed = s.replace(/\s+/g, " ").trim();
   return trimmed.length > n ? trimmed.slice(0, n - 1) + "…" : trimmed;
@@ -165,6 +173,9 @@ export default function SocialEditor({
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageProvider, setImageProvider] = useState<"auto" | "fal" | "unsplash">("auto");
   const [generating, setGenerating] = useState(false);
+  /** Up to 3 URLs the user pastes — when present + provider=fal, the route
+   *  routes to Flux Redux so the output mimics the references' style. */
+  const [referenceUrlsText, setReferenceUrlsText] = useState("");
   /** Tracks whether the user has typed into the image prompt themselves —
    * if false, we keep the input synced to whichever auto-prompt fits the
    * selected provider. */
@@ -274,7 +285,12 @@ export default function SocialEditor({
       const res = await fetch("/api/admin/generate-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, provider: imageProvider, aspect }),
+        body: JSON.stringify({
+          prompt,
+          provider: imageProvider,
+          aspect,
+          referenceUrls: parseReferenceUrls(referenceUrlsText),
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -689,7 +705,51 @@ export default function SocialEditor({
           className={inputClass + " text-xs font-mono"}
           placeholder="Or paste an image URL"
         />
+
+        {/* Reference images — when filled, fal.ai routes to Flux Redux so
+            the output mimics the example's style/composition. */}
+        <details className="text-[11px] text-[#888]">
+          <summary className="cursor-pointer text-[#aaa] hover:text-white">
+            🎨 Add reference images (up to 3) — make output look like these
+          </summary>
+          <div className="mt-2 space-y-2">
+            <textarea
+              value={referenceUrlsText}
+              onChange={(e) => setReferenceUrlsText(e.target.value)}
+              rows={2}
+              className={inputClass + " text-xs font-mono"}
+              placeholder="Paste 1-3 image URLs, one per line — competitor posts, mood boards, anything"
+            />
+            <p className="text-[10px] text-[#666] leading-relaxed">
+              When present + provider is fal.ai, we route to <strong>Flux Redux</strong>{" "}
+              which uses these as style/composition guides. Unsplash ignores
+              references (just searches by prompt).
+            </p>
+            {parseReferenceUrls(referenceUrlsText).length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {parseReferenceUrls(referenceUrlsText).map((u, i) => (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    key={i}
+                    src={u}
+                    alt={`Reference ${i + 1}`}
+                    className="h-16 w-16 object-cover rounded-md border border-white/[0.08]"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
       </div>
+
+      {/* Campaign mode — multi-day content + research + auto-schedule */}
+      <CampaignCard
+        profiles={profiles}
+        onSuccess={onSuccess}
+        onError={onError}
+        referenceUrlsText={referenceUrlsText}
+        setReferenceUrlsText={setReferenceUrlsText}
+      />
 
       {/* Platform cards */}
       <div className="space-y-4">
@@ -1057,6 +1117,357 @@ function PlatformCard({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Campaign mode ─────────────────────────── */
+
+type CampaignResult = {
+  post: {
+    date: string;
+    perPlatform: Partial<Record<PlatformKey, string>>;
+    imageQuery: string;
+    imagePrompt: string;
+  };
+  imageUrl: string | null;
+  imageCredit: string | null;
+  schedulings: Array<{
+    platform: string;
+    channelId: string;
+    ok: boolean;
+    error?: string;
+  }>;
+};
+
+function CampaignCard({
+  profiles,
+  onSuccess,
+  onError,
+  referenceUrlsText,
+  setReferenceUrlsText,
+}: {
+  profiles: BufferProfile[];
+  onSuccess: (msg: string) => void;
+  onError: (msg: string) => void;
+  referenceUrlsText: string;
+  setReferenceUrlsText: (v: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [topic, setTopic] = useState("");
+  const [count, setCount] = useState(3);
+  const [dates, setDates] = useState<string[]>([]);
+  const [referencePosts, setReferencePosts] = useState("");
+  const [platforms, setPlatforms] = useState<Record<PlatformKey, boolean>>({
+    linkedin: true,
+    x: true,
+    instagram: false,
+  });
+  const [selectedProfiles, setSelectedProfiles] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<CampaignResult[] | null>(null);
+  const [autoSchedule, setAutoSchedule] = useState(false);
+
+  // Auto-fill dates: today + 09:00, +2 days, +4 days etc.
+  useEffect(() => {
+    const out: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const d = new Date(Date.now() + (i + 1) * 86_400_000);
+      d.setHours(9, 0, 0, 0);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      out.push(
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+      );
+    }
+    setDates(out);
+  }, [count]);
+
+  async function run() {
+    if (!topic.trim()) {
+      onError("Topic required");
+      return;
+    }
+    const selectedPlats = (Object.keys(platforms) as PlatformKey[]).filter(
+      (p) => platforms[p]
+    );
+    if (selectedPlats.length === 0) {
+      onError("Pick at least one platform");
+      return;
+    }
+    const dueAts = dates.map((d) => new Date(d).toISOString());
+    const profilesByPlatform: Partial<Record<PlatformKey, string[]>> = {};
+    for (const p of selectedPlats) {
+      const matching = profiles
+        .filter((bp) =>
+          p === "linkedin"
+            ? bp.service === "linkedin"
+            : p === "x"
+            ? bp.service === "twitter" || bp.service === "x"
+            : bp.service === "instagram"
+        )
+        .filter((bp) => selectedProfiles[bp.id])
+        .map((bp) => bp.id);
+      if (matching.length > 0) profilesByPlatform[p] = matching;
+    }
+    if (autoSchedule && Object.keys(profilesByPlatform).length === 0) {
+      onError("Pick at least one Buffer profile per platform to auto-schedule");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/social/campaign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: topic.trim(),
+          dueAts,
+          platforms: selectedPlats,
+          profilesByPlatform,
+          referenceImageUrls: parseReferenceUrls(referenceUrlsText),
+          referencePosts: referencePosts
+            .split(/\n{2,}/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+          schedule: autoSchedule,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        onError(data.error || "Campaign failed");
+        setBusy(false);
+        return;
+      }
+      setResults(data.campaign as CampaignResult[]);
+      const succ = (data.campaign as CampaignResult[]).filter((c) =>
+        c.schedulings.every((s) => s.ok)
+      ).length;
+      onSuccess(
+        autoSchedule
+          ? `Campaign done — ${succ}/${data.campaign.length} fully scheduled`
+          : `Drafts ready — ${data.campaign.length} posts generated`
+      );
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Network error");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="rounded-2xl border border-purple-500/25 bg-gradient-to-br from-purple-500/[0.05] to-transparent p-5 space-y-4">
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="w-full flex items-start gap-3 text-left"
+      >
+        <div className="w-9 h-9 rounded-xl bg-purple-500/15 text-purple-300 flex items-center justify-center shrink-0">
+          <FiLayers size={16} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-white">Campaign mode</h3>
+          <p className="text-[11px] text-[#888] mt-1">
+            One topic → N distinct posts across N days. Researches the topic,
+            uses your reference images, generates posts + images, schedules
+            them all on Buffer in one go.
+          </p>
+        </div>
+        <span className="text-[10px] uppercase tracking-widest text-[#888] px-2 py-1">
+          {expanded ? "Hide" : "Open"}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="space-y-4 pt-2 border-t border-white/[0.06]">
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+              Campaign topic
+            </label>
+            <textarea
+              rows={2}
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              className={textareaClass}
+              placeholder='e.g. "Why most SAP consultants miss the AI moment — and what to do about it"'
+            />
+          </div>
+
+          <div className="grid sm:grid-cols-[140px_1fr] gap-3">
+            <div>
+              <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+                Posts
+              </label>
+              <select
+                value={count}
+                onChange={(e) => setCount(parseInt(e.target.value, 10))}
+                className={inputClass + " text-sm"}
+              >
+                {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+                Schedule for…
+              </label>
+              <div className="space-y-1.5">
+                {dates.map((d, i) => (
+                  <input
+                    key={i}
+                    type="datetime-local"
+                    value={d}
+                    onChange={(e) => {
+                      const next = [...dates];
+                      next[i] = e.target.value;
+                      setDates(next);
+                    }}
+                    className={inputClass + " text-xs"}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+              Platforms
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(platforms) as PlatformKey[]).map((p) => {
+                const on = platforms[p];
+                return (
+                  <button
+                    type="button"
+                    key={p}
+                    onClick={() => setPlatforms((s) => ({ ...s, [p]: !s[p] }))}
+                    className={`px-3 py-1.5 rounded-full text-xs border ${on ? "bg-purple-500/15 border-purple-500/40 text-purple-200" : "bg-white/[0.04] border-white/[0.08] text-[#999]"}`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+              Buffer profiles to schedule on (across platforms)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {profiles.length === 0 ? (
+                <p className="text-[11px] text-[#666]">
+                  No Buffer profiles loaded. Connect Buffer + refresh.
+                </p>
+              ) : (
+                profiles.map((p) => {
+                  const on = !!selectedProfiles[p.id];
+                  return (
+                    <button
+                      type="button"
+                      key={p.id}
+                      onClick={() =>
+                        setSelectedProfiles((s) => ({ ...s, [p.id]: !s[p.id] }))
+                      }
+                      className={`px-3 py-1.5 rounded-full text-xs border ${on ? "bg-purple-500/15 border-purple-500/40 text-purple-200" : "bg-white/[0.04] border-white/[0.08] text-[#999]"}`}
+                    >
+                      {p.formatted_username} ({p.service})
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+              Reference posts (paste competitor posts so the writer emulates voice — separate with blank line)
+            </label>
+            <textarea
+              rows={4}
+              value={referencePosts}
+              onChange={(e) => setReferencePosts(e.target.value)}
+              className={textareaClass + " text-xs"}
+              placeholder="Paste 1-6 posts you want it to learn the style from"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="auto-schedule"
+              checked={autoSchedule}
+              onChange={(e) => setAutoSchedule(e.target.checked)}
+              className="w-4 h-4 accent-purple-500"
+            />
+            <label htmlFor="auto-schedule" className="text-xs text-[#bbb]">
+              Auto-schedule on Buffer when generation finishes (otherwise just
+              shows drafts)
+            </label>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={run}
+              disabled={busy}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-bold shadow-[0_4px_20px_rgba(168,85,247,0.4)] hover:scale-[1.02] disabled:opacity-60"
+            >
+              <FiZap size={14} />
+              {busy ? "Running campaign…" : autoSchedule ? "Generate + schedule" : "Generate drafts"}
+            </button>
+          </div>
+
+          {results && (
+            <div className="space-y-3 pt-3 border-t border-white/[0.06]">
+              {results.map((r, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-4 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-purple-300">
+                      Post {i + 1} · {new Date(r.post.date).toLocaleString()}
+                    </span>
+                    {r.schedulings.length > 0 && (
+                      <span className="text-[10px] font-mono text-[#666]">
+                        {r.schedulings.filter((s) => s.ok).length}/{r.schedulings.length} scheduled
+                      </span>
+                    )}
+                  </div>
+                  {r.imageUrl && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={r.imageUrl}
+                      alt={`Campaign post ${i + 1}`}
+                      className="max-h-40 rounded-md border border-white/[0.06]"
+                    />
+                  )}
+                  {(Object.keys(r.post.perPlatform) as PlatformKey[]).map((p) => (
+                    <div key={p} className="text-[12px] text-[#ddd]">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-[#888]">
+                        {p}
+                      </span>
+                      <p className="whitespace-pre-wrap mt-1 leading-relaxed">
+                        {r.post.perPlatform[p]}
+                      </p>
+                    </div>
+                  ))}
+                  {r.schedulings.some((s) => !s.ok) && (
+                    <div className="text-[10px] text-red-400">
+                      {r.schedulings
+                        .filter((s) => !s.ok)
+                        .map((s) => `${s.platform}: ${s.error}`)
+                        .join(" · ")}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,11 @@ import {
 } from "./supabase-ssr";
 
 const COOKIE_NAME = "ka_admin_session";
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
+// 48 hours — shorter window means a stolen laptop's exposure is bounded.
+// getSession() bumps the cookie's expiry on activity, so an actively-used
+// session can keep going indefinitely without re-login.
+const SESSION_TTL_SECONDS = 60 * 60 * 48;
+const SESSION_REFRESH_AFTER_SECONDS = 60 * 60 * 24; // refresh once per 24h of activity
 
 function adminEmail(): string {
   return (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
@@ -93,8 +97,6 @@ export async function getSession(): Promise<{ email: string } | null> {
       } = await supabase.auth.getUser();
       if (user?.email) {
         const expected = adminEmail();
-        // If ADMIN_EMAIL is set, only that user is the admin. Otherwise any
-        // authenticated Supabase user counts (single-tenant deployments).
         if (!expected || user.email.toLowerCase() === expected) {
           return { email: user.email };
         }
@@ -106,7 +108,45 @@ export async function getSession(): Promise<{ email: string } | null> {
   // Legacy HMAC cookie fallback (works when Supabase isn't configured).
   const store = await cookies();
   const raw = store.get(COOKIE_NAME)?.value;
-  return parseSessionToken(raw);
+  const parsed = parseSessionToken(raw);
+  if (!parsed) return null;
+
+  // ── Activity-based refresh ──
+  // If the cookie is older than SESSION_REFRESH_AFTER_SECONDS but still
+  // valid, re-issue a fresh one. Keeps an actively-used session alive
+  // indefinitely while bounding a truly-idle session to 48h.
+  try {
+    const ageSeconds = sessionAgeSeconds(raw);
+    if (ageSeconds !== null && ageSeconds > SESSION_REFRESH_AFTER_SECONDS) {
+      const { token, maxAge } = buildSessionToken(parsed.email);
+      store.set(COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge,
+      });
+    }
+  } catch {
+    /* refresh is best-effort, don't kill the session over it */
+  }
+  return parsed;
+}
+
+function sessionAgeSeconds(token: string | undefined | null): number | null {
+  if (!token) return null;
+  const [b64] = token.split(".");
+  if (!b64) return null;
+  try {
+    const payload = Buffer.from(b64, "base64url").toString("utf8");
+    const [, expStr] = payload.split("|");
+    const exp = Number(expStr);
+    if (!exp || Number.isNaN(exp)) return null;
+    const issuedAt = exp - SESSION_TTL_SECONDS;
+    return Math.floor(Date.now() / 1000) - issuedAt;
+  } catch {
+    return null;
+  }
 }
 
 export async function setSessionCookie(email: string): Promise<void> {

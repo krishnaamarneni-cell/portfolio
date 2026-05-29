@@ -159,6 +159,16 @@ alter table public.admin_settings
   add column if not exists totp_backup_codes_hashed text[] not null default '{}',
   add column if not exists totp_setup_at timestamptz;
 
+-- ============ Login attempt rate-limiting ============
+create table if not exists public.login_attempts (
+  ip text primary key,
+  count int not null default 1,
+  window_start timestamptz not null default now(),
+  last_attempt timestamptz not null default now()
+);
+alter table public.login_attempts enable row level security;
+-- Service-role only.
+
 -- ============ Personal facts (central truths agents inject into every prompt) ============
 create table if not exists public.personal_facts (
   id uuid primary key default gen_random_uuid(),

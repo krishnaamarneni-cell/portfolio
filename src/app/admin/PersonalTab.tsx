@@ -18,6 +18,7 @@ import {
   FiBook,
   FiInfo,
 } from "react-icons/fi";
+import VoiceMic from "./VoiceMic";
 
 type PersonalNote = {
   id: string;
@@ -237,15 +238,24 @@ export default function PersonalTab({
 
       {/* Quick add */}
       <div className="rounded-2xl border border-[#ff6b00]/20 bg-gradient-to-br from-[#ff6b00]/[0.05] to-transparent p-5 space-y-3">
-        <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
-          Add to notepad
-        </label>
+        <div className="flex items-center justify-between gap-2">
+          <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
+            Add to notepad
+          </label>
+          <VoiceMic
+            size="sm"
+            onText={(text) =>
+              setDraft((d) => (d ? `${d} ${text}` : text))
+            }
+            onError={(msg) => onError(msg)}
+          />
+        </div>
         <textarea
           rows={3}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           className={inputClass + " resize-y leading-relaxed"}
-          placeholder={'e.g. "H1B STEM OPT expires May 5" — dates and tags are auto-detected, or fill the date field below'}
+          placeholder={'e.g. "H1B STEM OPT expires May 5" — dates and tags are auto-detected. Or tap the mic to talk.'}
         />
         <div className="flex items-center gap-2 flex-wrap">
           <input
