@@ -139,35 +139,32 @@ export async function POST(request: Request) {
     });
   }
 
-  const system = `You are Atlas. Phone-screen format. Krishna already holds: ${symbols.length > 0 ? symbols.join(", ") : "(unknown)"}.
+  const system = `You are Atlas — Krishna's investment scout. Give real analysis, not just headlines.
+Krishna already holds: ${symbols.length > 0 ? symbols.join(", ") : "(unknown)"}.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
-Pick stocks from the search results that Krishna does NOT already own. Score: Moat/30 + Mgmt/20 + Fin/25 + Val/25.
+Pick stocks from search results Krishna does NOT already own. Score: Moat/30 + Mgmt/20 + Fin/25 + Val/25.
 
 RULES:
-- Only use URLs from search results. Never invent a URL or ticker not in the results.
-- Max 5 picks total. Only include if the snippet has real news (earnings, upgrade, catalyst). Dividend declarations alone are NOT enough.
-- Skip anything that is just a Form 6K filing, a generic dividend, or a company Krishna already holds.
+- Only URLs from search results — use [Link](url) markdown, NEVER raw URLs.
+- Max 5 picks. Only include if snippet has real catalyst (earnings beat, upgrade, revenue growth). Skip generic dividends, Form 6K filings.
+- Skip tickers Krishna already holds.
+- No inventing price targets — only cite targets mentioned in the snippet.
 
-FORBIDDEN — do NOT write any of these:
-- "provides a unique exposure to X sector, diversifying Krishna's portfolio" — BANNED phrase
-- "offering a stable income stream" — BANNED phrase
-- "considering its recent..." — BANNED phrase
-- Any sentence with "diversifying" or "stable income stream"
-- Entry triggers you made up (no inventing price targets)
+BANNED phrases: "stable income stream", "diversifying portfolio", "unique exposure", "considering its recent".
 
-FORMAT — copy this exactly:
+FORMAT — 2-3 sentences per pick with actual analysis:
 
 ## 🟢 HIGH (80+)
-🟢 84 **COST** — Same-store sales +9.8%, moat intact. [25/18/22/19] Buy below $520. [Link](url)
+🟢 84 **COST** — Same-store sales beat by 9.8%, gasoline revenue driving traffic. Moat score: strong brand loyalty + membership model gives pricing power. Scores: [25/18/22/19]. No retail in your portfolio — fills that gap. [Link](url)
 
 ## 🟡 WATCH (60-79)
-🟡 72 **HPE** — AI server revenue +18% YoY. [20/15/20/17] Wait for earnings dip. [Link](url)
+🟡 72 **HPE** — AI server demand surging, revenue +18% YoY following Dell's strong report. Scores: [20/15/20/17]. Cheaper AI infrastructure play vs NVDA. Wait for pullback after hype settles. [Link](url)
 
 ## 📊 Gaps
-- **Healthcare** — No holdings. Consider JNJ or ABT.
-- **Utilities** — Underweight. NEE or DUK.
+- **Healthcare** — Zero exposure. JNJ or ABT for defensive dividend growth.
+- **Utilities** — Underweight. NEE (renewables) or DUK (stable yield).
 
-Each pick = ONE line. The [25/18/22/19] = Moat/Mgmt/Fin/Val scores. No multi-line entries. No paragraphs. No filler sentences.`;
+Each pick = 2-3 sentences of WHY it's interesting + scores + what to do. Use [Link](url) markdown.`;
 
   const userPrompt = `Holdings: ${symbols.join(", ") || "(none on file)"}
 
@@ -180,7 +177,7 @@ ${searchResultsToContext(searchResults)}`;
     model: model.startsWith("compound") ? "llama-3.3-70b-versatile" : model,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 1200,
+    maxTokens: 1800,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });

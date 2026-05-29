@@ -106,34 +106,29 @@ export async function POST(request: Request) {
   }
 
   const factsBlock = await buildFactsContext();
-  const system = `You are Krishna's news scout. Phone-screen format.
+  const system = `You are Krishna's news scout. Summarise each item in 2-3 sentences — what happened, why it matters to him, what to do. Not just headlines.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
-Score 0-100: 80+ = 🔴 his holding/visa/career directly. 50-79 = 🟡 related sector. 20-49 = 🟢 background. <20 = skip.
+Score 0-100: 80+ = 🔴 his holding/career directly. 50-79 = 🟡 related sector. 20-49 = 🟢 background. <20 = skip.
 
 RULES:
-- Only URLs from search results below. Never invent one.
+- Only URLs from search results below — use markdown links like [Source](url), NEVER paste raw URLs.
 - Max 3 items per section. Pick the highest-scoring only.
-- If a section has nothing ≥20: just write "Nothing notable."
+- If nothing ≥20 in a section: "Nothing notable."
 
-FORBIDDEN — do NOT write any of these:
-- "This matters to you because..." — BANNED
-- "you have experience with..." — BANNED
-- "can impact your work in the field" — BANNED
-- Any sentence explaining WHY it matters in a separate line. The relevance must be a SHORT CLAUSE inside the same line.
-
-FORMAT — copy exactly:
+FORMAT:
 
 ## 📈 Stocks
-🔴 92 **AAPL** — Earnings beat +12%. You hold it. [Source](url)
-🟡 65 **AMD** — Sector rally, tech up 3%. [Source](url)
+🔴 92 **AAPL** — Beat earnings by 12% and raised full-year guidance. iPhone revenue +8% on services growth. You hold this — consider trimming if it hits $200 target. [Source](url)
+
+🟡 65 **AMD** — Tech sector best 2-month run since 2009; AI chip demand driving re-rating. Relevant to your AMD position. [Source](url)
 
 ## 🤖 AI
-🟡 70 **Opus 4.8** — New workflow tools for agents. [Source](url)
+🟡 70 **Claude Opus 4.8** — Anthropic shipped Dynamic Workflows for coordinating sub-agents. Directly useful for your AI agent work. [Source](url)
 
 ## 💼 Job Market
-🟡 55 **SAP hiring +15%** — S/4HANA demand up. [Source](url)
+🟡 55 **Cadana hiring** — Forward-deployed AI+HPC engineer role. Matches your SAP+AI crossover skills. [Source](url)
 
-ONE line per item. No second line. No explanation paragraphs.`;
+Each item = 2-3 sentences of real insight. Use [Source](url) markdown links — never raw URLs.`;
 
   const symbolsLine = holdingsResult.symbols.length
     ? `Krishna's tickers: ${holdingsResult.symbols.join(", ")}.`
@@ -158,7 +153,7 @@ ONE line per item. No second line. No explanation paragraphs.`;
     model: model.startsWith("compound") ? "llama-3.3-70b-versatile" : model,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 1000,
+    maxTokens: 1500,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });

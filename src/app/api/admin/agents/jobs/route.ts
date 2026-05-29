@@ -59,25 +59,25 @@ const PROFILE_KEYWORDS: Record<Profile, string[]> = {
  *  rather than company landing pages. */
 const BROAD_MARKET_QUERIES: Record<Profile, string[]> = {
   sap: [
-    "site:linkedin.com/jobs SAP S/4HANA consultant",
-    "site:indeed.com SAP Ariba implementation",
-    "site:dice.com SAP MM SD analyst remote",
-    "SAP procure-to-pay lead role site:linkedin.com/jobs",
-    "SAP functional consultant master data site:indeed.com",
+    "SAP S/4HANA consultant job opening linkedin",
+    "SAP Ariba implementation analyst indeed job",
+    "SAP MM SD remote job dice careers",
+    "SAP procure-to-pay lead hiring glassdoor",
+    "SAP functional consultant master data job linkedin",
   ],
   software: [
-    "site:linkedin.com/jobs senior AI engineer remote",
-    "site:indeed.com full-stack engineer next.js typescript",
-    "site:linkedin.com/jobs AI agent developer",
-    "site:dice.com solutions architect AI platform",
-    "site:linkedin.com/jobs senior software engineer LLM",
+    "senior AI engineer remote job opening linkedin",
+    "full-stack engineer next.js typescript job indeed",
+    "AI agent developer hiring linkedin careers",
+    "solutions architect AI platform job glassdoor",
+    "senior software engineer LLM job dice careers",
   ],
   both: [
-    "site:linkedin.com/jobs SAP S/4HANA consultant",
-    "site:indeed.com SAP Ariba functional analyst remote",
-    "site:linkedin.com/jobs senior AI engineer",
-    "site:dice.com full-stack engineer LLM",
-    "site:linkedin.com/jobs solutions architect SAP AI",
+    "SAP S/4HANA consultant job opening linkedin",
+    "SAP Ariba functional analyst remote indeed job",
+    "senior AI engineer hiring linkedin careers",
+    "full-stack engineer LLM typescript job indeed",
+    "solutions architect SAP AI job glassdoor",
   ],
 };
 
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
     : companies.map((c) => {
         const kw = keywords.slice(0, 2).join(" OR ");
         const locClause = location ? ` ${location}` : "";
-        return `site:linkedin.com/jobs ${c} (${kw})${locClause}`;
+        return `${c} careers job opening (${kw})${locClause} linkedin indeed`;
       });
 
   // Fire all searches in parallel.
@@ -252,7 +252,7 @@ ${searchBlock}`;
     model: model.startsWith("compound") ? "llama-3.3-70b-versatile" : model,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 1000,
+    maxTokens: 1400,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });
