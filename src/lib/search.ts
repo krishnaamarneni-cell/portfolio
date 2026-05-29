@@ -31,21 +31,26 @@ export type SearchResult = {
   providerErrors?: string[];
 };
 
-export type ProviderName = "tavily" | "brave" | "searxng" | "duckduckgo";
+export type ProviderName = "tavily" | "brave" | "searxng" | "duckduckgo" | "rss";
 
 const PROVIDER_CHAIN: ProviderName[] = [
   "tavily",
   "brave",
   "searxng",
   "duckduckgo",
+  // RSS sits at the bottom of the chain — slower than the search APIs but
+  // never rate-limited or IP-blocked. It saved Lucy's bacon when DDG
+  // returned 403 from Vercel's edge IPs.
+  "rss",
 ];
 
 function isProviderConfigured(p: ProviderName): boolean {
   if (p === "tavily") return !!process.env.TAVILY_API_KEY;
   if (p === "brave") return !!process.env.BRAVE_API_KEY;
   if (p === "searxng") return !!process.env.SEARXNG_URL;
-  // DuckDuckGo is always available — no key needed.
+  // DuckDuckGo and RSS are always available — no key needed.
   if (p === "duckduckgo") return true;
+  if (p === "rss") return true;
   return false;
 }
 
@@ -106,7 +111,34 @@ async function callProvider(
   if (p === "tavily") return tavilySearch(opts);
   if (p === "brave") return braveSearch(opts);
   if (p === "searxng") return searxngSearch(opts);
-  return duckduckgoSearch(opts);
+  if (p === "duckduckgo") return duckduckgoSearch(opts);
+  return rssSearch(opts);
+}
+
+/* ─────────────────────────── RSS aggregator ─────────────────────────── */
+
+/** Bottom-of-chain fallback. Aggregates finance + tech RSS feeds and filters
+ *  by query keywords. Never hits a rate limit or 403 because RSS is designed
+ *  to be polled. */
+async function rssSearch(opts: {
+  query: string;
+  maxResults?: number;
+}): Promise<SearchResult> {
+  // Lazy import — keeps the RSS dependency tree out of every search call.
+  const { FINANCE_FEEDS, TECH_FEEDS, fetchManyFeeds, filterByQuery, rssItemsToSearchResult } =
+    await import("./rss");
+  const isTechLike = /\b(ai|llm|model|software|tool|chip|cloud)\b/i.test(opts.query);
+  const feeds = isTechLike
+    ? [...TECH_FEEDS, ...FINANCE_FEEDS]
+    : [...FINANCE_FEEDS, ...TECH_FEEDS];
+  const items = await fetchManyFeeds(feeds);
+  if (items.length === 0) {
+    throw new Error("RSS aggregator returned no items (every feed failed)");
+  }
+  const filtered = filterByQuery(items, opts.query, opts.maxResults ?? 8);
+  // If no items matched keywords, return the freshest few — better than empty.
+  const final = filtered.length > 0 ? filtered : items.slice(0, opts.maxResults ?? 8);
+  return rssItemsToSearchResult(opts.query, final);
 }
 
 /* ─────────────────────────── Tavily ─────────────────────────── */

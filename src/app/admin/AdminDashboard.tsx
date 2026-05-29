@@ -221,10 +221,14 @@ export default function AdminDashboard({
   return (
     <main
       className="min-h-screen bg-[#050505] text-white relative"
-      // The bottom nav (mobile only) is ~70px tall + safe-area-bottom; pad the
-      // page so content can scroll all the way without being hidden behind it.
       style={{
+        // Bottom nav (mobile only) sits at fixed-bottom — pad content so
+        // it doesn't hide behind it.
         paddingBottom: "calc(72px + env(safe-area-inset-bottom))",
+        // Header is now position:fixed so the iOS keyboard can't auto-scroll
+        // it out of view. Push content down by the header's height so it
+        // doesn't start under the header. 52px chrome + safe-area-top.
+        paddingTop: "calc(52px + env(safe-area-inset-top))",
       }}
     >
       {/* Ambient background */}
@@ -233,9 +237,11 @@ export default function AdminDashboard({
         <div className="absolute bottom-[-10%] right-0 w-[500px] h-[500px] bg-[#ff3d00]/[0.03] rounded-full blur-[150px]" />
       </div>
 
-      {/* Header — compact on mobile, full on desktop */}
+      {/* Header — position:fixed, NOT sticky, so the iOS keyboard can't push
+          the page up and hide it. The main element has paddingTop equal to
+          this header's height so content starts below it. */}
       <header
-        className="sticky top-0 z-30 bg-[#050505]/85 backdrop-blur-xl border-b border-white/[0.06]"
+        className="fixed top-0 left-0 right-0 z-30 bg-[#050505]/85 backdrop-blur-xl border-b border-white/[0.06]"
         // Respect the iPhone notch / status bar.
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >

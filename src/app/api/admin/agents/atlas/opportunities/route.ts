@@ -9,6 +9,12 @@ import {
   type SearchResult,
 } from "@/lib/search";
 import { buildFactsContext } from "@/lib/facts";
+import {
+  fetchManyFeeds,
+  FINANCE_FEEDS,
+  fetchTickerNews,
+  rssItemsToSearchResult,
+} from "@/lib/rss";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,42 +62,62 @@ export async function POST(request: Request) {
     buildFactsContext(),
   ]);
 
-  // ── Search bundles: each bundle = one query asking for Buffett-style picks
-  //    in a category Krishna's portfolio is light on. ──
-  const queries = [
-    "best dividend aristocrat stocks Buffett moat 2025",
-    "undervalued large cap stocks high free cash flow 2025",
-    "healthcare stocks reasonable PE strong moat 2025",
-    "financial sector stocks Buffett style 2025",
-    symbols.length
-      ? `${symbols.slice(0, 5).join(" OR ")} earnings sentiment analyst this week`
-      : "S&P 500 earnings this week",
-  ];
+  // ── Strategy: Lucy's Atlas didn't search the web — it polled Yahoo Finance
+  //    RSS feeds (per-ticker + general business) and let the LLM filter for
+  //    opportunities. Web search APIs get rate-limited or 403'd from Vercel's
+  //    IPs; RSS doesn't.
+  //
+  //    We fan out across:
+  //      1. Yahoo Finance per-ticker RSS for the user's top holdings —
+  //         direct signal about names he already owns
+  //      2. General finance RSS bundle (Yahoo / MarketWatch / CNBC /
+  //         Investing.com / SeekingAlpha / AP Business) — for cross-asset
+  //         opportunities and sector rotation
+  //
+  //    If a search provider key IS set, we ALSO run targeted queries in
+  //    parallel as a bonus — Tavily/Brave hits give us editorial picks
+  //    (Buffett-style screens). ──
+  const tickerNewsPromise = fetchTickerNews(symbols);
+  const generalNewsPromise = fetchManyFeeds(FINANCE_FEEDS.slice(0, 4));
 
-  let searchResults: SearchResult[] = [];
-  try {
-    searchResults = await Promise.all(
-      queries.map((q) =>
-        search({ query: q, maxResults: 5 }).catch(
-          (err): SearchResult => ({
-            query: q,
-            hits: [
-              {
-                title: "Search failed",
-                url: "",
-                snippet: err instanceof Error ? err.message : String(err),
-              },
-            ],
-          })
-        )
-      )
-    );
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Search failed" },
-      { status: 502 }
-    );
-  }
+  const searchQueries =
+    whichSearchProvider() && whichSearchProvider() !== "rss"
+      ? [
+          "best dividend aristocrat stocks Buffett moat 2025",
+          "undervalued large cap stocks high free cash flow",
+          "sector rotation healthcare financial 2025",
+        ]
+      : [];
+  const searchPromises = searchQueries.map((q) =>
+    search({ query: q, maxResults: 5 }).catch(
+      (err): SearchResult => ({
+        query: q,
+        hits: [],
+        providerErrors: [
+          err instanceof Error ? err.message.slice(0, 120) : "failed",
+        ],
+      })
+    )
+  );
+
+  const [tickerNews, generalNews, ...editorialResults] = await Promise.all([
+    tickerNewsPromise,
+    generalNewsPromise,
+    ...searchPromises,
+  ]);
+
+  // Convert RSS lists into SearchResult shape so the existing context
+  // formatter works.
+  const tickerResult = rssItemsToSearchResult(
+    `Per-ticker headlines (${symbols.length} holdings)`,
+    tickerNews.slice(0, 24)
+  );
+  const generalResult = rssItemsToSearchResult(
+    "General business / market news",
+    generalNews.slice(0, 12)
+  );
+
+  let searchResults: SearchResult[] = [tickerResult, generalResult, ...editorialResults];
   searchResults = searchResults.map((r) => ({
     ...r,
     hits: r.hits.filter((h) => h.url && /^https?:\/\//i.test(h.url)),
@@ -180,7 +206,9 @@ ${searchResultsToContext(searchResults)}`;
     context: {
       symbols,
       symbolCount: symbols.length,
-      queries,
+      tickerNewsItems: tickerNews.length,
+      generalNewsItems: generalNews.length,
+      editorialSearchQueries: searchQueries,
       provider: whichSearchProvider(),
       model: result.modelUsed ?? model,
       modelRequested: model,

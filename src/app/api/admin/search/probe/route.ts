@@ -196,6 +196,43 @@ export async function GET(request: Request) {
     probes.push(probe);
   }
 
+  // RSS — Yahoo Finance index. Sanity-checks the feed pipeline.
+  {
+    const probe: ProbeResult = { provider: "rss-yahoo-finance", configured: true };
+    const t0 = Date.now();
+    try {
+      const { fetchRssFeed } = await import("@/lib/rss");
+      const items = await fetchRssFeed(
+        "https://finance.yahoo.com/news/rssindex",
+        "yahoo_finance"
+      );
+      probe.ms = Date.now() - t0;
+      probe.ok = items.length > 0;
+      probe.hitCount = items.length;
+      probe.firstUrl = items[0]?.link;
+      if (!probe.ok) probe.error = "feed returned 0 items (network or parse)";
+    } catch (err) {
+      probe.error = err instanceof Error ? err.message : "failed";
+    }
+    probes.push(probe);
+  }
+  {
+    const probe: ProbeResult = { provider: "rss-yahoo-ticker(AAPL)", configured: true };
+    const t0 = Date.now();
+    try {
+      const { fetchRssFeed, yahooTickerFeedUrl } = await import("@/lib/rss");
+      const items = await fetchRssFeed(yahooTickerFeedUrl("AAPL"), "yahoo_AAPL");
+      probe.ms = Date.now() - t0;
+      probe.ok = items.length > 0;
+      probe.hitCount = items.length;
+      probe.firstUrl = items[0]?.link;
+      if (!probe.ok) probe.error = "ticker feed returned 0 items";
+    } catch (err) {
+      probe.error = err instanceof Error ? err.message : "failed";
+    }
+    probes.push(probe);
+  }
+
   const anyOk = probes.some((p) => p.ok && (p.hitCount ?? 0) > 0);
 
   return NextResponse.json({
