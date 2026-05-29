@@ -14,6 +14,7 @@ import {
 } from "react-icons/fi";
 import type { Connector } from "@/lib/content-types";
 import TwoFactorCard from "./TwoFactorCard";
+import FaceLockCard from "./FaceLockCard";
 
 type Props = {
   onSuccess: (msg: string) => void;
@@ -168,15 +169,19 @@ export default function ConnectorsEditor({ onSuccess, onError }: Props) {
   return (
     <section>
       <div className="mb-6">
-        <h2 className="text-xl font-bold">Connectors</h2>
+        <h2 className="text-xl font-bold">Settings</h2>
         <p className="text-xs text-[#666] mt-1">
-          Plug external read-only APIs (like WealthClaude) into the admin so
-          the Chat tab can pull live data into its answers.
+          Security (2FA, Face Lock, trusted devices, backups) + connected
+          services (Buffer, WealthClaude, Gmail). Everything that's not
+          content.
         </p>
       </div>
 
-      {/* 2FA — top of the page so it's never missed */}
+      {/* 2FA + backup — top of the page so it's never missed */}
       <TwoFactorCard onSuccess={onSuccess} onError={onError} />
+
+      {/* Face Lock + Trusted devices */}
+      <FaceLockCard onSuccess={onSuccess} onError={onError} />
 
       {/* Gmail — handled separately because it uses OAuth, not a static bearer token */}
       <div className="mt-6">

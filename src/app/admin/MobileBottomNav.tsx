@@ -28,23 +28,23 @@ export type Tab =
   | "connectors"
   | "chat";
 
-/** Five-slot bottom bar visible only on small screens. The first four are the
- *  most-used surfaces; "More" opens a sheet with the rest. Designed to feel
- *  native: 48px+ hit targets, safe-area padding, active-tab highlight. */
+/** Five-slot bottom bar. Order chosen for daily-touch frequency:
+ *  Chat → Life → Social → Agents → More. iPhone 15/16 widths (393-440px)
+ *  give ~78-88px per slot which fits a 22px icon + 11px label comfortably. */
 const PRIMARY: Array<{ id: Tab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
-  { id: "personal", label: "Life", icon: FiHeart },
-  { id: "thoughts", label: "Notes", icon: FiZap },
   { id: "chat", label: "Chat", icon: FiMessageSquare },
+  { id: "personal", label: "Life", icon: FiHeart },
+  { id: "social", label: "Social", icon: FiShare2 },
   { id: "agents", label: "Agents", icon: FiCpu },
 ];
 
 const SECONDARY: Array<{ id: Tab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "content", label: "Site Content", icon: FiLayout },
+  { id: "thoughts", label: "Notes", icon: FiZap },
   { id: "jobs", label: "Jobs", icon: FiBriefcase },
   { id: "projects", label: "Projects", icon: FiFolder },
-  { id: "social", label: "Social", icon: FiShare2 },
   { id: "analytics", label: "Analytics", icon: FiBarChart2 },
-  { id: "connectors", label: "Connectors", icon: FiLink },
+  { id: "connectors", label: "Settings", icon: FiLink },
 ];
 
 export default function MobileBottomNav({
@@ -60,9 +60,9 @@ export default function MobileBottomNav({
 
   return (
     <>
-      {/* Bottom bar */}
+      {/* Bottom bar — iOS-style frosted glass, 49pt tab height + safe area */}
       <nav
-        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0a0a0a]/95 backdrop-blur-xl border-t border-white/[0.08]"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0a0a0a]/80 backdrop-blur-2xl border-t border-white/[0.08]"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="grid grid-cols-5">
@@ -74,20 +74,22 @@ export default function MobileBottomNav({
                 key={item.id}
                 type="button"
                 onClick={() => onSelect(item.id)}
-                className={`flex flex-col items-center gap-0.5 py-2.5 ${on ? "text-[#ff8c38]" : "text-[#888]"}`}
+                className={`flex flex-col items-center gap-1 py-2.5 active:scale-95 transition-transform ${on ? "text-[#ff8c38]" : "text-[#999]"}`}
               >
-                <Icon size={20} />
-                <span className="text-[10px] font-medium">{item.label}</span>
+                <Icon size={22} />
+                <span className="text-[11px] font-medium tracking-tight">
+                  {item.label}
+                </span>
               </button>
             );
           })}
           <button
             type="button"
             onClick={() => setMoreOpen(true)}
-            className={`flex flex-col items-center gap-0.5 py-2.5 ${moreContainsActive ? "text-[#ff8c38]" : "text-[#888]"}`}
+            className={`flex flex-col items-center gap-1 py-2.5 active:scale-95 transition-transform ${moreContainsActive ? "text-[#ff8c38]" : "text-[#999]"}`}
           >
-            <FiMoreHorizontal size={20} />
-            <span className="text-[10px] font-medium">More</span>
+            <FiMoreHorizontal size={22} />
+            <span className="text-[11px] font-medium tracking-tight">More</span>
           </button>
         </div>
       </nav>

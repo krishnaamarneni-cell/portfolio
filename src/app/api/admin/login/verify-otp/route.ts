@@ -5,12 +5,14 @@ import {
   readPreauthCookie,
   verifyLoginCode,
 } from "@/lib/totp";
+import { trustThisDevice } from "@/lib/trusted-devices";
+import { clientIpFromRequest } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  let body: { code?: string };
+  let body: { code?: string; trustDevice?: boolean; deviceLabel?: string };
   try {
     body = await request.json();
   } catch {
@@ -20,8 +22,6 @@ export async function POST(request: Request) {
   if (!code) {
     return NextResponse.json({ error: "Code is required" }, { status: 400 });
   }
-  // Make sure the password step really happened — without a valid pre-auth
-  // cookie there's nothing to grant.
   const email = await readPreauthCookie();
   if (!email) {
     return NextResponse.json(
@@ -34,11 +34,21 @@ export async function POST(request: Request) {
     await new Promise((r) => setTimeout(r, 400));
     return NextResponse.json({ error: result.error }, { status: 401 });
   }
-  // Grant the actual admin session, drop the pre-auth crumbs.
   await setSessionCookie(email);
   await clearPreauthCookie();
+  // Remember this device so the next 30 days of logins skip the OTP step.
+  if (body.trustDevice) {
+    const ip = clientIpFromRequest(request);
+    const userAgent = request.headers.get("user-agent") ?? null;
+    await trustThisDevice({
+      label: body.deviceLabel,
+      ip,
+      userAgent: userAgent ?? undefined,
+    }).catch(() => undefined);
+  }
   return NextResponse.json({
     ok: true,
     usedBackup: result.usedBackup,
+    trustedDevice: !!body.trustDevice,
   });
 }

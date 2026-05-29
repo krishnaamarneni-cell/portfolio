@@ -7,6 +7,7 @@ import {
 import { createSupabaseServerClient } from "@/lib/supabase-ssr";
 import { getTotpStatus, setPreauthCookie } from "@/lib/totp";
 import { checkRateLimit, clientIpFromRequest } from "@/lib/rate-limit";
+import { isDeviceTrusted } from "@/lib/trusted-devices";
 
 export async function POST(request: Request) {
   // Per-IP rate-limit BEFORE any expensive work — prevents brute-force
@@ -85,10 +86,18 @@ export async function POST(request: Request) {
           { status: 401 }
         );
       }
-      // ── If 2FA is on, immediately sign out so the Supabase session ISN'T
-      //    granted yet. Set a short-lived pre-auth cookie instead — the OTP
-      //    verification step will re-establish the session. ──
+      // ── If 2FA is on, check whether this device is already trusted ──
       if (totp?.enabled) {
+        const trusted = await isDeviceTrusted().catch(() => false);
+        if (trusted) {
+          // Skip OTP — the Supabase session stays live.
+          return NextResponse.json({
+            ok: true,
+            source: "supabase",
+            skippedOtp: true,
+          });
+        }
+        // Otherwise drop the Supabase session and wait for the code.
         await supabase.auth.signOut().catch(() => undefined);
         await setPreauthCookie(email);
         return NextResponse.json({

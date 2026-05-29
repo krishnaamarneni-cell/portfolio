@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -23,10 +23,60 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
+  const [trustDevice, setTrustDevice] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [faceLockAvailable, setFaceLockAvailable] = useState(false);
+  const [faceBusy, setFaceBusy] = useState(false);
+
+  // Probe whether any Face Lock credential is enrolled — controls whether to
+  // show the "Sign in with Face ID" shortcut.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.PublicKeyCredential) return;
+    fetch("/api/admin/webauthn/credentials", { method: "HEAD" })
+      .then((r) => setFaceLockAvailable(r.ok))
+      .catch(() => undefined);
+  }, []);
+
+  async function onFaceLock() {
+    setError(null);
+    setFaceBusy(true);
+    try {
+      const r = await fetch("/api/admin/webauthn/authenticate");
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.options) {
+        setError(j.error || "Face Lock unavailable");
+        setFaceBusy(false);
+        return;
+      }
+      const { startAuthentication } = await import("@simplewebauthn/browser");
+      const assertion = await startAuthentication({ optionsJSON: j.options });
+      const r2 = await fetch("/api/admin/webauthn/authenticate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response: assertion }),
+      });
+      const j2 = await r2.json().catch(() => ({}));
+      if (!r2.ok) {
+        setError(j2.error || "Face Lock failed");
+        setFaceBusy(false);
+        return;
+      }
+      router.push("/admin");
+      router.refresh();
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.name === "NotAllowedError"
+          ? "Cancelled"
+          : err instanceof Error
+          ? err.message
+          : "Failed";
+      setError(msg);
+      setFaceBusy(false);
+    }
+  }
 
   async function onSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -70,7 +120,12 @@ export default function AdminLoginPage() {
       const res = await fetch("/api/admin/login/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: otp.trim() }),
+        body: JSON.stringify({
+          code: otp.trim(),
+          trustDevice,
+          deviceLabel:
+            typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 80) : undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -223,6 +278,27 @@ export default function AdminLoginPage() {
                   {submitting ? "Signing in…" : "Sign in"}
                   {!submitting && <FiArrowRight size={14} />}
                 </button>
+
+                {faceLockAvailable && (
+                  <>
+                    <div className="flex items-center gap-3 my-1">
+                      <span className="flex-1 h-px bg-white/[0.06]" />
+                      <span className="text-[10px] uppercase tracking-widest text-[#666]">
+                        or
+                      </span>
+                      <span className="flex-1 h-px bg-white/[0.06]" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onFaceLock}
+                      disabled={faceBusy}
+                      className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/[0.04] border border-blue-500/30 text-blue-300 font-semibold text-sm hover:bg-blue-500/10 disabled:opacity-50"
+                    >
+                      <span aria-hidden>🙂</span>
+                      {faceBusy ? "Waiting for Face ID…" : "Sign in with Face ID"}
+                    </button>
+                  </>
+                )}
               </form>
             </>
           ) : mode === "otp" ? (
@@ -292,6 +368,21 @@ export default function AdminLoginPage() {
                   </div>
                 )}
 
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={trustDevice}
+                    onChange={(e) => setTrustDevice(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-[#ff6b00]"
+                  />
+                  <span className="text-xs text-[#bbb] leading-relaxed">
+                    <strong className="text-white">Trust this device for 30 days</strong>
+                    <br />
+                    Skip the OTP step here for the next month. Revoke any time
+                    in Settings.
+                  </span>
+                </label>
+
                 <button
                   type="submit"
                   disabled={submitting || !otp.trim()}
@@ -302,8 +393,8 @@ export default function AdminLoginPage() {
                 </button>
 
                 <p className="text-[10px] text-[#666] leading-relaxed">
-                  This pre-auth session lasts 5 minutes. If you take longer,
-                  go back and enter your password again.
+                  Pre-auth lasts 5 minutes. If you take longer, go back and
+                  enter your password again.
                 </p>
               </form>
             </>

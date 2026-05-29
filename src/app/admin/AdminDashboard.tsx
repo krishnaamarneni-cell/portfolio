@@ -212,7 +212,7 @@ export default function AdminDashboard({
     { id: "analytics" as const, label: "Analytics", icon: FiBarChart2, hint: "Buffer post performance" },
     { id: "agents" as const, label: "Agents", icon: FiCpu, hint: "News + Jobs scouts" },
     { id: "personal" as const, label: "Life", icon: FiHeart, hint: "Notepad + Life agent" },
-    { id: "connectors" as const, label: "Connectors", icon: FiLink, hint: "Buffer + WealthClaude + Gmail" },
+    { id: "connectors" as const, label: "Settings", icon: FiLink, hint: "2FA, Face Lock, connectors, devices" },
     { id: "chat" as const, label: "Chat", icon: FiMessageSquare, hint: "Talk to your data with Groq" },
   ];
 

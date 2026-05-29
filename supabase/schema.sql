@@ -169,6 +169,32 @@ create table if not exists public.login_attempts (
 alter table public.login_attempts enable row level security;
 -- Service-role only.
 
+-- ============ Trusted devices (skip OTP for 30 days on known device) ============
+create table if not exists public.trusted_devices (
+  id uuid primary key default gen_random_uuid(),
+  token_hashed text not null unique,
+  device_label text,
+  ip text,
+  user_agent text,
+  last_used_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+create index if not exists trusted_devices_expires_idx on public.trusted_devices (expires_at);
+alter table public.trusted_devices enable row level security;
+
+-- ============ WebAuthn credentials (Face ID / Touch ID / Passkeys) ============
+create table if not exists public.webauthn_credentials (
+  id text primary key,
+  public_key text not null,
+  counter bigint not null default 0,
+  device_label text,
+  transports text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz
+);
+alter table public.webauthn_credentials enable row level security;
+
 -- ============ Personal facts (central truths agents inject into every prompt) ============
 create table if not exists public.personal_facts (
   id uuid primary key default gen_random_uuid(),
