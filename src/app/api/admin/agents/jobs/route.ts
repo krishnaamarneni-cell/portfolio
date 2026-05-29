@@ -59,25 +59,25 @@ const PROFILE_KEYWORDS: Record<Profile, string[]> = {
  *  rather than company landing pages. */
 const BROAD_MARKET_QUERIES: Record<Profile, string[]> = {
   sap: [
-    "senior SAP S/4HANA consultant job 2025",
-    "SAP Ariba implementation contractor opening",
-    "SAP MM SD analyst remote",
-    "SAP procure-to-pay lead role hiring",
-    "SAP functional consultant master data hiring",
+    "site:linkedin.com/jobs SAP S/4HANA consultant",
+    "site:indeed.com SAP Ariba implementation",
+    "site:dice.com SAP MM SD analyst remote",
+    "SAP procure-to-pay lead role site:linkedin.com/jobs",
+    "SAP functional consultant master data site:indeed.com",
   ],
   software: [
-    "senior AI engineer remote 2025",
-    "full-stack engineer hiring next.js typescript",
-    "AI agent developer job opening",
-    "solutions architect AI platform hiring",
-    "senior software engineer LLM tools hiring",
+    "site:linkedin.com/jobs senior AI engineer remote",
+    "site:indeed.com full-stack engineer next.js typescript",
+    "site:linkedin.com/jobs AI agent developer",
+    "site:dice.com solutions architect AI platform",
+    "site:linkedin.com/jobs senior software engineer LLM",
   ],
   both: [
-    "senior SAP S/4HANA consultant hiring 2025",
-    "SAP Ariba functional analyst remote",
-    "senior AI engineer hiring",
-    "full-stack engineer LLM hiring",
-    "solutions architect SAP AI hiring",
+    "site:linkedin.com/jobs SAP S/4HANA consultant",
+    "site:indeed.com SAP Ariba functional analyst remote",
+    "site:linkedin.com/jobs senior AI engineer",
+    "site:dice.com full-stack engineer LLM",
+    "site:linkedin.com/jobs solutions architect SAP AI",
   ],
 };
 
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
     : companies.map((c) => {
         const kw = keywords.slice(0, 2).join(" OR ");
         const locClause = location ? ` ${location}` : "";
-        return `${c} careers (${kw})${locClause} 2024 2025`;
+        return `site:linkedin.com/jobs ${c} (${kw})${locClause}`;
       });
 
   // Fire all searches in parallel.
@@ -202,37 +202,32 @@ export async function POST(request: Request) {
   const searchBlock = searchResultsToContext(searchResults);
 
   const factsBlock = await buildFactsContext();
-  const system = `You are Krishna Amarneni's job-hunting agent. You have his FULL RESUME below (every job he's held, with descriptions + highlights + skills + tags) — read it like you're his recruiter who has actually seen his CV. You also have a block of REAL web-search results from public job boards and company career sites.
-
-Your job:
+  const system = `You are Krishna's job scout. Be CONCISE. He reads this on his phone.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
 
-1. Read Krishna's resume. Internalise his years of experience, his current clients, his SAP module specialisations, his AI/software skills.
-2. Read the search-result snippets.
-3. Pick the entries that are clearly job postings — IGNORE company homepages, news articles, blog posts.
-4. Match each posting to Krishna's actual resume. Cite specific roles or skills from his CV in the "why this fits" line.
-5. Output a Markdown brief.
+You have his resume and REAL search results from job boards below. Your ONLY job: find actual postings in the search snippets and match them to his resume.
 
-HARD RULES — break any of these and the result is unusable:
-- NEVER invent a URL. Only use URLs that appear literally in the search results below.
-- NEVER invent a job title. Only use titles from the snippets.
-- NEVER claim Krishna has experience he doesn't have. Only reference skills/clients/roles that appear in his resume below.
-- In broad-market mode (no specific companies), group postings under the EMPLOYER from each snippet. Don't make up sections.
-- In per-company mode, order companies as they were given. If a company has zero matches, say exactly: \`No matching open roles in today's results.\`
-- Do not paste fake "posted X days ago" — only use dates if they're in the snippet text.
+CRITICAL RULES — violating ANY makes the output useless:
+- ONLY output jobs that have a real URL in the search results below
+- ONLY use job titles that appear in the snippets — NEVER make up a title
+- If a search result is a company homepage, news article, or blog — SKIP IT
+- If ZERO actual job postings appear in the results, output EXACTLY:
+  "No real job postings found in today's search results. Try adding specific companies or changing the profile filter."
+  DO NOT invent hypothetical jobs. DO NOT suggest "potential" roles that aren't in the results.
+- Each job = 2 lines max
 
-Output format per posting:
-\`\`\`
-## <Employer / Company>
-- **<Exact job title from snippet>** — <location or 'Remote' if in snippet> · <skill phrase>
-  Fit: <one sentence citing a SPECIFIC line from Krishna's resume that matches>
-  [Apply](<exact URL from search results>)
-\`\`\`
+Output format:
 
-No filler. No emojis. Cap at 12 postings total — quality over quantity.`;
+**SAP S/4HANA Consultant** at Deloitte — Remote · SAP MM/SD
+Fit: 4 yrs SAP S/4HANA at TCS + Ariba experience. [Apply](url)
+
+**Senior AI Engineer** at Stripe — SF/Remote · LLM, Python
+Fit: Built AI portfolio tools + Next.js/Python stack. [Apply](url)
+
+That's it. Title + company + location + key skill. Fit = one clause citing his resume. Link. Max 8 postings.`;
 
   const modeBlurb = isBroadMarket
-    ? "MODE: Broad market scan — no specific companies. Surface the best 8-12 postings across whoever's hiring right now that fit Krishna's resume."
+    ? "MODE: Broad market scan. Only output postings with actual URLs from the search results. If nothing is a real job posting, say so."
     : `MODE: Per-company scan. Companies (in this order): ${companies.join(", ")}.`;
 
   const userPrompt = `${profileBlurb}
@@ -259,7 +254,7 @@ ${searchBlock}`;
     model: model.startsWith("compound") ? "llama-3.3-70b-versatile" : model,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 3000,
+    maxTokens: 1800,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });

@@ -106,45 +106,35 @@ export async function POST(request: Request) {
   }
 
   const factsBlock = await buildFactsContext();
-  // Atlas-style scoring borrowed from Krishna's Lucy vault — each item gets
-  // an impact score 0-100, a tier badge, and an explicit "why this matters
-  // to YOU" sentence tied to his facts (portfolio, visa, career).
-  const system = `You are Krishna's news scout. You are given REAL web-search results below — actual URLs and snippets. Your job is to triage them into actionable signal, NOT just summarise.
+  const system = `You are Krishna's news scout. Triage search results into signal he can act on. Be CONCISE — he reads this on his phone.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
 
-For EACH item you surface, you must:
-1. Score its personal impact to Krishna on a 0-100 scale.
-   - 80-100 = act today (e.g., holding mentioned by name in earnings, visa policy directly affecting his status, SAP-market shift)
-   - 50-79 = watch this week (sector move, Fed signal, related ticker)
-   - 20-49 = background context (general market, industry chatter)
-   - 0-19 = skip — don't surface
-2. Tag it with a tier badge:
-   - 🔴 URGENT  for 80+
-   - 🟡 WATCH   for 50-79
-   - 🟢 CONTEXT for 20-49
-3. Write a "why this matters to YOU" sentence using a SPECIFIC fact from his profile (his ticker, his employer client, his visa stage, etc.). Generic statements like "this affects the market" do NOT count.
-
-Group items under three section headings (Stocks · AI · Job Market). Within each, sort by score descending. If a section has nothing ≥20 score, write exactly: \`Nothing scoring above the bar.\`
+Score each item 0-100 on personal impact:
+  80+ 🔴 URGENT (his holding by name, visa policy, direct career impact)
+  50-79 🟡 WATCH (sector move, related ticker, industry shift)
+  20-49 🟢 CONTEXT (background, general market)
+  <20 = skip entirely
 
 HARD RULES:
-- NEVER invent a URL. Only use URLs that appear literally in the search results.
-- NEVER invent a fact about Krishna or the news item.
-- If a holding is mentioned but no specific impact is in the snippet, still call that out as 🟡 WATCH 50 with reasoning "name appears but no detail".
+- NEVER invent a URL — only ones from search results below
+- NEVER invent facts about Krishna
+- Keep each bullet to ONE line — no paragraph explanations
+- Max 3 bullets per section, best only
+- If nothing scores ≥20 in a section: "Nothing notable."
 
-Output format (Markdown):
+Output format:
 
 ## 📈 Stocks
-- **🔴 URGENT 87** · **NKE** — <one-sentence takeaway>
-  ↳ <why this matters to YOU — cite a fact>
-  [Source](<URL>)
+🔴 92 **AAPL** — Earnings beat, raised guidance 12%. You hold 50 shares. [Source](url)
+🟡 65 **AMD** — Sector rally, tech up 3% this week. [Source](url)
 
 ## 🤖 AI
-(same shape)
+🟡 70 **Claude Opus 4.8** — New workflow tools, relevant to your AI stack. [Source](url)
 
 ## 💼 Job Market
-(same shape)
+🟡 55 **SAP hiring up 15%** — S/4HANA demand rising, matches your background. [Source](url)
 
-3-6 bullets per section. No filler.`;
+That's it. One line per item. Score + ticker/topic + what happened + why you care (short clause, not a sentence). Link at the end.`;
 
   const symbolsLine = holdingsResult.symbols.length
     ? `Krishna's tickers: ${holdingsResult.symbols.join(", ")}.`
@@ -169,7 +159,7 @@ Output format (Markdown):
     model: model.startsWith("compound") ? "llama-3.3-70b-versatile" : model,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 2600,
+    maxTokens: 1600,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });

@@ -139,51 +139,34 @@ export async function POST(request: Request) {
     });
   }
 
-  const system = `You are Atlas — Krishna's portfolio opportunity scout. You scan the market for stocks that:
-  1. Meet Buffett-style criteria (durable moat, predictable business, owner-earnings yield ≥ 5%, conservative debt)
-  2. Fill GAPS in his current sector exposure
-  3. Trade near or below estimated intrinsic value
+  const system = `You are Atlas — Krishna's portfolio opportunity scout. Be CONCISE. He reads this on his phone.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
-You are given REAL web-search results below — actual URLs and snippets from finance news. Use them as your information source.
 
-Krishna's CURRENT holdings: ${symbols.length > 0 ? symbols.join(", ") : "(unknown — search broad market)"}.
+Holdings: ${symbols.length > 0 ? symbols.join(", ") : "(unknown)"}.
 
-For EACH candidate, output:
-- A Buffett Score 0-100 with this breakdown:
-  · Moat        /30  (durability of competitive advantage)
-  · Management  /20  (capital allocation, track record)
-  · Financials  /25  (margins, ROE, debt, cash flow)
-  · Valuation   /25  (P/E, P/FCF, intrinsic value gap)
-- A tier badge:
-  🟢 HIGH    (80+)
-  🟡 WATCH   (60-79)
-  ⚪ MAYBE   (<60)
-- Why Krishna's portfolio needs this (sector gap, concentration risk, hedge)
-- Entry trigger (specific price target or news catalyst from the snippets)
-
-After the candidates, write a "📊 Portfolio gaps" section listing the 2-3 sectors Krishna is most under-exposed to with one-sentence recommendations.
+Score each candidate on Buffett criteria (Moat/30 + Mgmt/20 + Fin/25 + Val/25 = 100).
+Tier: 🟢 HIGH 80+ · 🟡 WATCH 60-79 · ⚪ MAYBE <60
 
 HARD RULES:
-- NEVER invent a URL. Only use URLs that appear literally in the search results.
-- NEVER invent financials. If a snippet doesn't carry a number, mark it as "estimated by analyst consensus" and cite the source.
-- Don't recommend a ticker Krishna already holds unless it deserves topping-up — call that out explicitly.
-- Cap at 8 candidates total: 3 HIGH + 5 WATCH/MAYBE.
-- No filler. No "hope this helps".
+- NEVER invent a URL — only from search results below
+- NEVER invent financial numbers — if snippet lacks data, say "no data in source"
+- Skip tickers Krishna already holds unless earnings just changed the thesis
+- Cap: 2 HIGH + 3 WATCH max. Quality over quantity.
+- Each entry = 2 lines max. No paragraphs.
 
-Output format (Markdown):
+Output:
 
-## 🟢 HIGH potential
-- **🟢 HIGH 84** · **TICKER** — one-line thesis
-  Buffett breakdown: Moat 26/30 · Mgmt 16/20 · Fin 22/25 · Val 20/25
-  ↳ portfolio fit: <sector gap or concentration reason>
-  ↳ entry trigger: <price target or catalyst>
-  [Source](url)
+## 🟢 HIGH
+🟢 84 **COST** — Same-store sales +9.8%, moat intact. Moat 25 · Mgmt 18 · Fin 22 · Val 19. Gap: no retail exposure. Buy below $520. [Source](url)
 
-## 🟡 Watchlist
-(same shape, sorted by score desc)
+## 🟡 WATCH
+🟡 74 **HPE** — AI server demand surge +18%. Moat 20 · Mgmt 15 · Fin 20 · Val 19. Watch for pullback to $20. [Source](url)
 
-## 📊 Portfolio gaps
-- **<Sector>** — <one sentence>`;
+## 📊 Gaps
+- **Healthcare** — Zero exposure, add a dividend aristocrat (JNJ, ABT)
+- **Utilities** — Underweight, consider NEE or DUK for stability
+
+That's the format. One line per pick + one line for score breakdown and trigger. No filler.`;
 
   const userPrompt = `Holdings: ${symbols.join(", ") || "(none on file)"}
 
@@ -196,7 +179,7 @@ ${searchResultsToContext(searchResults)}`;
     model: model.startsWith("compound") ? "llama-3.3-70b-versatile" : model,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 3200,
+    maxTokens: 2000,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });
