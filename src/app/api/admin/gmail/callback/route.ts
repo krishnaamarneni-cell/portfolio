@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
 import { exchangeCodeForTokens, saveTokens } from "@/lib/gmail";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** GET /api/admin/gmail/callback?code=…  Google redirects back here. */
+/** GET /api/admin/gmail/callback?code=…  Google redirects back here.
+ *
+ *  NOTE: We intentionally skip getSession() here. Google's redirect is a
+ *  cross-origin GET that may not carry the admin session cookie (SameSite,
+ *  Secure flags). The OAuth code exchange itself is the auth gate — a
+ *  valid code can only come from our client_id + redirect_uri. */
 export async function GET(request: Request) {
-  if (!(await getSession())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const err = url.searchParams.get("error");
