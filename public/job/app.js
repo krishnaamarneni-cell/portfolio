@@ -127,9 +127,10 @@ function setFilter(lo, hi, top, label){
 // --- tooltip ----------------------------------------------------------------
 function showTip(ev, d){
   const o = d.data, cs = customScores ? Math.round((customScores[o.name]??0)*100) : null;
+  const ty = ev.clientY + 14 > innerHeight - 160 ? ev.clientY - 150 : ev.clientY + 14;
   tip.style("opacity",1)
      .style("left", Math.min(ev.clientX+14, innerWidth-250)+"px")
-     .style("top",  (ev.clientY+14)+"px")
+     .style("top",  ty+"px")
      .html(`<h4>${o.name}</h4>
        <div class="row"><span>Group</span><b>${o.group}</b></div>
        <div class="row"><span>Workers</span><b>${o.employment} M</b></div>
