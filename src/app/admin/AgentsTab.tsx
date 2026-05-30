@@ -10,6 +10,7 @@ import {
   FiClock,
   FiCpu,
   FiTarget,
+  FiMail,
 } from "react-icons/fi";
 import { AGENT_MODELS, DEFAULT_AGENT_MODEL } from "@/lib/agents";
 
@@ -19,7 +20,7 @@ type AgentState = {
   context?: Record<string, unknown>;
 };
 
-type AgentKey = "news" | "jobs" | "opportunities";
+type AgentKey = "news" | "jobs" | "opportunities" | "inbox";
 
 const CACHE_PREFIX = "krishna_admin_agent_";
 
@@ -74,6 +75,12 @@ export default function AgentsTab({
   const [oppState, setOppState] = useState<AgentState | null>(null);
   const [oppBusy, setOppBusy] = useState(false);
   const [oppError, setOppError] = useState<string | null>(null);
+  // Email Intelligence
+  const [inboxState, setInboxState] = useState<AgentState | null>(null);
+  const [inboxBusy, setInboxBusy] = useState(false);
+  const [inboxError, setInboxError] = useState<string | null>(null);
+  const [inboxDays, setInboxDays] = useState(3);
+
   // Empty by default = broad market scan (the agent now runs without
   // specific companies). User can paste a comma-separated list to narrow.
   const [companiesText, setCompaniesText] = useState("");
@@ -85,6 +92,7 @@ export default function AgentsTab({
     setNewsState(loadCached("news"));
     setJobsState(loadCached("jobs"));
     setOppState(loadCached("opportunities"));
+    setInboxState(loadCached("inbox"));
     try {
       const saved = window.localStorage.getItem("krishna_admin_agent_model");
       if (saved) setModel(saved);
@@ -212,6 +220,37 @@ export default function AgentsTab({
     setOppBusy(false);
   }
 
+  async function runInbox() {
+    setInboxBusy(true);
+    setInboxError(null);
+    try {
+      const r = await fetch("/api/admin/agents/inbox", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, days: inboxDays }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setInboxError(data.error || "Inbox agent failed");
+        onError(data.error || "Inbox agent failed");
+      } else {
+        const next: AgentState = {
+          markdown: data.markdown || "",
+          runAt: Date.now(),
+          context: data.context,
+        };
+        setInboxState(next);
+        persistCached("inbox", next);
+        onSuccess("Inbox scan done");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      setInboxError(msg);
+      onError(msg);
+    }
+    setInboxBusy(false);
+  }
+
   return (
     <section className="space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -291,6 +330,75 @@ export default function AgentsTab({
           </div>
         ) : !newsState && !newsBusy && !newsError ? (
           <EmptyHint icon={FiTrendingUp} text="No run yet — hit Run." />
+        ) : null}
+      </div>
+
+      {/* Email Intelligence */}
+      <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5 space-y-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="w-9 h-9 rounded-xl bg-sky-500/15 text-sky-300 flex items-center justify-center">
+            <FiMail size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-white">Email Intelligence</h3>
+            <p className="text-[11px] text-[#666]">
+              Reads your inbox, categorizes every email, and flags job matches
+              &gt;70% against your resume.
+            </p>
+          </div>
+          {inboxState && (
+            <span className="text-[10px] font-mono text-[#666] flex items-center gap-1">
+              <FiClock size={10} />
+              {relTime(inboxState.runAt)}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={runInbox}
+            disabled={inboxBusy}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-sky-500 to-cyan-500 text-white font-bold text-xs shadow-[0_4px_15px_rgba(14,165,233,0.35)] hover:scale-[1.03] disabled:opacity-60"
+          >
+            <FiZap size={12} />
+            {inboxBusy ? "Scanning..." : inboxState ? "Re-scan" : "Scan inbox"}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
+            Scan last
+          </label>
+          <div className="flex gap-1.5">
+            {[1, 3, 7].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setInboxDays(d)}
+                className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                  inboxDays === d
+                    ? "bg-sky-500/15 border-sky-500/40 text-sky-300"
+                    : "bg-white/[0.04] border-white/[0.08] text-[#999] hover:border-sky-500/30"
+                }`}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {inboxError && (
+          <ErrorBox
+            msg={inboxError}
+            hint="Gmail must be connected under Settings. If you see 'Gmail not connected', click Connect Gmail and authorize read access."
+          />
+        )}
+
+        {inboxState && !inboxBusy ? (
+          <div className="mt-2 rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-5">
+            <ContextChips context={inboxState.context} />
+            <Markdown text={inboxState.markdown} />
+          </div>
+        ) : !inboxState && !inboxBusy && !inboxError ? (
+          <EmptyHint icon={FiMail} text="No scan yet — connect Gmail in Settings, then hit Scan." />
         ) : null}
       </div>
 
@@ -514,6 +622,15 @@ function ContextChips({
   }
   if (typeof context.provider === "string") {
     chips.push(`search: ${context.provider}`);
+  }
+  if (typeof context.emailCount === "number") {
+    chips.push(`${context.emailCount} emails`);
+  }
+  if (typeof context.days === "number") {
+    chips.push(`last ${context.days}d`);
+  }
+  if (typeof context.indeedJobsFound === "number") {
+    chips.push(`${context.indeedJobsFound} indeed listings`);
   }
   if (typeof context.profile === "string") {
     chips.push(`profile: ${context.profile}`);
