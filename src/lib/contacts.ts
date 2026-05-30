@@ -34,33 +34,19 @@ export type RecruiterContactInput = {
 
 const TABLE = "recruiter_contacts";
 
-/** Ensure the table exists — runs once, idempotent. */
+/** Check if the table exists. If not, log a clear error. */
+let tableChecked = false;
 async function ensureTable() {
+  if (tableChecked) return;
   const supabase = requireSupabaseAdmin();
-  // Try a lightweight query; if the table doesn't exist, create it.
   const { error } = await supabase.from(TABLE).select("id").limit(1);
   if (error?.code === "42P01") {
-    // Table doesn't exist — create it via raw SQL.
-    await supabase.rpc("exec_sql", {
-      sql: `
-        CREATE TABLE IF NOT EXISTS ${TABLE} (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          name TEXT NOT NULL DEFAULT '',
-          email TEXT NOT NULL,
-          company TEXT,
-          role_pitched TEXT,
-          match_pct INT,
-          source TEXT NOT NULL DEFAULT 'manual',
-          notes TEXT,
-          starred BOOLEAN NOT NULL DEFAULT FALSE,
-          emailed_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-          UNIQUE(email)
-        );
-      `,
-    });
+    console.error(
+      "[contacts] Table 'recruiter_contacts' does not exist. Run supabase/recruiter_contacts.sql in the Supabase SQL editor."
+    );
+    throw new Error("recruiter_contacts table not found — run the SQL migration in Supabase");
   }
+  tableChecked = true;
 }
 
 export async function listContacts(): Promise<RecruiterContact[]> {
@@ -104,13 +90,30 @@ export async function upsertContact(
 export async function upsertMany(
   inputs: RecruiterContactInput[]
 ): Promise<number> {
+  if (inputs.length === 0) return 0;
+  // Ensure table exists once before the loop.
+  await ensureTable();
   let saved = 0;
   for (const c of inputs) {
     try {
-      await upsertContact(c);
-      saved++;
+      const supabase = requireSupabaseAdmin();
+      const { error } = await supabase
+        .from(TABLE)
+        .upsert(
+          {
+            email: c.email.toLowerCase().trim(),
+            name: c.name || "",
+            company: c.company ?? null,
+            role_pitched: c.role_pitched ?? null,
+            match_pct: c.match_pct ?? null,
+            source: c.source ?? "inbox-agent",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "email" }
+        );
+      if (!error) saved++;
     } catch {
-      // skip duplicates / bad data
+      // skip bad data, continue with rest
     }
   }
   return saved;
