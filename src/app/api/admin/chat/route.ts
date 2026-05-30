@@ -24,6 +24,10 @@ import {
   ensureThread,
   getThreadMessages,
 } from "@/lib/chat-history";
+import { listContacts, upsertContact } from "@/lib/contacts";
+import { listNotes, type PersonalNote } from "@/lib/personal";
+import { listRecentMessages, sendEmail } from "@/lib/gmail";
+import { sendEmailUnified } from "@/lib/resend";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -161,6 +165,26 @@ export async function POST(request: Request) {
     })
   );
 
+  // ── Pull personal notes + contacts for context ──
+  const personalNotes = await listNotes().catch<PersonalNote[]>(() => []);
+  const recruiterContacts = await listContacts().catch(() => []);
+
+  const personalNotesBlob = personalNotes.length > 0
+    ? personalNotes.slice(0, 15).map((n) => {
+        const tags = n.tags.length ? ` (${n.tags.join(", ")})` : "";
+        const date = n.event_date ? ` [${n.event_date}]` : "";
+        return `- ${n.body.replace(/\s+/g, " ").trim()}${tags}${date}`;
+      }).join("\n")
+    : "";
+
+  const contactsBlob = recruiterContacts.length > 0
+    ? recruiterContacts.map((c) => {
+        const match = c.match_pct ? ` ${c.match_pct}%` : "";
+        const sent = c.emailed_at ? " [SENT]" : "";
+        return `- ${c.name} <${c.email}> @ ${c.company || "?"}${c.role_pitched ? ` — ${c.role_pitched}` : ""}${match}${sent}`;
+      }).join("\n")
+    : "";
+
   // Build system prompt
   const about = `${site.about.paragraph_one}\n${site.about.paragraph_two}`;
   const jobsBlob = jobs
@@ -213,6 +237,15 @@ ${projectsBlob || "(none on file)"}
 # Published notes
 ${notesBlob || "(none yet)"}
 
+${personalNotesBlob ? `# Personal notes (Life cockpit)\n${personalNotesBlob}\n` : ""}
+${contactsBlob ? `# Recruiter contacts (saved from inbox scans)\n${contactsBlob}\n` : ""}
+# Your built-in tools
+You have these tools available — USE THEM when Krishna asks about emails, contacts, or sending messages:
+- lucy__search_inbox: Search Gmail. Use for "check my email", "any new recruiter emails", etc.
+- lucy__list_contacts: List saved recruiter contacts.
+- lucy__save_contact: Save a recruiter's info.
+- lucy__send_email: Send an email. ALWAYS confirm with Krishna before sending. Draft the email first, show it, then send only after he approves.
+
 ${restBlob ? `# Connected services (snapshots)\n${restBlob}\n` : ""}${mcpBlob ? `\n# Connected services (tools)\n${mcpBlob}\n\nPrefer tools over guesses. When you call a tool, pass the result back through the conversation honestly. Quote specific numbers from the tool output.\n` : ""}`;
 
   // Compose Groq messages + tool list
@@ -220,6 +253,69 @@ ${restBlob ? `# Connected services (snapshots)\n${restBlob}\n` : ""}${mcpBlob ? 
     type: "function";
     function: { name: string; description?: string; parameters: Record<string, unknown> };
   }> = [];
+
+  // Lucy's built-in tools (contacts, gmail, email sending)
+  groqTools.push(
+    {
+      type: "function",
+      function: {
+        name: "lucy__list_contacts",
+        description: "List all saved recruiter contacts with their match %, company, role, and whether they've been emailed.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "lucy__save_contact",
+        description: "Save a new recruiter contact. Used when the user says to save someone's info.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Recruiter name" },
+            email: { type: "string", description: "Email address" },
+            company: { type: "string", description: "Company name" },
+            role_pitched: { type: "string", description: "Job role they mentioned" },
+            match_pct: { type: "number", description: "Match percentage 0-100" },
+          },
+          required: ["name", "email"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "lucy__search_inbox",
+        description: "Search Krishna's Gmail inbox. Use when asked about recent emails, recruiter messages, or job-related mail.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Gmail search query (e.g. 'from:recruiter newer_than:3d', 'subject:job opening')" },
+            max_results: { type: "number", description: "Max results (default 10)" },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "lucy__send_email",
+        description: "Send an email on Krishna's behalf. Use when asked to email a recruiter or contact. Always confirm the recipient and content with Krishna before calling.",
+        parameters: {
+          type: "object",
+          properties: {
+            to: { type: "string", description: "Recipient email address" },
+            subject: { type: "string", description: "Email subject line" },
+            body: { type: "string", description: "Email body text (plain text, will be formatted)" },
+          },
+          required: ["to", "subject", "body"],
+        },
+      },
+    },
+  );
+
+  // MCP connector tools
   for (const h of mcpHandles) {
     groqTools.push(...mcpToolsToGroqTools(h.tools, h.connector.id));
   }
@@ -280,33 +376,91 @@ ${restBlob ? `# Connected services (snapshots)\n${restBlob}\n` : ""}${mcpBlob ? 
       });
       // Execute each tool call.
       for (const call of toolCalls) {
-        const fullName = call.function.name; // "<connectorId>__<tool>"
-        const sep = fullName.indexOf("__");
-        const connId = sep > 0 ? fullName.slice(0, sep) : "";
-        const toolName = sep > 0 ? fullName.slice(sep + 2) : fullName;
-        const handle = mcpHandles.find((h) => h.connector.id === connId);
+        const fullName = call.function.name;
         let resultJson: string;
-        if (!handle) {
-          resultJson = JSON.stringify({ error: `No MCP handle for ${connId}` });
-        } else {
-          let args: Record<string, unknown> = {};
+
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.function.arguments || "{}");
+        } catch {
+          args = {};
+        }
+
+        // ── Lucy built-in tools ──
+        if (fullName === "lucy__list_contacts") {
+          const contacts = await listContacts().catch(() => []);
+          resultJson = JSON.stringify(contacts.map((c) => ({
+            name: c.name, email: c.email, company: c.company,
+            role: c.role_pitched, match: c.match_pct,
+            starred: c.starred, emailed: !!c.emailed_at,
+          }))).slice(0, 12000);
+
+        } else if (fullName === "lucy__save_contact") {
           try {
-            args = JSON.parse(call.function.arguments || "{}");
-          } catch {
-            args = {};
+            const saved = await upsertContact({
+              name: (args.name as string) || "",
+              email: (args.email as string) || "",
+              company: (args.company as string) || null,
+              role_pitched: (args.role_pitched as string) || null,
+              match_pct: typeof args.match_pct === "number" ? args.match_pct : null,
+              source: "chat",
+            });
+            resultJson = JSON.stringify({ ok: true, saved: { name: saved.name, email: saved.email } });
+          } catch (err) {
+            resultJson = JSON.stringify({ error: err instanceof Error ? err.message : "Save failed" });
           }
-          const out = await mcpCallTool(
-            handle.url,
-            handle.connector.bearer_token as string,
-            toolName,
-            args
-          );
-          if (out.ok) {
-            resultJson = JSON.stringify(out.parsed ?? out.content ?? null).slice(0, 16000);
+
+        } else if (fullName === "lucy__search_inbox") {
+          const { messages: emails, error: gmailErr } = await listRecentMessages({
+            query: (args.query as string) || "newer_than:3d",
+            maxResults: typeof args.max_results === "number" ? args.max_results : 10,
+          });
+          if (gmailErr) {
+            resultJson = JSON.stringify({ error: gmailErr });
           } else {
-            resultJson = JSON.stringify({ error: out.error || "Tool failed" });
+            resultJson = JSON.stringify(emails.map((m) => ({
+              from: m.from, subject: m.subject, date: m.date, snippet: m.snippet,
+            }))).slice(0, 12000);
+          }
+
+        } else if (fullName === "lucy__send_email") {
+          const to = (args.to as string) || "";
+          const subject = (args.subject as string) || "";
+          const bodyText = (args.body as string) || "";
+          if (!to || !subject || !bodyText) {
+            resultJson = JSON.stringify({ error: "to, subject, and body are required" });
+          } else {
+            const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;line-height:1.6;color:#1f2937;max-width:600px;margin:0 auto;padding:20px">
+<p>${bodyText.replace(/\n/g, "<br>")}</p>
+<p>Best regards,<br>Krishna Amarneni<br><a href="https://krishnaamarneni.com">krishnaamarneni.com</a></p>
+</body></html>`;
+            const send = await sendEmailUnified({ to, subject, html, text: bodyText });
+            resultJson = JSON.stringify({ ok: send.ok, provider: send.provider, error: send.error });
+          }
+
+        } else {
+          // ── MCP tool call ──
+          const sep = fullName.indexOf("__");
+          const connId = sep > 0 ? fullName.slice(0, sep) : "";
+          const toolName = sep > 0 ? fullName.slice(sep + 2) : fullName;
+          const handle = mcpHandles.find((h) => h.connector.id === connId);
+          if (!handle) {
+            resultJson = JSON.stringify({ error: `No MCP handle for ${connId}` });
+          } else {
+            const out = await mcpCallTool(
+              handle.url,
+              handle.connector.bearer_token as string,
+              toolName,
+              args
+            );
+            if (out.ok) {
+              resultJson = JSON.stringify(out.parsed ?? out.content ?? null).slice(0, 16000);
+            } else {
+              resultJson = JSON.stringify({ error: out.error || "Tool failed" });
+            }
           }
         }
+
         loop.push({
           role: "tool",
           tool_call_id: call.id,
