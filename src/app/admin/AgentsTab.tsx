@@ -629,6 +629,9 @@ function ContextChips({
   if (typeof context.days === "number") {
     chips.push(`last ${context.days}d`);
   }
+  if (typeof context.contactsSaved === "number" && context.contactsSaved > 0) {
+    chips.push(`${context.contactsSaved} contacts saved`);
+  }
   if (typeof context.indeedJobsFound === "number") {
     chips.push(`${context.indeedJobsFound} indeed listings`);
   }

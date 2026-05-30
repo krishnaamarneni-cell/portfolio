@@ -4,6 +4,7 @@ import { resolveAgentModel, runAgent } from "@/lib/agents";
 import { listRecentMessages } from "@/lib/gmail";
 import { fetchJobs, fetchSiteContent } from "@/lib/content";
 import { buildFactsContext } from "@/lib/facts";
+import { upsertMany, type RecruiterContactInput } from "@/lib/contacts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -105,7 +106,19 @@ RULES:
 - Every email must appear in exactly ONE category
 - For job matches, cite specific skills from Krishna's resume
 - Be honest about match percentages — don't inflate
-- Keep it scannable — he reads this on his phone`;
+- Keep it scannable — he reads this on his phone
+
+IMPORTANT: At the very end, output a JSON block with recruiter contacts extracted from job emails.
+Format it exactly like this (after the markdown):
+
+\`\`\`contacts
+[
+  {"name":"John Smith","email":"john@acme.com","company":"Acme Corp","role":"Senior SAP Consultant","match":85},
+  {"name":"Jane Doe","email":"jane@startup.io","company":"Startup","role":"AI Engineer","match":40}
+]
+\`\`\`
+
+Include ALL job/recruiter senders. Extract the person's name from the From field. If no job emails, output an empty array.`;
 
   const userPrompt = `KRISHNA'S RESUME (for job matching):
 ${experience || "(no jobs on file)"}
@@ -126,12 +139,43 @@ ${emailsBlock}`;
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
 
-  // Count categories from the emails for context chips.
+  // Extract and save recruiter contacts from the structured JSON block.
+  let contactsSaved = 0;
+  let markdown = result.content || "";
+  try {
+    const contactsMatch = /```contacts\s*\n([\s\S]*?)```/.exec(markdown);
+    if (contactsMatch) {
+      const parsed = JSON.parse(contactsMatch[1]) as Array<{
+        name?: string;
+        email?: string;
+        company?: string;
+        role?: string;
+        match?: number;
+      }>;
+      const inputs: RecruiterContactInput[] = parsed
+        .filter((c) => c.email && c.email.includes("@"))
+        .map((c) => ({
+          name: c.name || "",
+          email: c.email!,
+          company: c.company || null,
+          role_pitched: c.role || null,
+          match_pct: typeof c.match === "number" ? c.match : null,
+          source: "inbox-agent",
+        }));
+      contactsSaved = await upsertMany(inputs);
+      // Remove the JSON block from displayed markdown.
+      markdown = markdown.replace(/```contacts\s*\n[\s\S]*?```/, "").trim();
+    }
+  } catch {
+    // JSON parse failed — no contacts extracted, that's fine.
+  }
+
   return NextResponse.json({
-    markdown: result.content,
+    markdown,
     context: {
       days,
       emailCount: messages.length,
+      contactsSaved,
       model: result.modelUsed ?? model,
       modelRequested: model,
     },
