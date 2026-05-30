@@ -54,34 +54,49 @@ export async function POST(request: Request) {
       .join("; ");
     const skills = (site.skills?.skills ?? []).slice(0, 20).join(", ");
 
-    const system = `Write a short, professional email from Krishna to a recruiter. 3-4 sentences max. No fluff.
+    const system = `You write recruiter reply emails for Krishna Amarneni. Write like a real person, not a template.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
-Tone: confident but not pushy. Mention 1-2 specific skills that match the role. End with availability to chat.
-Output ONLY the email body text — no subject line, no "Dear", no signature block (those are added automatically).`;
 
-    const userPrompt = `Recruiter: ${body.recruiterName} at ${body.company || "unknown company"}
-Role: ${body.rolePitched || "not specified"}
-Krishna's recent experience: ${experience || "SAP + AI engineering"}
-Key skills: ${skills || "SAP S/4HANA, AI/ML, Next.js, Python"}`;
+STYLE RULES:
+- Sound human. Write like you're texting a professional contact, not writing a cover letter.
+- NO corporate filler: "excited about the opportunity", "leverage my expertise", "drive business growth", "make a significant impact" — ALL BANNED.
+- NO "I am confident in my ability" — BANNED.
+- Lead with a SPECIFIC thing from the role/company that caught your eye.
+- Name-drop ONE concrete project or result from Krishna's past (a client, a system he built, a metric).
+- 2-3 sentences max. End with a casual call to action ("Happy to jump on a call this week" not "I welcome the chance to discuss").
+- Output ONLY the body paragraphs. No "Hi Name" (added automatically). No signature (added automatically).
+
+GOOD EXAMPLE:
+"Saw the S/4HANA rollout role — I just wrapped a similar migration at Coca-Cola covering MM/SD and Ariba procurement. Would love to hear more about the scope. Free for a quick call this week?"
+
+BAD EXAMPLE (do NOT write like this):
+"I am excited about the opportunity to leverage my technical expertise in SAP S/4HANA to drive business growth. With my experience, I am confident in my ability to make a significant impact."`;
+
+    const userPrompt = `Recruiter: ${body.recruiterName} at ${body.company || "a company"}
+Role they pitched: ${body.rolePitched || "not specified"}
+Krishna's recent work: ${experience || "SAP + AI engineering"}
+Key skills: ${skills || "SAP S/4HANA, AI/ML, Next.js, Python"}
+
+Write 2-3 sentences. Human tone. No template language.`;
 
     const result = await runAgent({
       apiKey,
       model: "llama-3.3-70b-versatile",
       systemPrompt: system,
       userPrompt,
-      maxTokens: 500,
+      maxTokens: 300,
     });
 
-    const generatedBody = result.content || "I'm interested in discussing this opportunity further. Could we schedule a quick call?";
+    const generatedBody = result.content || "Saw your message about the role — looks like a strong fit given my recent work. Happy to jump on a quick call this week if you're free.";
 
     subject = body.rolePitched
-      ? `Interest in ${body.rolePitched} role`
-      : "Exploring opportunities";
+      ? `Re: ${body.rolePitched}`
+      : "Re: Opportunity";
 
     htmlBody = `<p>Hi ${body.recruiterName},</p>
 <p>${generatedBody.replace(/\n/g, "<br>")}</p>
-<p>Best regards,<br>Krishna Amarneni<br>
-<a href="https://krishnaamarneni.com">krishnaamarneni.com</a></p>`;
+<p>Krishna Amarneni<br>
+<a href="https://krishnaamarneni.com" style="color:#ff6b00">krishnaamarneni.com</a></p>`;
   } else {
     return NextResponse.json(
       { error: "GROQ_API_KEY not set and no custom message provided" },

@@ -432,7 +432,7 @@ ${restBlob ? `# Connected services (snapshots)\n${restBlob}\n` : ""}${mcpBlob ? 
           } else {
             const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;line-height:1.6;color:#1f2937;max-width:600px;margin:0 auto;padding:20px">
 <p>${bodyText.replace(/\n/g, "<br>")}</p>
-<p>Best regards,<br>Krishna Amarneni<br><a href="https://krishnaamarneni.com">krishnaamarneni.com</a></p>
+<p>Krishna Amarneni<br><a href="https://krishnaamarneni.com" style="color:#ff6b00">krishnaamarneni.com</a></p>
 </body></html>`;
             const send = await sendEmailUnified({ to, subject, html, text: bodyText });
             resultJson = JSON.stringify({ ok: send.ok, provider: send.provider, error: send.error });
