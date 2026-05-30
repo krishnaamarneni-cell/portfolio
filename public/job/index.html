@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Indian Job Market Visualizer</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --ink:#e8eaed; --muted:#9aa0a6;
+    --line:#2a2e37; --accent:#3a86ff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+  header{padding:14px 20px 10px;border-bottom:1px solid var(--line)}
+  h1{font-size:18px;margin:0;font-weight:650;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:12px;margin-top:3px}
+  .sub b{color:var(--ink);font-weight:600}
+
+  .bar{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;padding:10px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{background:transparent;color:var(--muted);border:0;padding:7px 12px;font-size:12.5px;cursor:pointer}
+  .seg button:hover{color:var(--ink)}
+  .seg button.on{background:var(--accent);color:#fff}
+
+  .prompt{display:flex;gap:8px;flex:1;min-width:280px}
+  .prompt input{flex:1;background:#0c0e12;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 11px;font-size:13px}
+  .prompt input:focus{outline:none;border-color:var(--accent)}
+  .prompt button{background:var(--accent);border:0;color:#fff;border-radius:8px;padding:0 16px;font-size:13px;font-weight:600;cursor:pointer}
+  .prompt button:disabled{opacity:.5;cursor:default}
+
+  main{position:relative;height:62vh;min-height:460px}
+  #chart{width:100%;height:100%}
+  .tile{stroke:var(--bg);stroke-width:2px;cursor:pointer;transition:opacity .15s}
+  .tile:hover{opacity:.82}
+  .tlabel{fill:#fff;font-size:11px;font-weight:600;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.45);stroke-width:2.5px}
+  .tsub{fill:rgba(255,255,255,.85);font-size:9.5px;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.4);stroke-width:2px}
+
+  .legend{position:absolute;left:16px;bottom:14px;background:rgba(15,17,21,.85);border:1px solid var(--line);border-radius:10px;padding:10px 12px;backdrop-filter:blur(6px);max-width:280px}
+  .legend .ttl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
+  .grad{height:10px;border-radius:5px;margin-bottom:4px}
+  .grad-lab{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted)}
+  .swatches{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px}
+  .sw{display:flex;align-items:center;gap:6px;font-size:11px}
+  .sw i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+  /* stats strip */
+  .stats{display:flex;flex-wrap:wrap;gap:18px 28px;padding:11px 20px;border-bottom:1px solid var(--line);background:#13161d}
+  .stat{flex:0 0 auto}
+  .stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;white-space:nowrap}
+  .stat .v{font-size:24px;font-weight:750;line-height:1}
+  .stat .vsub{font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap}
+  .hist{display:flex;align-items:flex-end;gap:2px;height:42px}
+  .hist i{width:9px;border-radius:2px 2px 0 0;min-height:1px;cursor:pointer}
+  .hist i:hover{outline:1px solid rgba(255,255,255,.5)}
+  .hist i.on{outline:2px solid #fff}
+  .srow.clk{cursor:pointer;border-radius:5px;padding:0 3px}
+  .srow.clk:hover{background:#1c212b}
+  .srow.on{background:#243042;box-shadow:inset 0 0 0 1px #3a86ff}
+  #status a{cursor:pointer}
+  .hist-ax{display:flex;justify-content:space-between;font-size:9px;color:var(--muted);width:108px;margin-top:2px}
+  .srow{display:flex;align-items:center;gap:7px;font-size:11px;margin:2.5px 0;white-space:nowrap}
+  .srow .lab{width:104px;color:var(--muted);text-align:right;overflow:hidden;text-overflow:ellipsis}
+  .srow .mb{width:46px;height:9px;background:#262b35;border-radius:3px;overflow:hidden;flex:0 0 auto}
+  .srow .mb i{display:block;height:100%}
+  .srow .num{width:34px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .srow .pct{width:28px;color:var(--muted);text-align:right}
+  .tip{position:absolute;pointer-events:none;background:#fff;color:#111;border-radius:8px;padding:9px 11px;font-size:12px;box-shadow:0 8px 28px rgba(0,0,0,.4);opacity:0;transition:opacity .1s;max-width:240px;z-index:10}
+  .tip h4{margin:0 0 4px;font-size:13px}
+  .tip .row{display:flex;justify-content:space-between;gap:14px;color:#444}
+  .tip .row b{color:#111}
+  .status{position:absolute;right:16px;bottom:14px;font-size:11px;color:var(--muted)}
+  footer{padding:7px 20px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+  a{color:var(--accent);text-decoration:none}
+
+  /* full data table — every occupation, paginated */
+  .tablewrap{padding:14px 20px 4px}
+  .tablewrap h2{font-size:13px;font-weight:650;margin:0 0 2px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink)}
+  .tablewrap .cap{font-size:11px;color:var(--muted);margin-bottom:9px}
+  table.data{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.data th,table.data td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  table.data th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:.4px;cursor:pointer;user-select:none}
+  table.data th:hover{color:var(--ink)}
+  table.data th.s-asc::after{content:" ▲";color:var(--accent)}
+  table.data th.s-desc::after{content:" ▼";color:var(--accent)}
+  table.data td:first-child,table.data th:first-child{text-align:left}
+  table.data td.grp{text-align:left}
+  table.data tbody tr:hover{background:#1c212b}
+  .gdot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+  .pager{display:flex;align-items:center;gap:10px;justify-content:flex-end;padding:10px 0 2px;font-size:12px;color:var(--muted)}
+  .pager button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:5px 11px;font-size:12px;cursor:pointer}
+  .pager button:disabled{opacity:.4;cursor:default}
+  .pager select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:4px 7px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Indian Job Market Visualizer</h1>
+  <div class="sub">Each tile's <b>area</b> = workers employed. <b>Colour</b> = the layer you pick. ~<b id="total">0</b> million workers across <b id="count">0</b> occupation groups. <span id="srcnote"></span></div>
+</header>
+
+<div class="bar">
+  <div class="field">
+    <label>Dataset</label>
+    <div class="seg" id="datasets">
+      <button data-d="real" class="on">Real · ILOSTAT 2025</button>
+      <button data-d="mock">Illustrative · 40</button>
+    </div>
+  </div>
+  <div class="field">
+    <label>Colour layer</label>
+    <div class="seg" id="layers">
+      <button data-k="group" class="on">Occupation group</button>
+      <button data-k="wage">Median pay</button>
+      <button data-k="education">Education</button>
+      <button data-k="formality">Job formality</button>
+      <button data-k="ai">AI exposure</button>
+      <button data-k="custom" id="customBtn">Custom prompt</button>
+    </div>
+  </div>
+  <div class="field" style="flex:1;min-width:280px">
+    <label>LLM prompt scoring — score every occupation 0–100, then recolour</label>
+    <div class="prompt">
+      <input id="q" placeholder="e.g. how exposed is this job to automation by robots?" />
+      <button id="run">Score</button>
+    </div>
+  </div>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<main>
+  <svg id="chart"></svg>
+  <div class="legend" id="legend"></div>
+  <div class="status" id="status"></div>
+  <div class="tip" id="tip"></div>
+</main>
+
+<div class="tablewrap">
+  <h2>All occupations</h2>
+  <div class="cap" id="tablecap"></div>
+  <div id="tablehost"></div>
+  <div class="pager">
+    <span id="pageinfo"></span>
+    <label>Rows
+      <select id="pagesize">
+        <option>10</option><option>25</option><option selected>50</option><option value="9999">All</option>
+      </select>
+    </label>
+    <button id="prev">‹ Prev</button>
+    <button id="next">Next ›</button>
+  </div>
+</div>
+
+<footer>
+  A development tool for exploring Indian labour data, inspired by <a href="https://karpathy.ai/jobs/" target="_blank" rel="noopener">Andrej Karpathy's US Job Market Visualizer</a>.
+  Figures are rough estimates, not an official release. Custom-prompt scoring uses a transparent client-side heuristic by default — wire an LLM API for real scores.
+</footer>
+
+<script src="data.js"></script>
+<script src="real_data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
