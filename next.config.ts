@@ -8,6 +8,14 @@ const nextConfig: NextConfig = {
       { source: "/thoughts", destination: "/notes", permanent: true },
     ];
   },
+  async rewrites() {
+    return [
+      // Indian Job Market Visualizer — static site in public/job/.
+      // Serve its index.html for the bare /job path (Next doesn't do this
+      // automatically for static folders).
+      { source: "/job", destination: "/job/index.html" },
+    ];
+  },
   async headers() {
     const noStore = {
       key: "Cache-Control",
