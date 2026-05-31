@@ -28,34 +28,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1.0,
     },
     {
-      url: `${base}/#book`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.9,
-    },
-    {
-      url: `${base}/#projects`,
+      url: `${base}/notes`,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.8,
-    },
-    {
-      url: `${base}/#experience`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.7,
     },
     {
       url: `${base}/investments`,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.7,
-    },
-    {
-      url: `${base}/notes`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.8,
     },
     ...noteEntries,
   ];
