@@ -21,6 +21,9 @@ const siteUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+  verification: {
+    google: "wCiq3wqantoox_zoRmivjpfuNOTqAC5Eoog39JnNKZc",
+  },
   title: "Krishna Amarneni | Full-Stack Developer & SAP Expert",
   description:
     "Portfolio of Krishna Amarneni — Full-Stack Developer, AI Agent Builder, and SAP Business Analyst. Author of 'Drive to Freedom'. Creator of WealthClaude, Lucy AI, and more.",
