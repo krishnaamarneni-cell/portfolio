@@ -11,6 +11,7 @@ import {
   FiCpu,
   FiTarget,
   FiMail,
+  FiBarChart2,
 } from "react-icons/fi";
 import { AGENT_MODELS, DEFAULT_AGENT_MODEL } from "@/lib/agents";
 
@@ -20,7 +21,7 @@ type AgentState = {
   context?: Record<string, unknown>;
 };
 
-type AgentKey = "news" | "jobs" | "opportunities" | "inbox";
+type AgentKey = "news" | "jobs" | "opportunities" | "inbox" | "screener";
 
 const CACHE_PREFIX = "krishna_admin_agent_";
 
@@ -81,6 +82,14 @@ export default function AgentsTab({
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [inboxDays, setInboxDays] = useState(3);
 
+  // Stock Screener
+  const [screenState, setScreenState] = useState<AgentState | null>(null);
+  const [screenBusy, setScreenBusy] = useState(false);
+  const [screenError, setScreenError] = useState<string | null>(null);
+  const [riskLevel, setRiskLevel] = useState(5);
+  const [sectorFocus, setSectorFocus] = useState("");
+  const [budget, setBudget] = useState("");
+
   // Empty by default = broad market scan (the agent now runs without
   // specific companies). User can paste a comma-separated list to narrow.
   const [companiesText, setCompaniesText] = useState("");
@@ -93,6 +102,7 @@ export default function AgentsTab({
     setJobsState(loadCached("jobs"));
     setOppState(loadCached("opportunities"));
     setInboxState(loadCached("inbox"));
+    setScreenState(loadCached("screener"));
     try {
       const saved = window.localStorage.getItem("krishna_admin_agent_model");
       if (saved) setModel(saved);
@@ -218,6 +228,42 @@ export default function AgentsTab({
       onError(msg);
     }
     setOppBusy(false);
+  }
+
+  async function runScreener() {
+    setScreenBusy(true);
+    setScreenError(null);
+    try {
+      const r = await fetch("/api/admin/agents/screener", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          risk: riskLevel,
+          sector: sectorFocus || undefined,
+          budget: budget || undefined,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setScreenError(data.error || "Screener failed");
+        onError(data.error || "Screener failed");
+      } else {
+        const next: AgentState = {
+          markdown: data.markdown || "",
+          runAt: Date.now(),
+          context: data.context,
+        };
+        setScreenState(next);
+        persistCached("screener", next);
+        onSuccess("Stock screener done");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      setScreenError(msg);
+      onError(msg);
+    }
+    setScreenBusy(false);
   }
 
   async function runInbox() {
@@ -560,6 +606,108 @@ export default function AgentsTab({
         ) : null}
       </div>
 
+      {/* Stock Screener */}
+      <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5 space-y-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-300 flex items-center justify-center">
+            <FiBarChart2 size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-white">Stock Screener</h3>
+            <p className="text-[11px] text-[#666]">
+              Set your risk tolerance, scan the whole market, find opportunities that match.
+            </p>
+          </div>
+          {screenState && (
+            <span className="text-[10px] font-mono text-[#666] flex items-center gap-1">
+              <FiClock size={10} />
+              {relTime(screenState.runAt)}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={runScreener}
+            disabled={screenBusy}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold text-xs shadow-[0_4px_15px_rgba(245,158,11,0.35)] hover:scale-[1.03] disabled:opacity-60"
+          >
+            <FiZap size={12} />
+            {screenBusy ? "Scanning..." : screenState ? "Re-scan" : "Scan market"}
+          </button>
+        </div>
+
+        {/* Risk slider */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
+              Risk tolerance
+            </label>
+            <span className="text-xs font-bold" style={{
+              color: riskLevel <= 3 ? "#22c55e" : riskLevel <= 6 ? "#f59e0b" : "#ef4444"
+            }}>
+              {riskLevel}/10 — {
+                riskLevel <= 2 ? "Conservative" :
+                riskLevel <= 4 ? "Moderate" :
+                riskLevel <= 6 ? "Growth" :
+                riskLevel <= 8 ? "Aggressive" : "Max Risk"
+              }
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[9px] text-emerald-400 font-mono">Safe</span>
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={riskLevel}
+              onChange={(e) => setRiskLevel(Number(e.target.value))}
+              className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+              style={{
+                background: `linear-gradient(to right, #22c55e, #f59e0b ${50}%, #ef4444)`,
+              }}
+            />
+            <span className="text-[9px] text-red-400 font-mono">YOLO</span>
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-2">
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+              Sector focus <span className="text-[#444]">(optional)</span>
+            </label>
+            <input
+              value={sectorFocus}
+              onChange={(e) => setSectorFocus(e.target.value)}
+              placeholder="e.g. tech, healthcare, energy, AI"
+              className="w-full px-4 py-2 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-amber-500/60 focus:outline-none text-xs text-white placeholder:text-[#555]"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+              Budget <span className="text-[#444]">(optional)</span>
+            </label>
+            <input
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              placeholder="e.g. $5,000 or $10k-50k"
+              className="w-full px-4 py-2 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-amber-500/60 focus:outline-none text-xs text-white placeholder:text-[#555]"
+            />
+          </div>
+        </div>
+
+        {screenError && (
+          <ErrorBox msg={screenError} hint="Needs a search provider (DDG/Tavily/Brave). Holdings pulled from WealthClaude MCP to avoid duplicate recommendations." />
+        )}
+
+        {screenState && !screenBusy ? (
+          <div className="mt-2 rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-5">
+            <ContextChips context={screenState.context} />
+            <Markdown text={screenState.markdown} />
+          </div>
+        ) : !screenState && !screenBusy && !screenError ? (
+          <EmptyHint icon={FiBarChart2} text="Set your risk level and hit Scan market." />
+        ) : null}
+      </div>
+
       {/* Footer help */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-[11px] text-[#888] leading-relaxed flex items-start gap-2">
         <FiCpu size={12} className="mt-0.5 shrink-0" />
@@ -634,6 +782,18 @@ function ContextChips({
   }
   if (typeof context.indeedJobsFound === "number") {
     chips.push(`${context.indeedJobsFound} indeed listings`);
+  }
+  if (typeof context.risk === "number") {
+    chips.push(`risk: ${context.risk}/10`);
+  }
+  if (typeof context.riskLabel === "string") {
+    chips.push(context.riskLabel);
+  }
+  if (typeof context.sector === "string" && context.sector) {
+    chips.push(`sector: ${context.sector}`);
+  }
+  if (typeof context.budget === "string" && context.budget) {
+    chips.push(`budget: ${context.budget}`);
   }
   if (typeof context.profile === "string") {
     chips.push(`profile: ${context.profile}`);
