@@ -12,7 +12,6 @@ export const maxDuration = 60;
 
 type Body = {
   model?: string;
-  /** How many days back to scan. Default 3. */
   days?: number;
 };
 
@@ -32,7 +31,6 @@ export async function POST(request: Request) {
 
   const days = Math.min(body.days ?? 3, 14);
 
-  // Pull emails from Gmail.
   const { messages, error: gmailError } = await listRecentMessages({
     query: `newer_than:${days}d`,
     maxResults: 40,
@@ -44,11 +42,12 @@ export async function POST(request: Request) {
   if (messages.length === 0) {
     return NextResponse.json({
       markdown: "## Inbox\n\nNo emails found in the last " + days + " days. Is Gmail connected?",
+      contacts: [],
+      drafts: [],
       context: { days, emailCount: 0 },
     });
   }
 
-  // Pull resume for job matching.
   const [jobs, site, factsBlock] = await Promise.all([
     fetchJobs().catch(() => []),
     fetchSiteContent(),
@@ -59,26 +58,20 @@ export async function POST(request: Request) {
     .join("\n");
   const skills = (site.skills?.skills ?? []).slice(0, 30);
 
-  // Format emails for the LLM.
   const emailsBlock = messages
     .map((m, i) => {
       return `[${i + 1}] From: ${m.from ?? "?"}\n    Subject: ${m.subject ?? "(no subject)"}\n    Date: ${m.date ?? "?"}\n    Preview: ${m.snippet ?? ""}`;
     })
     .join("\n\n");
 
-  const system = `You are Krishna's email intelligence agent. Categorize his inbox and surface what matters.
+  const system = `You are Krishna's email intelligence agent. Categorize his inbox, extract contacts, and draft replies.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
 
-You have ${messages.length} emails from the last ${days} days. Categorize EVERY email into one of these buckets:
+You have ${messages.length} emails from the last ${days} days.
 
-1. **Jobs/Recruiter** — JDs, recruiter outreach, interview invites, job alerts
-2. **Important** — Bills, appointments, government/visa, bank alerts, personal
-3. **Newsletters** — Tech newsletters, industry updates worth reading
-4. **Marketing/Spam** — Promotions, ads, sales emails, unsubscribe-worthy
-
-For Jobs/Recruiter emails, match against Krishna's resume and rate:
-- **Strong match (>70%)** — Skills + experience align well. Flag these prominently.
-- **Weak match (<70%)** — Different tech stack, too junior/senior, wrong domain. Note why.
+STEP 1: Categorize every email into: Jobs/Recruiter, Important, Newsletters, Marketing/Spam
+STEP 2: For ALL job/recruiter emails (not just strong matches), extract the sender's contact
+STEP 3: For each job/recruiter email, draft a SHORT reply (2-3 sentences, human tone)
 
 OUTPUT FORMAT:
 
@@ -86,31 +79,24 @@ OUTPUT FORMAT:
 X emails scanned. Y job-related, Z important, W newsletters, V marketing.
 
 ## Jobs & Recruiter (Y emails)
-### Strong matches
-- **[Subject]** from [Sender] — [Why it matches: cite specific resume match]. **85% match**
-- ...
+### Strong matches (>70%)
+- **[Subject]** from [Sender] — [Why it matches]. **85% match**
 
-### Weak matches
-- **[Subject]** from [Sender] — [Why it's weak: wrong stack/level/domain]. **40% match**
+### Other job emails
+- **[Subject]** from [Sender] — [Brief note]. **40% match**
 
 ## Important (Z emails)
 - **[Subject]** from [Sender] — [one-line summary]
 
 ## Newsletters (W emails)
-- **[Subject]** from [Sender] — [one-line: worth reading?]
+- **[Subject]** from [Sender] — [worth reading?]
 
 ## Marketing/Spam (V emails)
-[Just the count, don't list each one unless <5 total]
+[count only]
 
-RULES:
-- Every email must appear in exactly ONE category
-- For job matches, cite specific skills from Krishna's resume
-- Be honest about match percentages — don't inflate
-- Keep it scannable — he reads this on his phone
+CRITICAL: After the markdown, output TWO JSON blocks:
 
-IMPORTANT: At the very end, output a JSON block with recruiter contacts extracted from job emails.
-Format it exactly like this (after the markdown):
-
+1. ALL contacts from job/recruiter emails (save every single one for future cold outreach):
 \`\`\`contacts
 [
   {"name":"John Smith","email":"john@acme.com","company":"Acme Corp","role":"Senior SAP Consultant","match":85},
@@ -118,9 +104,21 @@ Format it exactly like this (after the markdown):
 ]
 \`\`\`
 
-Include ALL job/recruiter senders. Extract the person's name from the From field. If no job emails, output an empty array.`;
+2. Draft replies for each job/recruiter email (Krishna will approve/edit before sending):
+\`\`\`drafts
+[
+  {"to":"john@acme.com","name":"John Smith","subject":"Re: Senior SAP Consultant","body":"Saw the S/4HANA role — I just wrapped a similar migration at Coca-Cola covering MM/SD and Ariba. Would love to hear more about the scope. Free for a quick call this week?","match":85},
+  {"to":"jane@startup.io","name":"Jane Doe","subject":"Re: AI Engineer role","body":"Thanks for reaching out. The AI engineer role looks interesting — I've been building LLM-powered agent systems with Next.js and Python. Happy to chat if the role is still open.","match":40}
+]
+\`\`\`
 
-  const userPrompt = `KRISHNA'S RESUME (for job matching):
+RULES for drafts:
+- Sound human, not templated. Lead with something specific from the email.
+- 2-3 sentences max. End with a casual call-to-action.
+- BANNED: "excited about the opportunity", "leverage my expertise", "confident in my ability"
+- Include ALL job emails, not just strong matches — Krishna decides which to send`;
+
+  const userPrompt = `KRISHNA'S RESUME:
 ${experience || "(no jobs on file)"}
 Skills: ${skills.join(", ") || "(none)"}
 
@@ -133,24 +131,22 @@ ${emailsBlock}`;
     model: model.startsWith("compound") ? "llama-3.3-70b-versatile" : model,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 2500,
+    maxTokens: 3500,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
 
-  // Extract and save recruiter contacts from the structured JSON block.
-  let contactsSaved = 0;
   let markdown = result.content || "";
+  let contactsSaved = 0;
+  let drafts: Array<{ to: string; name: string; subject: string; body: string; match: number }> = [];
+
+  // Extract contacts
   try {
     const contactsMatch = /```contacts\s*\n([\s\S]*?)```/.exec(markdown);
     if (contactsMatch) {
       const parsed = JSON.parse(contactsMatch[1]) as Array<{
-        name?: string;
-        email?: string;
-        company?: string;
-        role?: string;
-        match?: number;
+        name?: string; email?: string; company?: string; role?: string; match?: number;
       }>;
       const inputs: RecruiterContactInput[] = parsed
         .filter((c) => c.email && c.email.includes("@"))
@@ -163,19 +159,27 @@ ${emailsBlock}`;
           source: "inbox-agent",
         }));
       contactsSaved = await upsertMany(inputs);
-      // Remove the JSON block from displayed markdown.
       markdown = markdown.replace(/```contacts\s*\n[\s\S]*?```/, "").trim();
     }
-  } catch {
-    // JSON parse failed — no contacts extracted, that's fine.
-  }
+  } catch {}
+
+  // Extract drafts
+  try {
+    const draftsMatch = /```drafts\s*\n([\s\S]*?)```/.exec(markdown);
+    if (draftsMatch) {
+      drafts = JSON.parse(draftsMatch[1]) as typeof drafts;
+      markdown = markdown.replace(/```drafts\s*\n[\s\S]*?```/, "").trim();
+    }
+  } catch {}
 
   return NextResponse.json({
     markdown,
+    drafts,
     context: {
       days,
       emailCount: messages.length,
       contactsSaved,
+      draftsGenerated: drafts.length,
       model: result.modelUsed ?? model,
       modelRequested: model,
     },

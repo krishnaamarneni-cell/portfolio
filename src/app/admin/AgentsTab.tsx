@@ -81,6 +81,11 @@ export default function AgentsTab({
   const [inboxBusy, setInboxBusy] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [inboxDays, setInboxDays] = useState(3);
+  type DraftReply = { to: string; name: string; subject: string; body: string; match: number };
+  const [drafts, setDrafts] = useState<DraftReply[]>([]);
+  const [editingDraft, setEditingDraft] = useState<number | null>(null);
+  const [sendingDraft, setSendingDraft] = useState<number | null>(null);
+  const [sentDrafts, setSentDrafts] = useState<Set<number>>(new Set());
 
   // Stock Screener
   const [screenState, setScreenState] = useState<AgentState | null>(null);
@@ -313,7 +318,13 @@ export default function AgentsTab({
         };
         setInboxState(next);
         persistCached("inbox", next);
-        onSuccess("Inbox scan done");
+        // Capture draft replies
+        if (Array.isArray(data.drafts) && data.drafts.length > 0) {
+          setDrafts(data.drafts);
+          setSentDrafts(new Set());
+          setEditingDraft(null);
+        }
+        onSuccess(`Inbox scan done — ${data.drafts?.length || 0} draft replies`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Network error";
@@ -472,6 +483,122 @@ export default function AgentsTab({
         ) : !inboxState && !inboxBusy && !inboxError ? (
           <EmptyHint icon={FiMail} text="No scan yet — connect Gmail in Settings, then hit Scan." />
         ) : null}
+
+        {/* Draft replies */}
+        {drafts.length > 0 && !inboxBusy && (
+          <div className="space-y-3">
+            <h4 className="text-[10px] font-mono uppercase tracking-widest text-sky-400">
+              Draft replies ({drafts.length}) — approve, edit, or discard
+            </h4>
+            {drafts.map((d, i) => {
+              const sent = sentDrafts.has(i);
+              const editing = editingDraft === i;
+              const sending = sendingDraft === i;
+              return (
+                <div key={i} className={`rounded-xl border p-4 space-y-2 ${sent ? "border-emerald-500/20 bg-emerald-500/[0.03]" : "border-white/[0.06] bg-[#0f0f0f]"}`}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-white">{d.name}</span>
+                    <span className="text-[9px] text-[#666] font-mono">{d.to}</span>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${d.match >= 70 ? "bg-emerald-500/15 text-emerald-300" : "bg-white/[0.04] text-[#666]"}`}>
+                      {d.match}%
+                    </span>
+                    {sent && <span className="text-[9px] font-bold text-emerald-400">SENT</span>}
+                  </div>
+                  <p className="text-[10px] text-[#888]">Subject: {d.subject}</p>
+
+                  {editing ? (
+                    <div className="space-y-2">
+                      <input
+                        value={d.subject}
+                        onChange={(e) => {
+                          const updated = [...drafts];
+                          updated[i] = { ...d, subject: e.target.value };
+                          setDrafts(updated);
+                        }}
+                        className="w-full px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-white/[0.08] text-xs text-white focus:outline-none focus:border-sky-500/60"
+                        placeholder="Subject"
+                      />
+                      <textarea
+                        value={d.body}
+                        onChange={(e) => {
+                          const updated = [...drafts];
+                          updated[i] = { ...d, body: e.target.value };
+                          setDrafts(updated);
+                        }}
+                        rows={4}
+                        className="w-full px-3 py-2 rounded-lg bg-[#1a1a1a] border border-white/[0.08] text-xs text-white focus:outline-none focus:border-sky-500/60 resize-y"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingDraft(null)}
+                          className="px-3 py-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30 text-[10px] font-bold text-sky-300"
+                        >
+                          Done editing
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[#ccc] leading-relaxed whitespace-pre-wrap">{d.body}</p>
+                  )}
+
+                  {!sent && !editing && (
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={sending}
+                        onClick={async () => {
+                          setSendingDraft(i);
+                          try {
+                            const r = await fetch("/api/admin/contacts/email", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                contactId: "draft",
+                                to: d.to,
+                                recruiterName: d.name,
+                                customMessage: d.body,
+                              }),
+                            });
+                            const j = await r.json();
+                            if (j.ok) {
+                              setSentDrafts((prev) => new Set([...prev, i]));
+                              onSuccess(`Sent to ${d.name}`);
+                            } else {
+                              onError(j.error || "Send failed");
+                            }
+                          } catch {
+                            onError("Network error");
+                          }
+                          setSendingDraft(null);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
+                      >
+                        {sending ? "Sending..." : "Approve & Send"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingDraft(i)}
+                        className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[10px] font-bold text-[#999] hover:text-white"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDrafts(drafts.filter((_, j) => j !== i));
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-[10px] text-[#555] hover:text-red-400"
+                      >
+                        Discard
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Jobs scout */}
