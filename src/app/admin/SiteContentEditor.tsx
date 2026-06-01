@@ -1189,7 +1189,7 @@ export default function SiteContentEditor({
         </div>
       </div>
 
-      <Section title="Hero" subtitle="Name, taglines, animated roles" defaultOpen>
+      <Section title="Hero" subtitle="Name, taglines, animated roles">
         <HeroEditor value={draft.hero} onChange={(v) => update("hero", v)} />
       </Section>
       <Section title="About" subtitle="Bio, stats, highlights, socials">

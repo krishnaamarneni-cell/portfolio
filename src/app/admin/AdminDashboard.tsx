@@ -88,6 +88,7 @@ export default function AdminDashboard({
       t === "social" ||
       t === "agents" ||
       t === "personal" ||
+      t === "contacts" ||
       t === "connectors" ||
       t === "chat"
     ) {
