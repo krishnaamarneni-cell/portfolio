@@ -86,6 +86,8 @@ export default function AgentsTab({
   const [editingDraft, setEditingDraft] = useState<number | null>(null);
   const [sendingDraft, setSendingDraft] = useState<number | null>(null);
   const [sentDrafts, setSentDrafts] = useState<Set<number>>(new Set());
+  const [rewriting, setRewriting] = useState(false);
+  const [customRewrite, setCustomRewrite] = useState("");
 
   // Stock Screener
   const [screenState, setScreenState] = useState<AgentState | null>(null);
@@ -528,6 +530,121 @@ export default function AgentsTab({
                         rows={4}
                         className="w-full px-3 py-2 rounded-lg bg-[#1a1a1a] border border-white/[0.08] text-xs text-white focus:outline-none focus:border-sky-500/60 resize-y"
                       />
+
+                      {/* AI rewrite toolbar */}
+                      <div className="rounded-lg bg-[#1a1a1a] border border-white/[0.06] p-2.5 space-y-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[9px] font-mono uppercase tracking-widest text-violet-400 mr-1">AI</span>
+                          {(
+                            [
+                              { key: "elaborate", label: "Elaborate", icon: "+" },
+                              { key: "shorter", label: "Shorter", icon: "-" },
+                              { key: "friendly", label: "Friendly", icon: null },
+                              { key: "professional", label: "Professional", icon: null },
+                              { key: "confident", label: "Confident", icon: null },
+                              { key: "casual", label: "Casual", icon: null },
+                              { key: "grammar", label: "Fix Grammar", icon: null },
+                            ] as const
+                          ).map((btn) => (
+                            <button
+                              key={btn.key}
+                              type="button"
+                              disabled={rewriting}
+                              onClick={async () => {
+                                setRewriting(true);
+                                try {
+                                  const r = await fetch("/api/admin/rewrite", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      text: d.body,
+                                      instruction: btn.key,
+                                      context: `Recruiter: ${d.name}, Role: ${d.subject}`,
+                                    }),
+                                  });
+                                  const j = await r.json();
+                                  if (j.rewritten) {
+                                    const updated = [...drafts];
+                                    updated[i] = { ...d, body: j.rewritten };
+                                    setDrafts(updated);
+                                  }
+                                } catch {}
+                                setRewriting(false);
+                              }}
+                              className="px-2 py-1 rounded-md bg-violet-500/10 border border-violet-500/20 text-[9px] font-bold text-violet-300 hover:bg-violet-500/20 disabled:opacity-40"
+                            >
+                              {btn.icon && <span className="mr-0.5">{btn.icon}</span>}
+                              {btn.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-1.5">
+                          <input
+                            value={customRewrite}
+                            onChange={(e) => setCustomRewrite(e.target.value)}
+                            placeholder="Custom: 'add SAP Ariba experience' or 'mention Coca-Cola project'"
+                            className="flex-1 px-2.5 py-1.5 rounded-md bg-[#0a0a0a] border border-white/[0.06] text-[10px] text-white placeholder:text-[#555] focus:outline-none focus:border-violet-500/40"
+                            onKeyDown={async (e) => {
+                              if (e.key === "Enter" && customRewrite.trim()) {
+                                setRewriting(true);
+                                try {
+                                  const r = await fetch("/api/admin/rewrite", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      text: d.body,
+                                      instruction: customRewrite,
+                                      context: `Recruiter: ${d.name}, Role: ${d.subject}`,
+                                    }),
+                                  });
+                                  const j = await r.json();
+                                  if (j.rewritten) {
+                                    const updated = [...drafts];
+                                    updated[i] = { ...d, body: j.rewritten };
+                                    setDrafts(updated);
+                                    setCustomRewrite("");
+                                  }
+                                } catch {}
+                                setRewriting(false);
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            disabled={rewriting || !customRewrite.trim()}
+                            onClick={async () => {
+                              if (!customRewrite.trim()) return;
+                              setRewriting(true);
+                              try {
+                                const r = await fetch("/api/admin/rewrite", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    text: d.body,
+                                    instruction: customRewrite,
+                                    context: `Recruiter: ${d.name}, Role: ${d.subject}`,
+                                  }),
+                                });
+                                const j = await r.json();
+                                if (j.rewritten) {
+                                  const updated = [...drafts];
+                                  updated[i] = { ...d, body: j.rewritten };
+                                  setDrafts(updated);
+                                  setCustomRewrite("");
+                                }
+                              } catch {}
+                              setRewriting(false);
+                            }}
+                            className="px-3 py-1.5 rounded-md bg-violet-500/15 border border-violet-500/30 text-[9px] font-bold text-violet-300 hover:bg-violet-500/25 disabled:opacity-40"
+                          >
+                            {rewriting ? "..." : "Rewrite"}
+                          </button>
+                        </div>
+                        {rewriting && (
+                          <p className="text-[9px] text-violet-400/60 animate-pulse">Rewriting with AI...</p>
+                        )}
+                      </div>
+
                       <div className="flex gap-2">
                         <button
                           type="button"
