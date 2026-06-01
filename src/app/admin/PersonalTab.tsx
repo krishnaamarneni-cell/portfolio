@@ -74,6 +74,7 @@ export default function PersonalTab({
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
   const [draftDate, setDraftDate] = useState("");
+  const [draftCategory, setDraftCategory] = useState<string>("note");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editBody, setEditBody] = useState("");
@@ -106,12 +107,15 @@ export default function PersonalTab({
   async function create() {
     if (!draft.trim()) return;
     setCreating(true);
+    // Add category as a tag so agents + filters can use it.
+    const tags = draftCategory !== "note" ? [draftCategory] : [];
     const r = await fetch("/api/admin/personal/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         body: draft.trim(),
         event_date: draftDate || undefined,
+        tags,
       }),
     });
     const j = await r.json().catch(() => ({}));
@@ -120,9 +124,10 @@ export default function PersonalTab({
       onError(j.error || "Save failed");
       return;
     }
-    onSuccess("Note saved");
+    onSuccess(`${draftCategory === "note" ? "Note" : draftCategory.charAt(0).toUpperCase() + draftCategory.slice(1)} saved`);
     setDraft("");
     setDraftDate("");
+    setDraftCategory("note");
     setNotes((n) => [j.note, ...n]);
   }
 
@@ -228,24 +233,43 @@ export default function PersonalTab({
           here. Quietly fades to "Clean" badge when there's nothing pending. */}
       <MemoryAgentCard onSuccess={onSuccess} onError={onError} />
 
-      {/* Facts table */}
-      <FactsCard onError={onError} onSuccess={onSuccess} />
+      {/* Collapsible sections — Facts, Habits, Reading */}
+      <CollapsibleSection title="Facts" count={0} id="facts">
+        <FactsCard onError={onError} onSuccess={onSuccess} />
+      </CollapsibleSection>
 
-      {/* Recruiter Contacts */}
-      <RecruiterContactsCard onError={onError} onSuccess={onSuccess} />
+      <CollapsibleSection title="Habits" count={0} id="habits">
+        <HabitsCard onError={onError} onSuccess={onSuccess} />
+      </CollapsibleSection>
 
-      {/* Habits */}
-      <HabitsCard onError={onError} onSuccess={onSuccess} />
-
-      {/* Reading list */}
-      <ReadingCard onError={onError} onSuccess={onSuccess} />
+      <CollapsibleSection title="Reading" count={0} id="reading">
+        <ReadingCard onError={onError} onSuccess={onSuccess} />
+      </CollapsibleSection>
 
       {/* Quick add */}
       <div className="rounded-2xl border border-[#ff6b00]/20 bg-gradient-to-br from-[#ff6b00]/[0.05] to-transparent p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
-            Add to notepad
-          </label>
+          <div className="flex items-center gap-2">
+            <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
+              Add
+            </label>
+            <select
+              value={draftCategory}
+              onChange={(e) => setDraftCategory(e.target.value)}
+              className="px-2 py-1 rounded-lg bg-[#0a0a0a] border border-[#ff6b00]/30 text-xs text-[#ff8c38] focus:outline-none"
+            >
+              <option value="note">Note</option>
+              <option value="fact">Fact</option>
+              <option value="habit">Habit</option>
+              <option value="reading">Reading</option>
+              <option value="visa">Visa / Immigration</option>
+              <option value="tax">Tax</option>
+              <option value="housing">Housing</option>
+              <option value="travel">Travel</option>
+              <option value="health">Health</option>
+              <option value="goal">Goal</option>
+            </select>
+          </div>
           {/* Live transcription — text streams in as you speak. The component
               calls back with each interim result; we treat the running text
               as "what's said in this recording" and append/replace into the
@@ -1890,6 +1914,54 @@ function ContactRow({
       >
         <FiTrash2 size={11} />
       </button>
+    </div>
+  );
+}
+
+/* ─────────────────── Collapsible section ─────────────────── */
+
+function CollapsibleSection({
+  title,
+  count,
+  id,
+  children,
+}: {
+  title: string;
+  count: number;
+  id: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(`life_section_${id}`) === "open";
+  });
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    try {
+      window.localStorage.setItem(`life_section_${id}`, next ? "open" : "closed");
+    } catch {}
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] overflow-hidden">
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-full flex items-center justify-between p-4 hover:bg-white/[0.02] transition-colors"
+      >
+        <span className="text-sm font-bold text-white">
+          {title}
+          {count > 0 && (
+            <span className="ml-2 text-[10px] font-mono text-[#666]">{count}</span>
+          )}
+        </span>
+        <span className="text-[10px] font-mono text-[#666]">
+          {open ? "HIDE" : "SHOW"}
+        </span>
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
     </div>
   );
 }
