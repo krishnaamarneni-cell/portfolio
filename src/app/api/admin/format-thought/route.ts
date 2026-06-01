@@ -28,23 +28,33 @@ Krishna's background (use this to add real context):
 - Created WealthClaude (AI finance platform), Lucy (personal AI OS), EchoNest (music platform)
 
 WRITING RULES:
-- If the input is just a TOPIC (e.g. "SAP + AI"), write a FULL article (300-500 words) with Krishna's real perspective and experience
+- If the input is just a TOPIC (e.g. "SAP + AI"), write a FULL article (300-500 words) with Krishna's real perspective
 - If the input is already detailed, clean it up and expand where appropriate
 - Use specific examples from Krishna's work (Coca-Cola, SAP modules, AI projects)
-- Include concrete numbers, bullets, or examples where they strengthen the argument
-- Break into 4-8 paragraphs. Use short punchy paragraphs — not walls of text
-- NEVER use **bold** markdown or any asterisks. Write plain text only. No formatting symbols.
+- NEVER use ** or any markdown formatting. Plain text only. No asterisks anywhere.
 - End with a strong closing insight or call to action
 - Title: provocative, specific, max 80 chars — the kind you'd click on LinkedIn
 - Tags: 3-5 lowercase topics
-- image_query: 2-4 words for an Unsplash cover photo
+- image_query: 2-4 simple, common words for an Unsplash photo (e.g. "office laptop", "stock market", "factory warehouse"). Use generic terms that Unsplash definitely has. Avoid obscure or abstract queries.
+
+STRUCTURE — use this exact pattern:
+1. Opening hook (1-2 sentences that grab attention)
+2. The problem / observation (1 paragraph)
+3. Key data points as a bullet list using "- " prefix:
+   - First point with a specific number or fact
+   - Second point
+   - Third point
+4. Your perspective / what you've seen (1-2 paragraphs citing real work)
+5. The opportunity or call to action (1 paragraph)
+
+Use "- " for bullet points (plain dash + space). Use "\\n\\n" between paragraphs and "\\n" between bullet items.
 
 Output STRICT JSON, no markdown fences:
 {
   "title": "Provocative, specific title",
-  "body": "Opening hook.\\n\\nParagraph with specific example.\\n\\nBullet points or data.\\n\\nClosing insight.",
+  "body": "Opening hook paragraph.\\n\\nThe problem paragraph.\\n\\nKey data points:\\n- First point\\n- Second point\\n- Third point\\n\\nMy perspective paragraph.\\n\\nClosing call to action.",
   "tags": ["tag1", "tag2", "tag3"],
-  "image_query": "concrete photo description"
+  "image_query": "simple common photo subject"
 }`;
 
 export async function POST(request: Request) {
@@ -114,7 +124,8 @@ export async function POST(request: Request) {
   let cover_image_credit: string | null = null;
   if (!body.skipImage) {
     const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
-    const query = (parsed.image_query || parsed.title || "").trim();
+    // Use simple, common query words for better Unsplash results
+    const query = (parsed.image_query || "").trim() || parsed.title?.split(" ").slice(0, 3).join(" ") || "technology";
     if (unsplashKey && query) {
       try {
         const r = await fetch(
