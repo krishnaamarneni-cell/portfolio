@@ -88,6 +88,8 @@ export default function AgentsTab({
   const [sentDrafts, setSentDrafts] = useState<Set<number>>(new Set());
   const [rewriting, setRewriting] = useState(false);
   const [customRewrite, setCustomRewrite] = useState("");
+  const [deepScanning, setDeepScanning] = useState(false);
+  const [deepScanResult, setDeepScanResult] = useState<string | null>(null);
 
   // Stock Screener
   const [screenState, setScreenState] = useState<AgentState | null>(null);
@@ -448,7 +450,7 @@ export default function AgentsTab({
           </button>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <label className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
             Scan last
           </label>
@@ -468,7 +470,42 @@ export default function AgentsTab({
               </button>
             ))}
           </div>
+          <div className="border-l border-white/[0.06] h-5 mx-1" />
+          <button
+            type="button"
+            disabled={deepScanning}
+            onClick={async () => {
+              setDeepScanning(true);
+              setDeepScanResult(null);
+              try {
+                const r = await fetch("/api/admin/agents/inbox/deep-scan", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ maxEmails: 500 }),
+                });
+                const j = await r.json();
+                if (j.ok) {
+                  setDeepScanResult(`Scanned ${j.scanned} emails, found ${j.jobEmails} job-related, extracted ${j.uniqueContacts} unique contacts, saved ${j.saved} new.`);
+                  onSuccess(`Deep scan: ${j.saved} contacts saved`);
+                } else {
+                  setDeepScanResult(`Error: ${j.error}`);
+                  onError(j.error || "Deep scan failed");
+                }
+              } catch (err) {
+                onError("Network error");
+              }
+              setDeepScanning(false);
+            }}
+            className="px-3 py-1.5 rounded-full text-xs border bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+          >
+            {deepScanning ? "Scanning all..." : "Deep Scan (all emails)"}
+          </button>
         </div>
+        {deepScanResult && (
+          <p className="text-[10px] text-amber-300/80 bg-amber-500/[0.04] border border-amber-500/20 rounded-lg px-3 py-2">
+            {deepScanResult}
+          </p>
+        )}
 
         {inboxError && (
           <ErrorBox

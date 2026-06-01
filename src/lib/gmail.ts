@@ -256,47 +256,68 @@ export async function listRecentMessages(opts: {
 }): Promise<{ messages: GmailMessageSummary[]; error?: string }> {
   const access = await getAccessToken();
   if (!access) return { messages: [], error: "Gmail not connected" };
-  const max = Math.max(1, Math.min(50, opts.maxResults ?? 10));
-  const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
-  listUrl.searchParams.set("maxResults", String(max));
-  if (opts.query) listUrl.searchParams.set("q", opts.query);
-  const r = await fetch(listUrl.toString(), {
-    headers: { Authorization: `Bearer ${access}` },
-    cache: "no-store",
-  });
-  if (!r.ok) {
-    return { messages: [], error: `Gmail list ${r.status}` };
+  const max = Math.max(1, Math.min(500, opts.maxResults ?? 10));
+
+  // Paginate through Gmail list API (max 100 per page).
+  const allIds: Array<{ id: string; threadId: string }> = [];
+  let pageToken: string | undefined;
+  while (allIds.length < max) {
+    const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+    listUrl.searchParams.set("maxResults", String(Math.min(100, max - allIds.length)));
+    if (opts.query) listUrl.searchParams.set("q", opts.query);
+    if (pageToken) listUrl.searchParams.set("pageToken", pageToken);
+    const r = await fetch(listUrl.toString(), {
+      headers: { Authorization: `Bearer ${access}` },
+      cache: "no-store",
+    });
+    if (!r.ok) {
+      if (allIds.length === 0) return { messages: [], error: `Gmail list ${r.status}` };
+      break;
+    }
+    const j = (await r.json()) as {
+      messages?: Array<{ id: string; threadId: string }>;
+      nextPageToken?: string;
+    };
+    const page = j.messages ?? [];
+    allIds.push(...page);
+    pageToken = j.nextPageToken;
+    if (!pageToken || page.length === 0) break;
   }
-  const j = (await r.json()) as {
-    messages?: Array<{ id: string; threadId: string }>;
-  };
-  const ids = (j.messages ?? []).slice(0, max);
-  // Fetch each message metadata in parallel.
-  const summaries = await Promise.all(
-    ids.map(async (m): Promise<GmailMessageSummary | null> => {
-      const mr = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
-        { headers: { Authorization: `Bearer ${access}` }, cache: "no-store" }
-      );
-      if (!mr.ok) return null;
-      const md = (await mr.json()) as {
-        id: string;
-        threadId: string;
-        snippet?: string;
-        payload?: { headers?: Array<{ name: string; value: string }> };
-      };
-      const headers = md.payload?.headers ?? [];
-      const get = (n: string) =>
-        headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value;
-      return {
-        id: md.id,
-        threadId: md.threadId,
-        from: get("From"),
-        subject: get("Subject"),
-        date: get("Date"),
-        snippet: md.snippet,
-      };
-    })
-  );
-  return { messages: summaries.filter((s): s is GmailMessageSummary => !!s) };
+
+  const ids = allIds.slice(0, max);
+
+  // Fetch each message metadata in parallel (batch 20 at a time to avoid rate limits).
+  const summaries: GmailMessageSummary[] = [];
+  const BATCH = 20;
+  for (let start = 0; start < ids.length; start += BATCH) {
+    const batch = ids.slice(start, start + BATCH);
+    const results = await Promise.all(
+      batch.map(async (m): Promise<GmailMessageSummary | null> => {
+        const mr = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+          { headers: { Authorization: `Bearer ${access}` }, cache: "no-store" }
+        );
+        if (!mr.ok) return null;
+        const md = (await mr.json()) as {
+          id: string;
+          threadId: string;
+          snippet?: string;
+          payload?: { headers?: Array<{ name: string; value: string }> };
+        };
+        const headers = md.payload?.headers ?? [];
+        const get = (n: string) =>
+          headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value;
+        return {
+          id: md.id,
+          threadId: md.threadId,
+          from: get("From"),
+          subject: get("Subject"),
+          date: get("Date"),
+          snippet: md.snippet,
+        };
+      })
+    );
+    summaries.push(...results.filter((s): s is GmailMessageSummary => !!s));
+  }
+  return { messages: summaries };
 }
