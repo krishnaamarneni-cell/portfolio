@@ -132,10 +132,31 @@
     </div>
   </div>
   <div class="field" style="flex:1;min-width:280px">
-    <label>LLM prompt scoring — score every occupation 0–100, then recolour</label>
+    <label>Search a job title to see its AI score</label>
     <div class="prompt">
-      <input id="q" placeholder="e.g. how exposed is this job to automation by robots?" />
+      <input id="q" placeholder="Type any job title (e.g. supply chain analyst, software engineer, truck driver)" />
       <button id="run">Score</button>
+    </div>
+  </div>
+</div>
+
+<!-- Score result card — appears when user scores a job -->
+<div id="scorecard" style="display:none;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line)">
+  <div style="max-width:800px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+    <div style="flex:0 0 auto;text-align:center">
+      <div id="sc-score" style="font-size:48px;font-weight:800;line-height:1"></div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">out of 10</div>
+    </div>
+    <div style="flex:1;min-width:200px">
+      <div id="sc-title" style="font-size:16px;font-weight:700;margin-bottom:4px"></div>
+      <div id="sc-explain" style="font-size:13px;color:var(--muted);line-height:1.5"></div>
+    </div>
+    <div style="flex:0 0 auto;display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:12px">
+      <span style="color:var(--muted)">AI Exposure</span><span id="sc-ai" style="font-weight:600"></span>
+      <span style="color:var(--muted)">Median Pay</span><span id="sc-pay" style="font-weight:600"></span>
+      <span style="color:var(--muted)">Education</span><span id="sc-edu" style="font-weight:600"></span>
+      <span style="color:var(--muted)">Formality</span><span id="sc-formal" style="font-weight:600"></span>
+      <span style="color:var(--muted)">Workers</span><span id="sc-workers" style="font-weight:600"></span>
     </div>
   </div>
 </div>

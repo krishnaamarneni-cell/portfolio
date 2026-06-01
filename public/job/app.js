@@ -260,17 +260,80 @@ function scoreByHeuristic(q, o){
   return Math.max(0, Math.min(1, s));
 }
 async function runPrompt(){
-  const q = document.getElementById("q").value.trim();
-  if(!q){ setStatus("Enter a prompt first."); return; }
-  const btn = document.getElementById("run"); btn.disabled = true;
-  setStatus("Scoring " + DATA.length + " occupations…");
+  const q = document.getElementById(“q”).value.trim();
+  if(!q){ setStatus(“Enter a job title first.”); return; }
+  const btn = document.getElementById(“run”); btn.disabled = true;
+  setStatus(“Scoring “ + DATA.length + “ occupations…”);
   await new Promise(r=>setTimeout(r,250));
   customScores = {}; DATA.forEach(o => customScores[o.name] = scoreByHeuristic(q, o));
-  layer = "custom"; filter = null;
-  d3.selectAll("#layers button").classed("on", false);
-  d3.select("#customBtn").classed("on", true);
+  layer = “custom”; filter = null;
+  d3.selectAll(“#layers button”).classed(“on”, false);
+  d3.select(“#customBtn”).classed(“on”, true);
   render(); btn.disabled = false;
-  setStatus(`Coloured by: “${q}” (heuristic). Hover a tile for its score.`);
+
+  // Find the best-matching occupation for the score card
+  showScoreCard(q);
+  setStatus(`Coloured by: “${q}”. Hover a tile for its score.`);
+}
+
+function showScoreCard(query){
+  const q = query.toLowerCase();
+  // Find closest matching occupation by name similarity
+  let best = null, bestScore = -1;
+  DATA.forEach(o => {
+    const name = o.name.toLowerCase();
+    let score = 0;
+    q.split(/\s+/).forEach(w => { if(w.length > 2 && name.includes(w)) score += 1; });
+    // Exact match bonus
+    if(name.includes(q)) score += 5;
+    if(score > bestScore){ bestScore = score; best = o; }
+  });
+
+  const card = document.getElementById(“scorecard”);
+  if(!best || bestScore <= 0){
+    // No match — show the average across all occupations
+    const avgAi = d3.mean(DATA, d => d.ai) || 0;
+    const scoreVal = (customScores ? d3.mean(DATA, d => customScores[d.name] || 0) : avgAi) * 10;
+    document.getElementById(“sc-score”).textContent = scoreVal.toFixed(1);
+    document.getElementById(“sc-score”).style.color = RAMP(scoreVal / 10);
+    document.getElementById(“sc-title”).textContent = `”${query}” — no exact occupation match`;
+    document.getElementById(“sc-explain”).textContent = “This job title doesn't match any specific occupation in the dataset. The score shows the average across all occupations. Try a broader term like 'analyst', 'engineer', 'driver', or 'farmer'.”;
+    document.getElementById(“sc-ai”).textContent = (avgAi * 10).toFixed(1) + “/10”;
+    document.getElementById(“sc-pay”).textContent = “—“;
+    document.getElementById(“sc-edu”).textContent = “—“;
+    document.getElementById(“sc-formal”).textContent = “—“;
+    document.getElementById(“sc-workers”).textContent = “—“;
+    card.style.display = “block”;
+    return;
+  }
+
+  const aiScore = (best.ai * 10).toFixed(1);
+  const promptScore = customScores ? (customScores[best.name] * 10).toFixed(1) : aiScore;
+  const scoreNum = parseFloat(promptScore);
+
+  document.getElementById(“sc-score”).textContent = promptScore;
+  document.getElementById(“sc-score”).style.color = RAMP(scoreNum / 10);
+  document.getElementById(“sc-title”).textContent = best.name;
+
+  // Plain language explanation
+  let explain = “”;
+  if(scoreNum >= 8) explain = “Very high exposure. This job is likely to see major changes from AI and automation in the next 5-10 years. Many tasks can be automated or augmented by AI tools.”;
+  else if(scoreNum >= 6) explain = “Moderate-to-high exposure. Parts of this job will change with AI, but human judgment, relationships, or physical presence still matter. Upskilling in AI tools would be smart.”;
+  else if(scoreNum >= 4) explain = “Moderate exposure. Some routine tasks may be automated, but the core of this job requires skills AI can't easily replace. A balanced risk profile.”;
+  else if(scoreNum >= 2) explain = “Low exposure. This job involves physical work, human interaction, or creative judgment that AI struggles with. Relatively safe from automation in the near term.”;
+  else explain = “Minimal exposure. This job is hands-on, location-dependent, or requires uniquely human skills. Very unlikely to be significantly disrupted by AI soon.”;
+
+  // Add pay context
+  if(best.wage) explain += ` Median pay: ${INR(best.wage)}/month.`;
+  explain += ` About ${(best.employment).toFixed(1)}M people work in this occupation.`;
+
+  document.getElementById(“sc-explain”).textContent = explain;
+  document.getElementById(“sc-ai”).textContent = aiScore + “/10”;
+  document.getElementById(“sc-pay”).textContent = best.wage ? INR(best.wage) + “/mo” : “—“;
+  document.getElementById(“sc-edu”).textContent = EDU[best.education] || “—“;
+  document.getElementById(“sc-formal”).textContent = (best.formality * 100).toFixed(0) + “% formal”;
+  document.getElementById(“sc-workers”).textContent = best.employment.toFixed(1) + “M”;
+  card.style.display = “block”;
 }
 document.getElementById("run").onclick = runPrompt;
 document.getElementById("q").addEventListener("keydown", e=>{ if(e.key==="Enter") runPrompt(); });
