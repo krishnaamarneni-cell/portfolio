@@ -18,8 +18,11 @@ type Body = {
   recruiterName: string;
   company?: string;
   rolePitched?: string;
-  /** If provided, skip AI generation and send this directly. */
   customMessage?: string;
+  customSubject?: string;
+  attachResume?: boolean;
+  /** If true, return the AI-generated draft without sending. */
+  draftOnly?: boolean;
 };
 
 export async function POST(request: Request) {
@@ -93,9 +96,12 @@ Write 2-3 sentences. Human tone. No template language.`;
 
     const generatedBody = result.content || "Saw your message about the role — looks like a strong fit given my recent work. Happy to jump on a quick call this week if you're free.";
 
-    subject = body.rolePitched
-      ? `Re: ${body.rolePitched}`
-      : "Re: Opportunity";
+    // If draftOnly, return the draft without sending.
+    if (body.draftOnly) {
+      return NextResponse.json({ draft: generatedBody });
+    }
+
+    subject = body.customSubject || (body.rolePitched ? `Re: ${body.rolePitched}` : "Re: Opportunity");
 
     htmlBody = `<p>Hi ${body.recruiterName},</p>
 <p>${generatedBody.replace(/\n/g, "<br>")}</p>
@@ -108,39 +114,72 @@ Write 2-3 sentences. Human tone. No template language.`;
     );
   }
 
+  if (body.customSubject) subject = body.customSubject;
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://krishnaamarneni.com";
+
   // Wrap in a clean email template.
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1f2937;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
 ${htmlBody}
 </body></html>`;
 
-  const send = await sendEmailUnified({
-    to: body.to,
-    subject,
-    html,
-    text: htmlBody.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " "),
-  });
+  const plainText = htmlBody.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
 
-  if (send.ok) {
-    await markEmailed(body.contactId);
-    // Record for learning — track what Krishna actually sends so AI improves.
+  // Send with optional resume attachment.
+  const attachResume = body.attachResume !== false; // default true
+  let resumeBuffer: Buffer | null = null;
+  if (attachResume) {
     try {
-      const plainBody = htmlBody.replace(/<[^>]+>/g, "").trim();
+      const resumeUrl = `${siteUrl}/Krishna_Amarneni_Resume.docx`;
+      const r = await fetch(resumeUrl);
+      if (r.ok) resumeBuffer = Buffer.from(await r.arrayBuffer());
+    } catch {}
+  }
+
+  // Use Resend directly for attachment support.
+  const resendKey = process.env.RESEND_API_KEY;
+  let sendResult: { ok: boolean; error?: string; provider: string };
+
+  if (resendKey && resumeBuffer) {
+    try {
+      const { Resend } = await import("resend");
+      const resend = new Resend(resendKey);
+      const from = process.env.RESEND_FROM_EMAIL || "Lucy <onboarding@resend.dev>";
+      const r = await resend.emails.send({
+        from, to: body.to, subject, html, text: plainText,
+        attachments: [{ filename: "Krishna_Amarneni_Resume.docx", content: resumeBuffer }],
+      });
+      sendResult = r.error
+        ? { ok: false, error: r.error.message, provider: "resend" }
+        : { ok: true, provider: "resend" };
+    } catch (err) {
+      sendResult = { ok: false, error: err instanceof Error ? err.message : "Resend failed", provider: "resend" };
+    }
+  } else {
+    const s = await sendEmailUnified({ to: body.to, subject, html, text: plainText });
+    sendResult = s;
+  }
+
+  if (sendResult.ok) {
+    await markEmailed(body.contactId);
+    try {
       await recordResponse({
         to_email: body.to,
         to_name: body.recruiterName,
         subject,
-        ai_draft: body.customMessage ? "" : plainBody, // empty if user wrote it manually
-        final_body: plainBody,
+        ai_draft: body.customMessage ? "" : plainText,
+        final_body: plainText,
         action: body.customMessage ? "edited_sent" : "sent",
       });
-    } catch {} // non-critical
+    } catch {}
   }
 
   return NextResponse.json({
-    ok: send.ok,
-    error: send.error,
-    provider: send.provider,
+    ok: sendResult.ok,
+    error: sendResult.error,
+    provider: sendResult.provider,
     subject,
+    resumeAttached: !!resumeBuffer,
   });
 }
