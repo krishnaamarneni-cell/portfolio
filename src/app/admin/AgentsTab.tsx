@@ -97,12 +97,20 @@ export default function AgentsTab({
   const [profile, setProfile] = useState<"software" | "sap" | "both">("both");
   const [location, setLocation] = useState("");
 
+  const autoRefreshTriggered = useState(false)[1]; // prevent re-trigger
+  const [autoRefreshDone, setAutoRefreshDone] = useState(false);
+
   useEffect(() => {
-    setNewsState(loadCached("news"));
-    setJobsState(loadCached("jobs"));
-    setOppState(loadCached("opportunities"));
-    setInboxState(loadCached("inbox"));
-    setScreenState(loadCached("screener"));
+    const cachedNews = loadCached("news");
+    const cachedJobs = loadCached("jobs");
+    const cachedOpp = loadCached("opportunities");
+    const cachedInbox = loadCached("inbox");
+    const cachedScreen = loadCached("screener");
+    setNewsState(cachedNews);
+    setJobsState(cachedJobs);
+    setOppState(cachedOpp);
+    setInboxState(cachedInbox);
+    setScreenState(cachedScreen);
     try {
       const saved = window.localStorage.getItem("krishna_admin_agent_model");
       if (saved) setModel(saved);
@@ -113,6 +121,24 @@ export default function AgentsTab({
       const c = window.localStorage.getItem("krishna_admin_agent_companies");
       if (c) setCompaniesText(c);
     } catch {}
+
+    // ── Smart auto-refresh: run stale agents silently ──
+    // If an agent hasn't run in 6+ hours, auto-run it in the background.
+    const SIX_HOURS = 6 * 60 * 60 * 1000;
+    const isStale = (s: AgentState | null) => !s || Date.now() - s.runAt > SIX_HOURS;
+    // Use a small delay so the UI renders first, then agents start silently.
+    const timer = setTimeout(() => {
+      if (isStale(cachedNews)) runNews();
+      if (isStale(cachedOpp)) runOpportunities();
+      // Jobs + screener + inbox need user config, only auto-refresh if they've run before.
+      if (cachedJobs && isStale(cachedJobs)) runJobs();
+      if (cachedScreen && isStale(cachedScreen)) runScreener();
+      // Inbox only if Gmail is connected (will fail gracefully if not).
+      if (cachedInbox && isStale(cachedInbox)) runInbox();
+      setAutoRefreshDone(true);
+    }, 2000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     try {

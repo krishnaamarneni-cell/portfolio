@@ -1,0 +1,35 @@
+# Scheduled agent runs — free via GitHub Actions.
+# Calls /api/cron/agents on krishnaamarneni.com every 6 hours.
+# The endpoint scans inbox for recruiter emails, saves contacts,
+# and runs a quick news check.
+#
+# Setup: Add CRON_SECRET as a GitHub repo secret
+#   (Settings → Secrets → Actions → New secret)
+#   Use the same value as your Vercel CRON_SECRET.
+
+name: Agent Cron
+
+on:
+  schedule:
+    # Every 6 hours: midnight, 6am, noon, 6pm UTC
+    - cron: "0 0,6,12,18 * * *"
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  run-agents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Trigger agent cron
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://krishnaamarneni.com/api/cron/agents")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Agent cron failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
