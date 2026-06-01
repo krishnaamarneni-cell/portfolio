@@ -12,6 +12,8 @@ import {
   FiTarget,
   FiMail,
   FiBarChart2,
+  FiChevronDown,
+  FiChevronUp,
 } from "react-icons/fi";
 import { AGENT_MODELS, DEFAULT_AGENT_MODEL } from "@/lib/agents";
 
@@ -108,6 +110,37 @@ export default function AgentsTab({
 
   const autoRefreshTriggered = useState(false)[1]; // prevent re-trigger
   const [autoRefreshDone, setAutoRefreshDone] = useState(false);
+
+  // Collapsed state for agent cards — persisted in localStorage
+  const COLLAPSE_KEY = "krishna_admin_agent_collapsed";
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem(COLLAPSE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+  const toggleCollapsed = (id: string) => {
+    setCollapsed((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      try { window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  // Default all cards to collapsed on first visit (no key in localStorage yet)
+  const isCollapsed = (id: string) => collapsed[id] ?? true;
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(COLLAPSE_KEY);
+      if (!raw) {
+        const defaults: Record<string, boolean> = { news: true, inbox: true, jobs: true, opportunities: true, screener: true };
+        window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(defaults));
+        setCollapsed(defaults);
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     const cachedNews = loadCached("news");
@@ -338,24 +371,117 @@ export default function AgentsTab({
     setInboxBusy(false);
   }
 
-  return (
-    <section className="space-y-6">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-xl font-bold">Agents</h2>
-          <p className="text-xs text-[#666] mt-1">
-            Autonomous scouts that go to the open web on demand. Backed by
-            Groq's compound model with a built-in search tool.
-          </p>
+  /* ── Reusable collapsible agent card wrapper ── */
+  function AgentCard({
+    id,
+    title,
+    subtitle,
+    icon: Icon,
+    iconBg,
+    iconColor,
+    accentColor,
+    busy,
+    hasResults,
+    lastRunAt,
+    runLabel,
+    busyLabel,
+    reRunLabel,
+    buttonGradient,
+    buttonTextColor,
+    buttonShadow,
+    onRun,
+    children,
+  }: {
+    id: string;
+    title: string;
+    subtitle: string;
+    icon: React.ComponentType<{ size?: number }>;
+    iconBg: string;
+    iconColor: string;
+    accentColor: string;
+    busy: boolean;
+    hasResults: boolean;
+    lastRunAt?: number;
+    runLabel: string;
+    busyLabel: string;
+    reRunLabel: string;
+    buttonGradient: string;
+    buttonTextColor: string;
+    buttonShadow: string;
+    onRun: () => void;
+    children: React.ReactNode;
+  }) {
+    const open = !isCollapsed(id);
+    return (
+      <div
+        className={`rounded-2xl border bg-[#1a1a1a] overflow-hidden transition-all duration-200 border-l-2 ${accentColor} ${
+          busy
+            ? "border-white/[0.15] animate-pulse"
+            : "border-white/[0.06]"
+        }`}
+      >
+        {/* Header — always visible */}
+        <div
+          className="flex items-center gap-3 px-5 py-3.5 cursor-pointer select-none"
+          onClick={() => toggleCollapsed(id)}
+        >
+          <div className={`w-8 h-8 rounded-lg ${iconBg} ${iconColor} flex items-center justify-center shrink-0`}>
+            <Icon size={15} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-white text-sm leading-tight">{title}</h3>
+              {!open && (
+                <span className="text-[11px] text-[#555] truncate hidden sm:inline">{subtitle}</span>
+              )}
+            </div>
+          </div>
+          {lastRunAt && (
+            <span className="text-[10px] font-mono text-[#555] flex items-center gap-1 shrink-0">
+              <FiClock size={10} />
+              {relTime(lastRunAt)}
+            </span>
+          )}
+          <span className={`w-2 h-2 rounded-full shrink-0 ${hasResults ? "bg-emerald-400" : "bg-[#333]"}`} />
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRun(); }}
+            disabled={busy}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full ${buttonGradient} ${buttonTextColor} font-bold text-[11px] ${buttonShadow} hover:scale-[1.03] disabled:opacity-60 shrink-0 transition-transform`}
+          >
+            <FiZap size={11} />
+            {busy ? busyLabel : hasResults ? reRunLabel : runLabel}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); toggleCollapsed(id); }}
+            className="text-[#555] hover:text-white transition-colors shrink-0 p-0.5"
+          >
+            {open ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
+          </button>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
-            Model
-          </span>
+        {/* Expanded content */}
+        {open && (
+          <div className="px-5 pb-5 space-y-4 border-t border-white/[0.04]">
+            <p className="text-[11px] text-[#666] pt-3">{subtitle}</p>
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <section className="space-y-4">
+      {/* Compact header with floating model pill */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-white">Agents</h2>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08]">
+          <FiCpu size={11} className="text-[#666]" />
           <select
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs text-[#ccc] focus:outline-none max-w-[260px]"
+            className="bg-transparent text-[11px] text-[#ccc] focus:outline-none cursor-pointer max-w-[220px]"
           >
             {AGENT_MODELS.map((m) => (
               <option key={m.id} value={m.id}>
@@ -366,36 +492,26 @@ export default function AgentsTab({
         </div>
       </div>
 
-      {/* News scout */}
-      <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5 space-y-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-300 flex items-center justify-center">
-            <FiTrendingUp size={16} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white">News scout</h3>
-            <p className="text-[11px] text-[#666]">
-              Stocks in your portfolio, job-market trends, new AI tools — last
-              7 days.
-            </p>
-          </div>
-          {newsState && (
-            <span className="text-[10px] font-mono text-[#666] flex items-center gap-1">
-              <FiClock size={10} />
-              {relTime(newsState.runAt)}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={runNews}
-            disabled={newsBusy}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-bold text-xs shadow-[0_4px_15px_rgba(255,107,0,0.35)] hover:scale-[1.03] disabled:opacity-60"
-          >
-            <FiZap size={12} />
-            {newsBusy ? "Scouting…" : newsState ? "Re-run" : "Run"}
-          </button>
-        </div>
-
+      {/* ── News scout ── */}
+      <AgentCard
+        id="news"
+        title="News scout"
+        subtitle="Stocks in your portfolio, job-market trends, new AI tools — last 7 days."
+        icon={FiTrendingUp}
+        iconBg="bg-emerald-500/15"
+        iconColor="text-emerald-300"
+        accentColor="border-l-emerald-500"
+        busy={newsBusy}
+        hasResults={!!newsState}
+        lastRunAt={newsState?.runAt}
+        runLabel="Run"
+        busyLabel="Scouting..."
+        reRunLabel="Re-run"
+        buttonGradient="bg-gradient-to-r from-[#ff6b00] to-[#ff8c38]"
+        buttonTextColor="text-black"
+        buttonShadow="shadow-[0_4px_15px_rgba(255,107,0,0.35)]"
+        onRun={runNews}
+      >
         <input
           value={newsFocus}
           onChange={(e) => setNewsFocus(e.target.value)}
@@ -418,38 +534,28 @@ export default function AgentsTab({
         ) : !newsState && !newsBusy && !newsError ? (
           <EmptyHint icon={FiTrendingUp} text="No run yet — hit Run." />
         ) : null}
-      </div>
+      </AgentCard>
 
-      {/* Email Intelligence */}
-      <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5 space-y-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="w-9 h-9 rounded-xl bg-sky-500/15 text-sky-300 flex items-center justify-center">
-            <FiMail size={16} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white">Email Intelligence</h3>
-            <p className="text-[11px] text-[#666]">
-              Reads your inbox, categorizes every email, and flags job matches
-              &gt;70% against your resume.
-            </p>
-          </div>
-          {inboxState && (
-            <span className="text-[10px] font-mono text-[#666] flex items-center gap-1">
-              <FiClock size={10} />
-              {relTime(inboxState.runAt)}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={runInbox}
-            disabled={inboxBusy}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-sky-500 to-cyan-500 text-white font-bold text-xs shadow-[0_4px_15px_rgba(14,165,233,0.35)] hover:scale-[1.03] disabled:opacity-60"
-          >
-            <FiZap size={12} />
-            {inboxBusy ? "Scanning..." : inboxState ? "Re-scan" : "Scan inbox"}
-          </button>
-        </div>
-
+      {/* ── Email Intelligence ── */}
+      <AgentCard
+        id="inbox"
+        title="Email Intelligence"
+        subtitle="Reads your inbox, categorizes every email, and flags job matches >70% against your resume."
+        icon={FiMail}
+        iconBg="bg-sky-500/15"
+        iconColor="text-sky-300"
+        accentColor="border-l-sky-500"
+        busy={inboxBusy}
+        hasResults={!!inboxState}
+        lastRunAt={inboxState?.runAt}
+        runLabel="Scan inbox"
+        busyLabel="Scanning..."
+        reRunLabel="Re-scan"
+        buttonGradient="bg-gradient-to-r from-sky-500 to-cyan-500"
+        buttonTextColor="text-white"
+        buttonShadow="shadow-[0_4px_15px_rgba(14,165,233,0.35)]"
+        onRun={runInbox}
+      >
         <div className="flex items-center gap-3 flex-wrap">
           <label className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
             Scan last
@@ -760,37 +866,28 @@ export default function AgentsTab({
             })}
           </div>
         )}
-      </div>
+      </AgentCard>
 
-      {/* Jobs scout */}
-      <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5 space-y-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="w-9 h-9 rounded-xl bg-indigo-500/15 text-indigo-300 flex items-center justify-center">
-            <FiBriefcase size={16} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white">Jobs scout</h3>
-            <p className="text-[11px] text-[#666]">
-              Active openings at target companies that match your experience.
-            </p>
-          </div>
-          {jobsState && (
-            <span className="text-[10px] font-mono text-[#666] flex items-center gap-1">
-              <FiClock size={10} />
-              {relTime(jobsState.runAt)}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={runJobs}
-            disabled={jobsBusy}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-bold text-xs shadow-[0_4px_15px_rgba(255,107,0,0.35)] hover:scale-[1.03] disabled:opacity-60"
-          >
-            <FiZap size={12} />
-            {jobsBusy ? "Scouting…" : jobsState ? "Re-run" : "Run"}
-          </button>
-        </div>
-
+      {/* ── Jobs scout ── */}
+      <AgentCard
+        id="jobs"
+        title="Jobs scout"
+        subtitle="Active openings at target companies that match your experience."
+        icon={FiBriefcase}
+        iconBg="bg-indigo-500/15"
+        iconColor="text-indigo-300"
+        accentColor="border-l-indigo-500"
+        busy={jobsBusy}
+        hasResults={!!jobsState}
+        lastRunAt={jobsState?.runAt}
+        runLabel="Run"
+        busyLabel="Scouting..."
+        reRunLabel="Re-run"
+        buttonGradient="bg-gradient-to-r from-[#ff6b00] to-[#ff8c38]"
+        buttonTextColor="text-black"
+        buttonShadow="shadow-[0_4px_15px_rgba(255,107,0,0.35)]"
+        onRun={runJobs}
+      >
         <div className="space-y-3">
           {/* Profile picker — Software / SAP / Both */}
           <div className="space-y-1.5">
@@ -838,7 +935,7 @@ export default function AgentsTab({
             </div>
             <div>
               <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
-                Location (Remote, NJ, Chicago…)
+                Location (Remote, NJ, Chicago...)
               </label>
               <input
                 value={location}
@@ -871,38 +968,28 @@ export default function AgentsTab({
         ) : !jobsState && !jobsBusy && !jobsError ? (
           <EmptyHint icon={FiBriefcase} text="No run yet — set companies and hit Run." />
         ) : null}
-      </div>
+      </AgentCard>
 
-      {/* Atlas Opportunities — Lucy-era portfolio scout */}
-      <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5 space-y-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="w-9 h-9 rounded-xl bg-fuchsia-500/15 text-fuchsia-300 flex items-center justify-center">
-            <FiTarget size={16} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white">Atlas — Opportunities</h3>
-            <p className="text-[11px] text-[#666]">
-              Buffett-scored picks that fill your portfolio gaps. HIGH ·
-              WATCH · MAYBE tiering, sector-gap analysis at the bottom.
-            </p>
-          </div>
-          {oppState && (
-            <span className="text-[10px] font-mono text-[#666] flex items-center gap-1">
-              <FiClock size={10} />
-              {relTime(oppState.runAt)}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={runOpportunities}
-            disabled={oppBusy}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white font-bold text-xs shadow-[0_4px_15px_rgba(217,70,239,0.35)] hover:scale-[1.03] disabled:opacity-60"
-          >
-            <FiZap size={12} />
-            {oppBusy ? "Scanning…" : oppState ? "Re-run" : "Scan"}
-          </button>
-        </div>
-
+      {/* ── Atlas Opportunities ── */}
+      <AgentCard
+        id="opportunities"
+        title="Atlas — Opportunities"
+        subtitle="Buffett-scored picks that fill your portfolio gaps. HIGH / WATCH / MAYBE tiering, sector-gap analysis."
+        icon={FiTarget}
+        iconBg="bg-fuchsia-500/15"
+        iconColor="text-fuchsia-300"
+        accentColor="border-l-fuchsia-500"
+        busy={oppBusy}
+        hasResults={!!oppState}
+        lastRunAt={oppState?.runAt}
+        runLabel="Scan"
+        busyLabel="Scanning..."
+        reRunLabel="Re-run"
+        buttonGradient="bg-gradient-to-r from-fuchsia-500 to-pink-500"
+        buttonTextColor="text-white"
+        buttonShadow="shadow-[0_4px_15px_rgba(217,70,239,0.35)]"
+        onRun={runOpportunities}
+      >
         {oppError && (
           <ErrorBox
             msg={oppError}
@@ -918,37 +1005,28 @@ export default function AgentsTab({
         ) : !oppState && !oppBusy && !oppError ? (
           <EmptyHint icon={FiTarget} text="No scan yet — hit Scan." />
         ) : null}
-      </div>
+      </AgentCard>
 
-      {/* Stock Screener */}
-      <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5 space-y-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-300 flex items-center justify-center">
-            <FiBarChart2 size={16} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white">Stock Screener</h3>
-            <p className="text-[11px] text-[#666]">
-              Set your risk tolerance, scan the whole market, find opportunities that match.
-            </p>
-          </div>
-          {screenState && (
-            <span className="text-[10px] font-mono text-[#666] flex items-center gap-1">
-              <FiClock size={10} />
-              {relTime(screenState.runAt)}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={runScreener}
-            disabled={screenBusy}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold text-xs shadow-[0_4px_15px_rgba(245,158,11,0.35)] hover:scale-[1.03] disabled:opacity-60"
-          >
-            <FiZap size={12} />
-            {screenBusy ? "Scanning..." : screenState ? "Re-scan" : "Scan market"}
-          </button>
-        </div>
-
+      {/* ── Stock Screener ── */}
+      <AgentCard
+        id="screener"
+        title="Stock Screener"
+        subtitle="Set your risk tolerance, scan the whole market, find opportunities that match."
+        icon={FiBarChart2}
+        iconBg="bg-amber-500/15"
+        iconColor="text-amber-300"
+        accentColor="border-l-amber-500"
+        busy={screenBusy}
+        hasResults={!!screenState}
+        lastRunAt={screenState?.runAt}
+        runLabel="Scan market"
+        busyLabel="Scanning..."
+        reRunLabel="Re-scan"
+        buttonGradient="bg-gradient-to-r from-amber-500 to-orange-500"
+        buttonTextColor="text-black"
+        buttonShadow="shadow-[0_4px_15px_rgba(245,158,11,0.35)]"
+        onRun={runScreener}
+      >
         {/* Risk slider */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -1020,7 +1098,7 @@ export default function AgentsTab({
         ) : !screenState && !screenBusy && !screenError ? (
           <EmptyHint icon={FiBarChart2} text="Set your risk level and hit Scan market." />
         ) : null}
-      </div>
+      </AgentCard>
 
       {/* Footer help */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-[11px] text-[#888] leading-relaxed flex items-start gap-2">
