@@ -102,6 +102,18 @@ export async function GET(request: Request) {
     results.inbox = `error: ${err instanceof Error ? err.message : "unknown"}`;
   }
 
+  // Auto-reply pipeline — send personalized replies to >70% matches with resume attached.
+  try {
+    const { runAutoReplyPipeline } = await import("@/lib/auto-reply");
+    const autoReply = await runAutoReplyPipeline();
+    results.autoReply = `scanned ${autoReply.scanned}, ${autoReply.jobEmails} job emails, ${autoReply.matched} matched, ${autoReply.sent} sent, ${autoReply.skippedDuplicate} skipped (already replied)`;
+    if (autoReply.errors.length > 0) {
+      results.autoReplyErrors = autoReply.errors.join("; ");
+    }
+  } catch (err) {
+    results.autoReply = `error: ${err instanceof Error ? err.message : "unknown"}`;
+  }
+
   return NextResponse.json({
     ok: true,
     ran_at: new Date().toISOString(),
