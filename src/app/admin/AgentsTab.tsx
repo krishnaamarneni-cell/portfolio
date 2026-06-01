@@ -90,6 +90,7 @@ export default function AgentsTab({
   const [sentDrafts, setSentDrafts] = useState<Set<number>>(new Set());
   const [rewriting, setRewriting] = useState(false);
   const [customRewrite, setCustomRewrite] = useState("");
+  const [draftAttachResume, setDraftAttachResume] = useState(true);
   const [deepScanning, setDeepScanning] = useState(false);
   const [deepScanResult, setDeepScanResult] = useState<string | null>(null);
 
@@ -795,6 +796,16 @@ export default function AgentsTab({
                         )}
                       </div>
 
+                      {/* Resume + signature controls */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <label className="flex items-center gap-1.5 text-[10px] text-[#999] cursor-pointer">
+                          <input type="checkbox" checked={draftAttachResume} onChange={(e) => setDraftAttachResume(e.target.checked)}
+                            className="rounded border-white/20" />
+                          <FiTarget size={10} /> Attach resume
+                        </label>
+                        <span className="text-[9px] text-[#555]">Signature: Krishna Amarneni · krishnaamarneni.com</span>
+                      </div>
+
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -806,11 +817,27 @@ export default function AgentsTab({
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-[#ccc] leading-relaxed whitespace-pre-wrap">{d.body}</p>
+                    <div className="space-y-2">
+                      <p className="text-xs text-[#ccc] leading-relaxed whitespace-pre-wrap">{d.body}</p>
+                      <div className="border-t border-white/[0.04] pt-2 text-[10px] text-[#555]">
+                        <p>Krishna Amarneni</p>
+                        <p className="text-[#ff8c38]">krishnaamarneni.com</p>
+                        {draftAttachResume && (
+                          <p className="flex items-center gap-1 mt-1 text-[#666]">
+                            <FiTarget size={9} /> Krishna_Amarneni_Resume.docx
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   )}
 
                   {!sent && !editing && (
-                    <div className="flex gap-2 pt-1">
+                    <div className="flex items-center gap-2 pt-1 flex-wrap">
+                      <label className="flex items-center gap-1 text-[9px] text-[#666] cursor-pointer">
+                        <input type="checkbox" checked={draftAttachResume} onChange={(e) => setDraftAttachResume(e.target.checked)}
+                          className="rounded border-white/20" />
+                        Resume
+                      </label>
                       <button
                         type="button"
                         disabled={sending}
@@ -825,12 +852,14 @@ export default function AgentsTab({
                                 to: d.to,
                                 recruiterName: d.name,
                                 customMessage: d.body,
+                                customSubject: d.subject,
+                                attachResume: draftAttachResume,
                               }),
                             });
                             const j = await r.json();
                             if (j.ok) {
                               setSentDrafts((prev) => new Set([...prev, i]));
-                              onSuccess(`Sent to ${d.name}`);
+                              onSuccess(`Sent to ${d.name}${j.resumeAttached ? " (with resume)" : ""}`);
                             } else {
                               onError(j.error || "Send failed");
                             }
