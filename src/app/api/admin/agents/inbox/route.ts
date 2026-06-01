@@ -29,12 +29,23 @@ export async function POST(request: Request) {
     body = (await request.json().catch(() => ({}))) as Body;
   } catch {}
 
-  const days = Math.min(body.days ?? 3, 14);
+  const days = Math.min(body.days ?? 3, 365);
 
-  const { messages, error: gmailError } = await listRecentMessages({
+  // For longer scans, pull more emails but filter job-only before sending to LLM.
+  const fetchLimit = days <= 7 ? 40 : days <= 30 ? 100 : 300;
+  const { messages: allMessages, error: gmailError } = await listRecentMessages({
     query: `newer_than:${days}d`,
-    maxResults: 40,
+    maxResults: fetchLimit,
   });
+
+  // Filter to job-related emails for longer scans (LLM can't process 300 emails).
+  const JOB_RX = /job|hiring|opportunity|role|position|engineer|consultant|recruiter|opening|interview|offer|career|vacancy|talent/i;
+  const messages = days <= 7
+    ? allMessages // Short scans: show everything
+    : allMessages.filter((m) => {
+        const text = `${m.subject ?? ""} ${m.snippet ?? ""} ${m.from ?? ""}`;
+        return JOB_RX.test(text);
+      }).slice(0, 40); // Cap at 40 for LLM context
 
   if (gmailError) {
     return NextResponse.json({ error: gmailError }, { status: 502 });

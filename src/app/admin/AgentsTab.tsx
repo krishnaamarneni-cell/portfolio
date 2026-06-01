@@ -455,7 +455,14 @@ export default function AgentsTab({
             Scan last
           </label>
           <div className="flex gap-1.5">
-            {[1, 3, 7].map((d) => (
+            {([
+              { d: 1, label: "1d" },
+              { d: 3, label: "3d" },
+              { d: 7, label: "7d" },
+              { d: 30, label: "30d" },
+              { d: 90, label: "3mo" },
+              { d: 365, label: "1yr" },
+            ]).map(({ d, label }) => (
               <button
                 key={d}
                 type="button"
@@ -466,7 +473,7 @@ export default function AgentsTab({
                     : "bg-white/[0.04] border-white/[0.08] text-[#999] hover:border-sky-500/30"
                 }`}
               >
-                {d}d
+                {label}
               </button>
             ))}
           </div>
