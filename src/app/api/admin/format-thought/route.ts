@@ -33,7 +33,7 @@ WRITING RULES:
 - Use specific examples from Krishna's work (Coca-Cola, SAP modules, AI projects)
 - Include concrete numbers, bullets, or examples where they strengthen the argument
 - Break into 4-8 paragraphs. Use short punchy paragraphs — not walls of text
-- Bold key phrases with **markdown bold** for scannability
+- NEVER use **bold** markdown or any asterisks. Write plain text only. No formatting symbols.
 - End with a strong closing insight or call to action
 - Title: provocative, specific, max 80 chars — the kind you'd click on LinkedIn
 - Tags: 3-5 lowercase topics

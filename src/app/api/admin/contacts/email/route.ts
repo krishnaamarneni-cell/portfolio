@@ -67,6 +67,7 @@ STYLE RULES:
 - Sound human. Write like you're texting a professional contact, not writing a cover letter.
 - NO corporate filler: "excited about the opportunity", "leverage my expertise", "drive business growth", "make a significant impact" — ALL BANNED.
 - NO "I am confident in my ability" — BANNED.
+- NEVER use **bold** markdown, asterisks, or any formatting symbols. Plain text only.
 - Lead with a SPECIFIC thing from the role/company that caught your eye.
 - Name-drop ONE concrete project or result from Krishna's past (a client, a system he built, a metric).
 - 2-3 sentences max. End with a casual call to action ("Happy to jump on a call this week" not "I welcome the chance to discuss").

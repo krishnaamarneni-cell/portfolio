@@ -38,6 +38,7 @@ Critical:
 - Don't invent facts about Krishna or his companies that aren't in the topic
 - Three versions should share the same core idea but be genuinely native to each platform
 - No "buy now", no clickbait, no fake urgency
+- NEVER use **bold** markdown, asterisks, or any formatting symbols. Plain text only. No ** anywhere in the output.
 
 Image fields:
 - "image_query" → 2-4 concrete words for an Unsplash stock-photo search (e.g., "trader desk monitors")

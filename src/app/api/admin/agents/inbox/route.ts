@@ -128,7 +128,7 @@ CRITICAL: After the markdown, output TWO JSON blocks:
 RULES for drafts:
 - Sound human, not templated. Lead with something specific from the email.
 - 2-3 sentences max. End with a casual call-to-action.
-- BANNED: "excited about the opportunity", "leverage my expertise", "confident in my ability"
+- BANNED: "excited about the opportunity", "leverage my expertise", "confident in my ability", any **bold** markdown or asterisks — plain text only
 - Include ALL job emails, not just strong matches — Krishna decides which to send
 ${learningCtx}`;
 

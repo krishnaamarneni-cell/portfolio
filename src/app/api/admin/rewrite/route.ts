@@ -74,7 +74,7 @@ INSTRUCTION: ${instruction}
 ${body.context ? `CONTEXT: ${body.context}` : ""}
 ${learningCtx}
 
-BANNED: "excited about the opportunity", "leverage my expertise", "I am confident", "I believe my skills", any third-person reference to Krishna`,
+BANNED: "excited about the opportunity", "leverage my expertise", "I am confident", "I believe my skills", any third-person reference to Krishna, any **bold** markdown or asterisks — write PLAIN TEXT only`,
     userPrompt: body.text,
     maxTokens: 400,
   });

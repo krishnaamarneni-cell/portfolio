@@ -140,7 +140,7 @@ Match scoring:
 
 Reply rules:
 - Sound human. 2-3 sentences. Lead with something specific from the email.
-- BANNED: "excited about the opportunity", "leverage my expertise"
+- BANNED: "excited about the opportunity", "leverage my expertise", any **bold** or asterisks — plain text only
 - End with "Happy to jump on a call this week" or similar casual CTA.
 - Do NOT include greetings or signature — those are added automatically.
 
