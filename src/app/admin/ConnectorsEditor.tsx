@@ -718,15 +718,30 @@ function GmailCard({
   );
 }
 
-/* ─────────────── Lucy MCP Hub card ─────────────── */
+/* ─────────────── Lucy MCP Hub + Token Generator ─────────────── */
+
+type TokenRow = {
+  id: string;
+  name: string;
+  token_prefix: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
+};
 
 function McpHubCard() {
   const [open, setOpen] = useState(false);
+  const [tokens, setTokens] = useState<TokenRow[]>([]);
+  const [newName, setNewName] = useState("");
+  const [expiry, setExpiry] = useState<string>("none");
+  const [generating, setGenerating] = useState(false);
+  const [justCreated, setJustCreated] = useState<string | null>(null);
+
   const mcpUrl = typeof window !== "undefined"
     ? `${window.location.origin}/api/mcp`
     : "https://krishnaamarneni.com/api/mcp";
 
-  const tools = [
+  const TOOLS = [
     { name: "get_bio", desc: "Bio, headline, about" },
     { name: "get_experience", desc: "Full job history" },
     { name: "get_projects", desc: "Featured projects" },
@@ -738,8 +753,50 @@ function McpHubCard() {
     { name: "search_inbox", desc: "Search Gmail" },
     { name: "send_email", desc: "Send email" },
     { name: "list_services", desc: "Connected MCP services" },
-    { name: "call_service", desc: "Proxy call to WealthClaude/EchoNest" },
+    { name: "call_service", desc: "Proxy to WealthClaude/EchoNest" },
   ];
+
+  async function loadTokens() {
+    const r = await fetch("/api/admin/mcp-tokens");
+    if (r.ok) {
+      const j = await r.json();
+      if (Array.isArray(j.tokens)) setTokens(j.tokens);
+    }
+  }
+
+  useEffect(() => {
+    if (open) loadTokens();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  async function generate() {
+    if (!newName.trim()) return;
+    setGenerating(true);
+    setJustCreated(null);
+    const expiryDays = expiry === "7" ? 7 : expiry === "30" ? 30 : expiry === "90" ? 90 : undefined;
+    const r = await fetch("/api/admin/mcp-tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newName.trim(), expiry_days: expiryDays }),
+    });
+    const j = await r.json();
+    if (j.token) {
+      setJustCreated(j.token);
+      setNewName("");
+      loadTokens();
+    }
+    setGenerating(false);
+  }
+
+  async function revoke(id: string) {
+    await fetch("/api/admin/mcp-tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", id }),
+    });
+    loadTokens();
+    if (justCreated) setJustCreated(null);
+  }
 
   return (
     <div className="mt-6 rounded-2xl border border-white/[0.06] bg-[#1a1a1a] overflow-hidden">
@@ -753,28 +810,136 @@ function McpHubCard() {
         </div>
         <div className="flex-1 min-w-0 text-left">
           <h3 className="font-bold text-white">
-            Lucy MCP Hub
+            Connect an AI agent
             <span className="ml-2 text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-400 border border-violet-500/20 uppercase">
-              {tools.length} tools
+              {TOOLS.length} tools
             </span>
           </h3>
           <p className="text-[11px] text-[#666]">
-            Connect any AI agent (Personal OS, Claude Desktop, ChatGPT) to Lucy.
-            Full access to portfolio, contacts, Gmail, and all connected services.
+            Generate a read-only token so Claude, ChatGPT, or any agent can access
+            your portfolio, contacts, Gmail, and connected services. Tokens are
+            revokable anytime.
           </p>
         </div>
         <span className="text-[10px] font-mono text-[#666] shrink-0">
-          {open ? "HIDE" : "SHOW"}
+          {open ? "HIDE" : "SETUP"}
         </span>
       </button>
 
       {open && (
         <div className="px-5 pb-5 space-y-4">
+          {/* Warning */}
+          <div className="rounded-xl bg-amber-500/[0.06] border border-amber-500/20 px-4 py-3 text-[11px] text-amber-300/80">
+            A token is like a password — anyone who has it can read your data.
+            Only paste it into AI tools you trust, and remember those services
+            may store what you share.
+          </div>
+
+          {/* Just-created token */}
+          {justCreated && (
+            <div className="rounded-xl bg-emerald-500/[0.06] border border-emerald-500/30 p-4 space-y-2">
+              <p className="text-xs font-bold text-emerald-300">
+                Copy your token now
+              </p>
+              <p className="text-[10px] text-emerald-300/70">
+                This is the only time it will be shown. Store it somewhere safe.
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 px-3 py-2 rounded-lg bg-[#0a0a0a] border border-emerald-500/20 text-xs text-emerald-300 font-mono break-all">
+                  {justCreated}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(justCreated)}
+                  className="shrink-0 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-300 font-bold hover:bg-emerald-500/20"
+                >
+                  Copy
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setJustCreated(null)}
+                className="text-[10px] text-emerald-300/60 hover:text-emerald-300 underline"
+              >
+                I've saved it
+              </button>
+            </div>
+          )}
+
+          {/* Token generator */}
+          <div className="rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-4 space-y-3">
+            <h4 className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
+              Your tokens
+            </h4>
+            <div className="flex items-center gap-2">
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Name (e.g. My Claude, Personal OS)"
+                className="flex-1 px-3 py-2 rounded-lg bg-[#1a1a1a] border border-white/[0.08] text-xs text-white placeholder:text-[#555] focus:outline-none focus:border-violet-500/60"
+              />
+              <select
+                value={expiry}
+                onChange={(e) => setExpiry(e.target.value)}
+                className="px-2 py-2 rounded-lg bg-[#1a1a1a] border border-white/[0.08] text-xs text-[#999]"
+              >
+                <option value="none">No expiry</option>
+                <option value="7">7 days</option>
+                <option value="30">30 days</option>
+                <option value="90">90 days</option>
+              </select>
+              <button
+                type="button"
+                onClick={generate}
+                disabled={generating || !newName.trim()}
+                className="px-4 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-xs font-bold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40"
+              >
+                {generating ? "..." : "Generate"}
+              </button>
+            </div>
+
+            {/* Token list */}
+            {tokens.length > 0 && (
+              <div className="space-y-2 mt-3">
+                {tokens.map((t) => {
+                  const expired = t.expires_at && new Date(t.expires_at) < new Date();
+                  return (
+                    <div
+                      key={t.id}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#1a1a1a] border border-white/[0.06]"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white">{t.name}</span>
+                          <code className="text-[9px] font-mono text-[#666]">{t.token_prefix}</code>
+                        </div>
+                        <p className="text-[9px] text-[#555]">
+                          {t.last_used_at
+                            ? `Last used ${new Date(t.last_used_at).toLocaleDateString()}`
+                            : "Never used"}
+                          {t.expires_at && !expired && ` · expires ${new Date(t.expires_at).toLocaleDateString()}`}
+                          {expired && " · EXPIRED"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => revoke(t.id)}
+                        className="shrink-0 w-7 h-7 rounded-md text-[#555] hover:text-red-400 flex items-center justify-center"
+                      >
+                        <FiTrash2 size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Connection info */}
           <div className="rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-4 space-y-3">
             <div>
               <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1">
-                MCP Connector URL
+                MCP Connector URL (Claude / ChatGPT custom connectors)
               </label>
               <div className="flex items-center gap-2">
                 <code className="flex-1 px-3 py-2 rounded-lg bg-[#1a1a1a] border border-white/[0.08] text-xs text-violet-300 font-mono truncate">
@@ -782,47 +947,23 @@ function McpHubCard() {
                 </code>
                 <button
                   type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(mcpUrl);
-                  }}
+                  onClick={() => navigator.clipboard.writeText(mcpUrl)}
                   className="shrink-0 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[10px] text-[#999] hover:text-white"
                 >
                   Copy
                 </button>
               </div>
             </div>
-            <div>
-              <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1">
-                Auth token (set MCP_ACCESS_TOKEN in Vercel env)
-              </label>
-              <code className="block px-3 py-2 rounded-lg bg-[#1a1a1a] border border-white/[0.08] text-xs text-[#888] font-mono">
-                Authorization: Bearer &lt;your-token&gt;
-              </code>
-            </div>
-          </div>
-
-          {/* How to connect */}
-          <div className="rounded-xl bg-violet-500/[0.04] border border-violet-500/20 p-4">
-            <h4 className="text-xs font-bold text-violet-300 mb-2">How to connect</h4>
-            <ol className="text-[11px] text-[#999] space-y-1.5 list-decimal pl-4">
-              <li>Set <code className="text-violet-300">MCP_ACCESS_TOKEN</code> in Vercel env (any random string)</li>
-              <li>In the connecting agent, use the URL above + Bearer token</li>
-              <li>The agent calls <code className="text-violet-300">tools/list</code> to discover all {tools.length} tools</li>
-              <li>It can then call any tool — read your portfolio, search Gmail, or proxy to WealthClaude</li>
-            </ol>
           </div>
 
           {/* Available tools */}
           <div>
             <h4 className="text-[10px] font-mono uppercase tracking-widest text-[#666] mb-2">
-              Available tools ({tools.length})
+              Available tools ({TOOLS.length})
             </h4>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {tools.map((t) => (
-                <div
-                  key={t.name}
-                  className="px-2.5 py-1.5 rounded-lg bg-[#0a0a0a] border border-white/[0.05] text-[10px]"
-                >
+              {TOOLS.map((t) => (
+                <div key={t.name} className="px-2.5 py-1.5 rounded-lg bg-[#0a0a0a] border border-white/[0.05] text-[10px]">
                   <code className="text-violet-300 font-mono">{t.name}</code>
                   <p className="text-[#666] mt-0.5">{t.desc}</p>
                 </div>

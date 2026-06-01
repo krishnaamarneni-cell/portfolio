@@ -7,6 +7,7 @@ import { sendEmailUnified } from "@/lib/resend";
 import { buildFactsContext } from "@/lib/facts";
 import { resolveConnectorCall } from "@/lib/connector-url";
 import { looksLikeMcp, mcpInitialize, mcpListTools, mcpCallTool } from "@/lib/mcp";
+import { validateToken } from "@/lib/mcp-tokens";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,13 +43,18 @@ function jsonRpcError(id: number | string | null, code: number, message: string)
   return NextResponse.json({ jsonrpc: "2.0", id, error: { code, message } });
 }
 
-function checkAuth(request: Request): boolean {
-  const token = process.env.MCP_ACCESS_TOKEN;
-  if (!token) return true;
+async function checkAuth(request: Request): Promise<boolean> {
   const auth = request.headers.get("authorization") || "";
   const url = new URL(request.url);
   const queryToken = url.searchParams.get("token") || "";
-  return auth === `Bearer ${token}` || queryToken === token;
+  const rawToken = auth.startsWith("Bearer ") ? auth.slice(7) : queryToken;
+
+  if (!rawToken) {
+    // No token provided — only allow if no tokens exist at all (first-run dev mode).
+    const envToken = process.env.MCP_ACCESS_TOKEN;
+    return !envToken;
+  }
+  return validateToken(rawToken);
 }
 
 const TOOLS = [
@@ -178,7 +184,7 @@ async function handleTool(
 }
 
 export async function POST(request: Request) {
-  if (!checkAuth(request)) {
+  if (!(await checkAuth(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
