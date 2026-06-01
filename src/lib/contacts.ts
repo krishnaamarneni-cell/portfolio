@@ -18,6 +18,7 @@ export type RecruiterContact = {
   notes: string | null;
   starred: boolean;
   emailed_at: string | null;
+  times_contacted: number;
   created_at: string;
   updated_at: string;
 };
@@ -66,21 +67,48 @@ export async function upsertContact(
 ): Promise<RecruiterContact> {
   await ensureTable();
   const supabase = requireSupabaseAdmin();
+  const email = input.email.toLowerCase().trim();
+
+  // Check if exists — if so, increment times_contacted.
+  const { data: existing } = await supabase
+    .from(TABLE)
+    .select("id, times_contacted")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .update({
+        name: input.name || undefined,
+        company: input.company ?? undefined,
+        role_pitched: input.role_pitched ?? undefined,
+        match_pct: input.match_pct ?? undefined,
+        source: input.source ?? undefined,
+        notes: input.notes ?? undefined,
+        times_contacted: (existing.times_contacted ?? 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data as RecruiterContact;
+  }
+
   const { data, error } = await supabase
     .from(TABLE)
-    .upsert(
-      {
-        email: input.email.toLowerCase().trim(),
-        name: input.name || "",
-        company: input.company ?? null,
-        role_pitched: input.role_pitched ?? null,
-        match_pct: input.match_pct ?? null,
-        source: input.source ?? "manual",
-        notes: input.notes ?? null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "email" }
-    )
+    .insert({
+      email,
+      name: input.name || "",
+      company: input.company ?? null,
+      role_pitched: input.role_pitched ?? null,
+      match_pct: input.match_pct ?? null,
+      source: input.source ?? "manual",
+      notes: input.notes ?? null,
+      times_contacted: 1,
+      updated_at: new Date().toISOString(),
+    })
     .select()
     .single();
   if (error) throw new Error(error.message);

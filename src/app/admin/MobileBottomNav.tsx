@@ -12,6 +12,7 @@ import {
   FiFolder,
   FiShare2,
   FiLink,
+  FiUsers,
   FiX,
 } from "react-icons/fi";
 
@@ -24,6 +25,7 @@ export type Tab =
   | "agents"
   | "personal"
   | "connectors"
+  | "contacts"
   | "chat";
 
 /** Five-slot bottom bar. Order chosen for daily-touch frequency:
@@ -37,6 +39,7 @@ const PRIMARY: Array<{ id: Tab; label: string; icon: React.ComponentType<{ size?
 ];
 
 const SECONDARY: Array<{ id: Tab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
+  { id: "contacts", label: "Contacts", icon: FiUsers },
   { id: "content", label: "Site Content", icon: FiLayout },
   { id: "thoughts", label: "Notes", icon: FiZap },
   { id: "jobs", label: "Jobs", icon: FiBriefcase },
