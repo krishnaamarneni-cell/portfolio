@@ -138,17 +138,20 @@ ${htmlBody}
     } catch {}
   }
 
-  // Use Resend directly for attachment support.
+  // Send email. Gmail is primary (no domain restrictions). Resend only if
+  // a verified domain is configured (RESEND_FROM_EMAIL is not onboarding@).
   const resendKey = process.env.RESEND_API_KEY;
+  const resendFrom = process.env.RESEND_FROM_EMAIL || "";
+  const hasVerifiedDomain = resendFrom && !resendFrom.includes("onboarding@resend.dev");
   let sendResult: { ok: boolean; error?: string; provider: string };
 
-  if (resendKey && resumeBuffer) {
+  if (hasVerifiedDomain && resendKey && resumeBuffer) {
+    // Resend with attachment (only works with verified domain)
     try {
       const { Resend } = await import("resend");
       const resend = new Resend(resendKey);
-      const from = process.env.RESEND_FROM_EMAIL || "Lucy <onboarding@resend.dev>";
       const r = await resend.emails.send({
-        from, to: body.to, subject, html, text: plainText,
+        from: resendFrom, to: body.to, subject, html, text: plainText,
         attachments: [{ filename: "Krishna_Amarneni_Resume.docx", content: resumeBuffer }],
       });
       sendResult = r.error
@@ -158,8 +161,15 @@ ${htmlBody}
       sendResult = { ok: false, error: err instanceof Error ? err.message : "Resend failed", provider: "resend" };
     }
   } else {
-    const s = await sendEmailUnified({ to: body.to, subject, html, text: plainText });
-    sendResult = s;
+    // Gmail doesn't support attachments via the simple send API.
+    // If resume was requested, add a download link instead.
+    let sendHtml = html;
+    if (resumeBuffer && !hasVerifiedDomain) {
+      const resumeLink = `${siteUrl}/Krishna_Amarneni_Resume.docx`;
+      sendHtml = html.replace("</body>", `<p style="margin-top:16px;font-size:13px;color:#6b7280">Resume: <a href="${resumeLink}" style="color:#ff6b00">${resumeLink}</a></p></body>`);
+    }
+    const s = await sendEmailUnified({ to: body.to, subject, html: sendHtml, text: plainText });
+    sendResult = { ...s, provider: s.provider };
   }
 
   if (sendResult.ok) {

@@ -57,24 +57,26 @@ export async function sendEmailUnified(opts: {
   html: string;
   text?: string;
 }): Promise<{ ok: boolean; id?: string; error?: string; provider: string }> {
-  // 1. Try Resend
-  if (hasResend()) {
-    const result = await sendViaResend(opts);
-    if (result.ok) return { ...result, provider: "resend" };
-    // If Resend failed, try Gmail as fallback
-    console.warn("[email] Resend failed, trying Gmail fallback:", result.error);
-  }
-
-  // 2. Fallback: Gmail OAuth
+  // 1. Try Gmail first (no domain restrictions, user already connected)
   try {
     const { sendEmail } = await import("@/lib/gmail");
     const result = await sendEmail(opts);
-    return { ...result, provider: "gmail" };
-  } catch (err) {
-    return {
-      ok: false,
-      error: `Both Resend and Gmail failed. Last: ${err instanceof Error ? err.message : String(err)}`,
-      provider: "none",
-    };
+    if (result.ok) return { ...result, provider: "gmail" };
+    console.warn("[email] Gmail failed, trying Resend:", result.error);
+  } catch {
+    // Gmail not connected — try Resend
   }
+
+  // 2. Fallback: Resend (needs verified domain for external recipients)
+  if (hasResend()) {
+    const result = await sendViaResend(opts);
+    if (result.ok) return { ...result, provider: "resend" };
+    return { ok: false, error: result.error, provider: "resend" };
+  }
+
+  return {
+    ok: false,
+    error: "No email provider available. Connect Gmail in Settings or verify a domain at resend.com/domains.",
+    provider: "none",
+  };
 }
