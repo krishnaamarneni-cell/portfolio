@@ -443,14 +443,13 @@ export default function ContactsTab({
               <button type="button" onClick={() => startEdit(c)} className="shrink-0 w-7 h-7 rounded-md text-[#555] hover:text-white flex items-center justify-center">
                 <FiEdit2 size={11} />
               </button>
-              {c.emailed_at ? (
-                <span className="shrink-0 text-[8px] font-mono text-emerald-400/70 w-8 text-center">Sent</span>
-              ) : (
-                <button type="button" onClick={() => openComposer(c)}
-                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 text-[10px] font-bold hover:bg-sky-500/25">
-                  <FiMail size={10} /> Email
-                </button>
+              {c.emailed_at && (
+                <span className="shrink-0 text-[8px] font-mono text-emerald-400/70">Sent</span>
               )}
+              <button type="button" onClick={() => openComposer(c)}
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 text-[10px] font-bold hover:bg-sky-500/25">
+                <FiMail size={10} /> {c.emailed_at ? "Again" : "Email"}
+              </button>
               <button type="button" onClick={() => act({ action: "delete", id: c.id })}
                 className="shrink-0 w-6 h-6 rounded-md text-[#444] hover:text-red-400 flex items-center justify-center">
                 <FiTrash2 size={11} />
