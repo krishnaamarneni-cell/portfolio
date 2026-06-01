@@ -17,6 +17,7 @@ import TwoFactorCard from "./TwoFactorCard";
 import FaceLockCard from "./FaceLockCard";
 import LucyImportCard from "./LucyImportCard";
 import SignOutCard from "./SignOutCard";
+import { MorningBriefingCard, SundayReflectionCard } from "./PersonalTab";
 
 type Props = {
   onSuccess: (msg: string) => void;
@@ -188,6 +189,14 @@ export default function ConnectorsEditor({ onSuccess, onError, sessionEmail }: P
 
       {/* Lucy vault import + knowledge library */}
       <LucyImportCard onSuccess={onSuccess} onError={onError} />
+
+      {/* Morning Briefing + Sunday Reflection */}
+      <div className="mt-6">
+        <MorningBriefingCard onError={onError} onSuccess={onSuccess} />
+      </div>
+      <div className="mt-4">
+        <SundayReflectionCard onError={onError} onSuccess={onSuccess} />
+      </div>
 
       {/* Lucy MCP Hub — connection info for external agents */}
       <McpHubCard />

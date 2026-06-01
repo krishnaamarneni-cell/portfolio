@@ -5,6 +5,8 @@ import { markEmailed } from "@/lib/contacts";
 import { runAgent } from "@/lib/agents";
 import { fetchJobs, fetchSiteContent } from "@/lib/content";
 import { buildFactsContext } from "@/lib/facts";
+import { recordResponse } from "@/lib/email-learning";
+import { buildLearningContext } from "@/lib/email-learning";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,10 +45,11 @@ export async function POST(request: Request) {
     htmlBody = body.customMessage.replace(/\n/g, "<br>");
   } else if (apiKey) {
     // AI-generate a professional outreach email.
-    const [jobs, site, factsBlock] = await Promise.all([
+    const [jobs, site, factsBlock, learningCtx] = await Promise.all([
       fetchJobs().catch(() => []),
       fetchSiteContent(),
       buildFactsContext(),
+      buildLearningContext().catch(() => ""),
     ]);
     const experience = jobs
       .slice(0, 4)
@@ -70,7 +73,8 @@ GOOD EXAMPLE:
 "Saw the S/4HANA rollout role — I just wrapped a similar migration at Coca-Cola covering MM/SD and Ariba procurement. Would love to hear more about the scope. Free for a quick call this week?"
 
 BAD EXAMPLE (do NOT write like this):
-"I am excited about the opportunity to leverage my technical expertise in SAP S/4HANA to drive business growth. With my experience, I am confident in my ability to make a significant impact."`;
+"I am excited about the opportunity to leverage my technical expertise in SAP S/4HANA to drive business growth. With my experience, I am confident in my ability to make a significant impact."
+${learningCtx}`;
 
     const userPrompt = `Recruiter: ${body.recruiterName} at ${body.company || "a company"}
 Role they pitched: ${body.rolePitched || "not specified"}
@@ -119,6 +123,18 @@ ${htmlBody}
 
   if (send.ok) {
     await markEmailed(body.contactId);
+    // Record for learning — track what Krishna actually sends so AI improves.
+    try {
+      const plainBody = htmlBody.replace(/<[^>]+>/g, "").trim();
+      await recordResponse({
+        to_email: body.to,
+        to_name: body.recruiterName,
+        subject,
+        ai_draft: body.customMessage ? "" : plainBody, // empty if user wrote it manually
+        final_body: plainBody,
+        action: body.customMessage ? "edited_sent" : "sent",
+      });
+    } catch {} // non-critical
   }
 
   return NextResponse.json({

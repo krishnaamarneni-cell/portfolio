@@ -228,10 +228,6 @@ export default function PersonalTab({
           here. Quietly fades to "Clean" badge when there's nothing pending. */}
       <MemoryAgentCard onSuccess={onSuccess} onError={onError} />
 
-      {/* Morning Briefing + Sunday Reflection settings */}
-      <MorningBriefingCard onError={onError} onSuccess={onSuccess} />
-      <SundayReflectionCard onError={onError} onSuccess={onSuccess} />
-
       {/* Facts table */}
       <FactsCard onError={onError} onSuccess={onSuccess} />
 
@@ -645,7 +641,7 @@ type Settings = {
   morning_briefing_last_subject: string | null;
 };
 
-function MorningBriefingCard({
+export function MorningBriefingCard({
   onSuccess,
   onError,
 }: {
@@ -891,7 +887,7 @@ function MorningBriefingCard({
 
 /* ─────────────────── Sunday Reflection card ─────────────────── */
 
-function SundayReflectionCard({
+export function SundayReflectionCard({
   onSuccess,
   onError,
 }: {

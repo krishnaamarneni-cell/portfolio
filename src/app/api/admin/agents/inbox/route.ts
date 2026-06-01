@@ -5,6 +5,7 @@ import { listRecentMessages } from "@/lib/gmail";
 import { fetchJobs, fetchSiteContent } from "@/lib/content";
 import { buildFactsContext } from "@/lib/facts";
 import { upsertMany, type RecruiterContactInput } from "@/lib/contacts";
+import { buildLearningContext } from "@/lib/email-learning";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -59,10 +60,11 @@ export async function POST(request: Request) {
     });
   }
 
-  const [jobs, site, factsBlock] = await Promise.all([
+  const [jobs, site, factsBlock, learningCtx] = await Promise.all([
     fetchJobs().catch(() => []),
     fetchSiteContent(),
     buildFactsContext(),
+    buildLearningContext().catch(() => ""),
   ]);
   const experience = jobs
     .map((j) => `- ${j.title} @ ${j.company} (${j.period})`)
@@ -127,7 +129,8 @@ RULES for drafts:
 - Sound human, not templated. Lead with something specific from the email.
 - 2-3 sentences max. End with a casual call-to-action.
 - BANNED: "excited about the opportunity", "leverage my expertise", "confident in my ability"
-- Include ALL job emails, not just strong matches — Krishna decides which to send`;
+- Include ALL job emails, not just strong matches — Krishna decides which to send
+${learningCtx}`;
 
   const userPrompt = `KRISHNA'S RESUME:
 ${experience || "(no jobs on file)"}
