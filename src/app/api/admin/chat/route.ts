@@ -28,6 +28,7 @@ import { listContacts, upsertContact } from "@/lib/contacts";
 import { listNotes, type PersonalNote } from "@/lib/personal";
 import { listRecentMessages, sendEmail } from "@/lib/gmail";
 import { sendEmailUnified } from "@/lib/resend";
+import { getGroqTools } from "@/lib/mcp-tools";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -254,66 +255,9 @@ ${restBlob ? `# Connected services (snapshots)\n${restBlob}\n` : ""}${mcpBlob ? 
     function: { name: string; description?: string; parameters: Record<string, unknown> };
   }> = [];
 
-  // Lucy's built-in tools (contacts, gmail, email sending)
-  groqTools.push(
-    {
-      type: "function",
-      function: {
-        name: "lucy__list_contacts",
-        description: "List all saved recruiter contacts with their match %, company, role, and whether they've been emailed.",
-        parameters: { type: "object", properties: {} },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "lucy__save_contact",
-        description: "Save a new recruiter contact. Used when the user says to save someone's info.",
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: "Recruiter name" },
-            email: { type: "string", description: "Email address" },
-            company: { type: "string", description: "Company name" },
-            role_pitched: { type: "string", description: "Job role they mentioned" },
-            match_pct: { type: "number", description: "Match percentage 0-100" },
-          },
-          required: ["name", "email"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "lucy__search_inbox",
-        description: "Search Krishna's Gmail inbox. Use when asked about recent emails, recruiter messages, or job-related mail.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: "Gmail search query (e.g. 'from:recruiter newer_than:3d', 'subject:job opening')" },
-            max_results: { type: "number", description: "Max results (default 10)" },
-          },
-          required: ["query"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "lucy__send_email",
-        description: "Send an email on Krishna's behalf. Use when asked to email a recruiter or contact. Always confirm the recipient and content with Krishna before calling.",
-        parameters: {
-          type: "object",
-          properties: {
-            to: { type: "string", description: "Recipient email address" },
-            subject: { type: "string", description: "Email subject line" },
-            body: { type: "string", description: "Email body text (plain text, will be formatted)" },
-          },
-          required: ["to", "subject", "body"],
-        },
-      },
-    },
-  );
+  // Lucy's built-in tools — auto-loaded from central registry.
+  // Add a tool to src/lib/mcp-tools.ts and it appears here + MCP + Settings.
+  groqTools.push(...getGroqTools());
 
   // MCP connector tools
   for (const h of mcpHandles) {

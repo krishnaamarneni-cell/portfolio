@@ -18,6 +18,7 @@ import FaceLockCard from "./FaceLockCard";
 import LucyImportCard from "./LucyImportCard";
 import SignOutCard from "./SignOutCard";
 import { MorningBriefingCard, SundayReflectionCard } from "./PersonalTab";
+import { getToolsForDisplay } from "@/lib/mcp-tools";
 
 type Props = {
   onSuccess: (msg: string) => void;
@@ -750,20 +751,8 @@ function McpHubCard() {
     ? `${window.location.origin}/api/mcp`
     : "https://krishnaamarneni.com/api/mcp";
 
-  const TOOLS = [
-    { name: "get_bio", desc: "Bio, headline, about" },
-    { name: "get_experience", desc: "Full job history" },
-    { name: "get_projects", desc: "Featured projects" },
-    { name: "get_skills", desc: "Skills + services" },
-    { name: "get_notes", desc: "Personal notes" },
-    { name: "get_facts", desc: "Facts memory" },
-    { name: "get_contacts", desc: "Recruiter contacts" },
-    { name: "save_contact", desc: "Add a contact" },
-    { name: "search_inbox", desc: "Search Gmail" },
-    { name: "send_email", desc: "Send email" },
-    { name: "list_services", desc: "Connected MCP services" },
-    { name: "call_service", desc: "Proxy to WealthClaude/EchoNest" },
-  ];
+  // Auto-loaded from central registry — add a tool to mcp-tools.ts and it shows here.
+  const TOOLS = getToolsForDisplay();
 
   async function loadTokens() {
     const r = await fetch("/api/admin/mcp-tokens");

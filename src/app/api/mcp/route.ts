@@ -8,6 +8,7 @@ import { buildFactsContext } from "@/lib/facts";
 import { resolveConnectorCall } from "@/lib/connector-url";
 import { looksLikeMcp, mcpInitialize, mcpListTools, mcpCallTool } from "@/lib/mcp";
 import { validateToken } from "@/lib/mcp-tokens";
+import { getMcpTools } from "@/lib/mcp-tools";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -57,24 +58,9 @@ async function checkAuth(request: Request): Promise<boolean> {
   return validateToken(rawToken);
 }
 
-const TOOLS = [
-  // Portfolio data
-  { name: "get_bio", description: "Get Krishna's bio, about section, and headline.", inputSchema: { type: "object", properties: {} } },
-  { name: "get_experience", description: "Get full work experience / job history with highlights.", inputSchema: { type: "object", properties: {} } },
-  { name: "get_projects", description: "Get featured projects with descriptions and links.", inputSchema: { type: "object", properties: {} } },
-  { name: "get_skills", description: "Get skills list and services.", inputSchema: { type: "object", properties: {} } },
-  // Personal data
-  { name: "get_notes", description: "Get personal notes from Life cockpit (visa dates, plans, reminders).", inputSchema: { type: "object", properties: {} } },
-  { name: "get_facts", description: "Get personal facts (always-on memory used by all agents).", inputSchema: { type: "object", properties: {} } },
-  { name: "get_contacts", description: "Get saved recruiter contacts with match percentages.", inputSchema: { type: "object", properties: {} } },
-  { name: "save_contact", description: "Save a recruiter contact.", inputSchema: { type: "object", properties: { name: { type: "string" }, email: { type: "string" }, company: { type: "string" }, role: { type: "string" }, match_pct: { type: "number" } }, required: ["name", "email"] } },
-  // Gmail
-  { name: "search_inbox", description: "Search Gmail inbox.", inputSchema: { type: "object", properties: { query: { type: "string", description: "Gmail search query" }, max_results: { type: "number" } }, required: ["query"] } },
-  { name: "send_email", description: "Send an email on Krishna's behalf.", inputSchema: { type: "object", properties: { to: { type: "string" }, subject: { type: "string" }, body: { type: "string" } }, required: ["to", "subject", "body"] } },
-  // MCP proxy — call any connected service through Lucy
-  { name: "list_services", description: "List all connected MCP services (WealthClaude, EchoNest, etc.) with their available tools.", inputSchema: { type: "object", properties: {} } },
-  { name: "call_service", description: "Proxy a tool call to a connected MCP service. Use list_services first to see available tools.", inputSchema: { type: "object", properties: { connector_id: { type: "string", description: "Connector ID (e.g. the connector's UUID)" }, tool: { type: "string", description: "Tool name on that service" }, args: { type: "object", description: "Arguments to pass" } }, required: ["connector_id", "tool"] } },
-];
+// Tools auto-loaded from central registry — add a tool to mcp-tools.ts
+// and it appears here, in chat, and in the Settings UI automatically.
+const TOOLS = getMcpTools();
 
 async function handleTool(
   name: string,
