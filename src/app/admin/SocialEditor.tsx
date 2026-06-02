@@ -1578,14 +1578,10 @@ function PostRewriteBar({ text, platform, onChange }: {
   async function rewrite(instruction: string) {
     setBusy(true);
     try {
-      const r = await fetch("/api/admin/rewrite", {
+      const r = await fetch("/api/admin/social-rewrite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          instruction,
-          context: `Platform: ${platform}. This is a social media post.`,
-        }),
+        body: JSON.stringify({ text, instruction, platform }),
       });
       const j = await r.json();
       if (j.rewritten) onChange(j.rewritten);
@@ -1594,40 +1590,46 @@ function PostRewriteBar({ text, platform, onChange }: {
   }
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap mt-2">
-      <span className="text-[9px] font-mono uppercase tracking-widest text-violet-400 mr-0.5">AI</span>
-      {[
-        { key: "elaborate", label: "+Elaborate" },
-        { key: "shorter", label: "-Shorter" },
-        { key: "friendly", label: "Friendly" },
-        { key: "professional", label: "Professional" },
-        { key: "confident", label: "Confident" },
-        { key: "casual", label: "Casual" },
-        { key: "grammar", label: "Fix Grammar" },
-      ].map((btn) => (
-        <button
-          key={btn.key}
-          type="button"
-          disabled={busy}
-          onClick={() => rewrite(btn.key)}
-          className="px-2 py-1 rounded-md bg-violet-500/10 border border-violet-500/20 text-[9px] font-bold text-violet-300 hover:bg-violet-500/20 disabled:opacity-40"
-        >
-          {btn.label}
-        </button>
-      ))}
-      <input
-        value={custom}
-        onChange={(e) => setCustom(e.target.value)}
-        placeholder="Custom..."
-        className="w-24 px-2 py-1 rounded-md bg-[#0a0a0a] border border-white/[0.06] text-[9px] text-white placeholder:text-[#555] focus:outline-none focus:border-violet-500/40"
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && custom.trim()) {
-            rewrite(custom);
-            setCustom("");
-          }
-        }}
-      />
-      {busy && <span className="text-[9px] text-violet-400/60 animate-pulse">...</span>}
+    <div className="space-y-1.5 mt-2">
+      <div className="flex items-center gap-1 flex-wrap">
+        <span className="text-[9px] font-mono uppercase tracking-widest text-violet-400 mr-0.5">AI</span>
+        {[
+          { key: "elaborate", label: "+More" },
+          { key: "shorter", label: "-Shorter" },
+          { key: "hookline", label: "Hook" },
+          { key: "storytelling", label: "Story" },
+          { key: "controversial", label: "Hot take" },
+          { key: "datadriven", label: "Data" },
+          { key: "professional", label: "Pro" },
+          { key: "casual", label: "Casual" },
+          { key: "grammar", label: "Grammar" },
+        ].map((btn) => (
+          <button
+            key={btn.key}
+            type="button"
+            disabled={busy}
+            onClick={() => rewrite(btn.key)}
+            className="px-2 py-1 rounded-md bg-violet-500/10 border border-violet-500/20 text-[8px] font-bold text-violet-300 hover:bg-violet-500/20 disabled:opacity-40"
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-1">
+        <input
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          placeholder="Custom: 'add a question at end' or 'mention Coca-Cola project'"
+          className="flex-1 px-2 py-1 rounded-md bg-[#0a0a0a] border border-white/[0.06] text-[9px] text-white placeholder:text-[#555] focus:outline-none focus:border-violet-500/40"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && custom.trim()) {
+              rewrite(custom);
+              setCustom("");
+            }
+          }}
+        />
+        {busy && <span className="text-[9px] text-violet-400/60 animate-pulse">rewriting...</span>}
+      </div>
     </div>
   );
 }
