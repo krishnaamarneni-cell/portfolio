@@ -1,5 +1,5 @@
 // ============================================================================
-//  Indian Job Market Visualizer — rendering + layers + stats + prompt scoring
+//  Indian Job Market Visualizer -- rendering + layers + stats + prompt scoring
 // ============================================================================
 const GROUP_COLORS = window.GROUP_COLORS;
 const svg = d3.select("#chart"), tip = d3.select("#tip"), legend = d3.select("#legend");
@@ -8,11 +8,11 @@ let TOTAL_EMP = 0;                 // recomputed per dataset
 let dataset = "real";             // "real" | "mock"
 let layer = "group";              // active colour layer
 let customScores = null;          // map: name -> 0..1, from prompt scoring
-let filter = null;                // {lo,hi,top,label} — click a tier/bin to drill in
+let filter = null;                // {lo,hi,top,label} -- click a tier/bin to drill in
 
 // One consistent ramp for EVERY numeric layer: green (low) -> red (high).
 // Using a single scale across layers avoids the "different palette each time"
-// confusion — only the categorical "group" layer uses distinct hues.
+// confusion -- only the categorical "group" layer uses distinct hues.
 const RAMP = t => d3.interpolateRdYlGn(1 - Math.max(0, Math.min(1, t)));
 
 function setDataset(key){
@@ -25,7 +25,7 @@ function setDataset(key){
   document.getElementById("count").textContent = DATA.length;
   const m = window.DATASET_META[key];
   document.getElementById("srcnote").innerHTML =
-    `<b style="color:var(--ink)">${m.badge}</b> — ${m.note}`;
+    `<b style="color:var(--ink)">${m.badge}</b> -- ${m.note}`;
   d3.selectAll("#datasets button").classed("on", false);
   d3.select(`#datasets button[data-d="${key}"]`).classed("on", true);
   d3.selectAll("#layers button").classed("on", false);
@@ -108,7 +108,7 @@ function render(){
   renderTable();
   updateFilterStatus();
 }
-function fit(s, w){ const max = Math.floor(w/6.6); return s.length>max ? s.slice(0,max-1)+"…" : s; }
+function fit(s, w){ const max = Math.floor(w/6.6); return s.length>max ? s.slice(0,max-1)+"..." : s; }
 
 function updateFilterStatus(){
   const el = document.getElementById("status");
@@ -159,35 +159,35 @@ function drawLegend(){
 }
 
 // ============================================================================
-//  Stats strip — reactive to the active layer (mirrors Karpathy's header)
+//  Stats strip -- reactive to the active layer (mirrors Karpathy's header)
 // ============================================================================
 function fmtEmp(m){ return m>=1 ? Math.round(m)+"M" : Math.round(m*1000)+"k"; }
 function bar(width, color){ return `<span class="mb"><i style="width:${Math.round(width)}%;background:${color}"></i></span>`; }
 
 function renderStats(){
   const metric = LAYER_NAME[layer];
-  // job-weighted average score on a 0–10 scale
+  // job-weighted average score on a 0-10 scale
   const wSum = d3.sum(DATA, d=> scoreNorm(d)*10*d.employment);
   const avg = wSum / TOTAL_EMP;
 
-  // histogram: employment in each 0–10 bin
+  // histogram: employment in each 0-10 bin
   const bins = new Array(10).fill(0);
   DATA.forEach(d=>{ let b=Math.min(9, Math.floor(scoreNorm(d)*10)); bins[b]+=d.employment; });
   const bMax = Math.max(...bins);
   const hist = bins.map((v,i)=>{ const lo=i/10, hi=(i+1)/10, on=filter&&filter.lo===lo&&filter.hi===hi;
-    return `<i class="${on?'on':''}" data-flo="${lo}" data-fhi="${hi}" data-ftop="${i===9?1:0}" data-flabel="score ${i}–${i+1}" title="${i}–${i+1}: ${fmtEmp(v)} — click to filter" style="height:${(v/bMax)*42}px;background:${RAMP((i+0.5)/10)}"></i>`; }).join("");
+    return `<i class="${on?'on':''}" data-flo="${lo}" data-fhi="${hi}" data-ftop="${i===9?1:0}" data-flabel="score ${i}-${i+1}" title="${i}-${i+1}: ${fmtEmp(v)} -- click to filter" style="height:${(v/bMax)*42}px;background:${RAMP((i+0.5)/10)}"></i>`; }).join("");
 
   // 5 exposure tiers
-  const tiers = [["Minimal","0–2"],["Low","2–4"],["Moderate","4–6"],["High","6–8"],["Very high","8–10"]]
+  const tiers = [["Minimal","0-2"],["Low","2-4"],["Moderate","4-6"],["High","6-8"],["Very high","8-10"]]
     .map(([lab,rng],i)=>{ const lo=i*2/10, hi=(i+1)*2/10;
       const emp=d3.sum(DATA.filter(d=>{const s=scoreNorm(d);return s>=lo && (i===4? s<=hi : s<hi);}), d=>d.employment);
       return {lab,emp,col:RAMP((i*2+1)/10)}; });
   const tMax = Math.max(...tiers.map(t=>t.emp))||1;
   const tierRows = tiers.map((t,i)=>{ const lo=i*2/10, hi=(i+1)*2/10, on=filter&&filter.lo===lo&&filter.hi===hi;
-    return `<div class="srow clk ${on?'on':''}" data-flo="${lo}" data-fhi="${hi}" data-ftop="${i===4?1:0}" data-flabel="${t.lab} (${i*2}–${(i+1)*2})"><span class="lab">${t.lab}</span>${bar(t.emp/tMax*100,t.col)}<span class="num">${fmtEmp(t.emp)}</span><span class="pct">${Math.round(t.emp/TOTAL_EMP*100)}%</span></div>`; }).join("");
+    return `<div class="srow clk ${on?'on':''}" data-flo="${lo}" data-fhi="${hi}" data-ftop="${i===4?1:0}" data-flabel="${t.lab} (${i*2}-${(i+1)*2})"><span class="lab">${t.lab}</span>${bar(t.emp/tMax*100,t.col)}<span class="num">${fmtEmp(t.emp)}</span><span class="pct">${Math.round(t.emp/TOTAL_EMP*100)}%</span></div>`; }).join("");
 
   // avg score within pay buckets
-  const payB = [["<₹12k",0,12000],["₹12–18k",12000,18000],["₹18–30k",18000,30000],["₹30–60k",30000,60000],["₹60k+",60000,1e9]];
+  const payB = [["<₹12k",0,12000],["₹12-18k",12000,18000],["₹18-30k",18000,30000],["₹30-60k",30000,60000],["₹60k+",60000,1e9]];
   const payRows = payB.map(([lab,lo,hi])=>{ const sub=DATA.filter(d=>d.wage>=lo&&d.wage<hi);
       const e=d3.sum(sub,d=>d.employment); const a= e? d3.sum(sub,d=>scoreNorm(d)*10*d.employment)/e : 0;
       return `<div class="srow"><span class="lab">${lab}</span>${bar(a/10*100,RAMP(a/10))}<span class="num">${a.toFixed(1)}</span></div>`; }).join("");
@@ -203,7 +203,7 @@ function renderStats(){
 
   document.getElementById("stats").innerHTML = `
     <div class="stat"><div class="k">Total jobs</div><div class="v">${Math.round(TOTAL_EMP)}M</div><div class="vsub">usual-status workers</div></div>
-    <div class="stat"><div class="k">Avg ${metric}</div><div class="v" style="color:${RAMP(avg/10)}">${avg.toFixed(1)}</div><div class="vsub">job-weighted, 0–10</div></div>
+    <div class="stat"><div class="k">Avg ${metric}</div><div class="v" style="color:${RAMP(avg/10)}">${avg.toFixed(1)}</div><div class="vsub">job-weighted, 0-10</div></div>
     <div class="stat"><div class="k">Jobs by ${metric}</div><div class="hist">${hist}</div><div class="hist-ax"><span>0</span><span>5</span><span>10</span></div></div>
     <div class="stat"><div class="k">${metric} tiers</div>${tierRows}</div>
     <div class="stat"><div class="k">${metric} by pay</div>${payRows}</div>
@@ -260,20 +260,20 @@ function scoreByHeuristic(q, o){
   return Math.max(0, Math.min(1, s));
 }
 async function runPrompt(){
-  const q = document.getElementById(“q”).value.trim();
-  if(!q){ setStatus(“Enter a job title first.”); return; }
-  const btn = document.getElementById(“run”); btn.disabled = true;
-  setStatus(“Scoring “ + DATA.length + “ occupations…”);
+  const q = document.getElementById("q").value.trim();
+  if(!q){ setStatus("Enter a job title first."); return; }
+  const btn = document.getElementById("run"); btn.disabled = true;
+  setStatus("Scoring " + DATA.length + " occupations...");
   await new Promise(r=>setTimeout(r,250));
   customScores = {}; DATA.forEach(o => customScores[o.name] = scoreByHeuristic(q, o));
-  layer = “custom”; filter = null;
-  d3.selectAll(“#layers button”).classed(“on”, false);
-  d3.select(“#customBtn”).classed(“on”, true);
+  layer = "custom"; filter = null;
+  d3.selectAll("#layers button").classed("on", false);
+  d3.select("#customBtn").classed("on", true);
   render(); btn.disabled = false;
 
   // Find the best-matching occupation for the score card
   showScoreCard(q);
-  setStatus(`Coloured by: “${q}”. Hover a tile for its score.`);
+  setStatus(`Coloured by: "${q}". Hover a tile for its score.`);
 }
 
 function showScoreCard(query){
@@ -289,21 +289,21 @@ function showScoreCard(query){
     if(score > bestScore){ bestScore = score; best = o; }
   });
 
-  const card = document.getElementById(“scorecard”);
+  const card = document.getElementById("scorecard");
   if(!best || bestScore <= 0){
-    // No match — show the average across all occupations
+    // No match -- show the average across all occupations
     const avgAi = d3.mean(DATA, d => d.ai) || 0;
     const scoreVal = (customScores ? d3.mean(DATA, d => customScores[d.name] || 0) : avgAi) * 10;
-    document.getElementById(“sc-score”).textContent = scoreVal.toFixed(1);
-    document.getElementById(“sc-score”).style.color = RAMP(scoreVal / 10);
-    document.getElementById(“sc-title”).textContent = `”${query}” — no exact occupation match`;
-    document.getElementById(“sc-explain”).textContent = “This job title doesn't match any specific occupation in the dataset. The score shows the average across all occupations. Try a broader term like 'analyst', 'engineer', 'driver', or 'farmer'.”;
-    document.getElementById(“sc-ai”).textContent = (avgAi * 10).toFixed(1) + “/10”;
-    document.getElementById(“sc-pay”).textContent = “—“;
-    document.getElementById(“sc-edu”).textContent = “—“;
-    document.getElementById(“sc-formal”).textContent = “—“;
-    document.getElementById(“sc-workers”).textContent = “—“;
-    card.style.display = “block”;
+    document.getElementById("sc-score").textContent = scoreVal.toFixed(1);
+    document.getElementById("sc-score").style.color = RAMP(scoreVal / 10);
+    document.getElementById("sc-title").textContent = `"${query}" -- no exact occupation match`;
+    document.getElementById("sc-explain").textContent = "This job title doesn't match any specific occupation in the dataset. The score shows the average across all occupations. Try a broader term like 'analyst', 'engineer', 'driver', or 'farmer'.";
+    document.getElementById("sc-ai").textContent = (avgAi * 10).toFixed(1) + "/10";
+    document.getElementById("sc-pay").textContent = "--";
+    document.getElementById("sc-edu").textContent = "--";
+    document.getElementById("sc-formal").textContent = "--";
+    document.getElementById("sc-workers").textContent = "--";
+    card.style.display = "block";
     return;
   }
 
@@ -311,36 +311,36 @@ function showScoreCard(query){
   const promptScore = customScores ? (customScores[best.name] * 10).toFixed(1) : aiScore;
   const scoreNum = parseFloat(promptScore);
 
-  document.getElementById(“sc-score”).textContent = promptScore;
-  document.getElementById(“sc-score”).style.color = RAMP(scoreNum / 10);
-  document.getElementById(“sc-title”).textContent = best.name;
+  document.getElementById("sc-score").textContent = promptScore;
+  document.getElementById("sc-score").style.color = RAMP(scoreNum / 10);
+  document.getElementById("sc-title").textContent = best.name;
 
   // Plain language explanation
-  let explain = “”;
-  if(scoreNum >= 8) explain = “Very high exposure. This job is likely to see major changes from AI and automation in the next 5-10 years. Many tasks can be automated or augmented by AI tools.”;
-  else if(scoreNum >= 6) explain = “Moderate-to-high exposure. Parts of this job will change with AI, but human judgment, relationships, or physical presence still matter. Upskilling in AI tools would be smart.”;
-  else if(scoreNum >= 4) explain = “Moderate exposure. Some routine tasks may be automated, but the core of this job requires skills AI can't easily replace. A balanced risk profile.”;
-  else if(scoreNum >= 2) explain = “Low exposure. This job involves physical work, human interaction, or creative judgment that AI struggles with. Relatively safe from automation in the near term.”;
-  else explain = “Minimal exposure. This job is hands-on, location-dependent, or requires uniquely human skills. Very unlikely to be significantly disrupted by AI soon.”;
+  let explain = "";
+  if(scoreNum >= 8) explain = "Very high exposure. This job is likely to see major changes from AI and automation in the next 5-10 years. Many tasks can be automated or augmented by AI tools.";
+  else if(scoreNum >= 6) explain = "Moderate-to-high exposure. Parts of this job will change with AI, but human judgment, relationships, or physical presence still matter. Upskilling in AI tools would be smart.";
+  else if(scoreNum >= 4) explain = "Moderate exposure. Some routine tasks may be automated, but the core of this job requires skills AI can't easily replace. A balanced risk profile.";
+  else if(scoreNum >= 2) explain = "Low exposure. This job involves physical work, human interaction, or creative judgment that AI struggles with. Relatively safe from automation in the near term.";
+  else explain = "Minimal exposure. This job is hands-on, location-dependent, or requires uniquely human skills. Very unlikely to be significantly disrupted by AI soon.";
 
   // Add pay context
   if(best.wage) explain += ` Median pay: ${INR(best.wage)}/month.`;
   explain += ` About ${(best.employment).toFixed(1)}M people work in this occupation.`;
 
-  document.getElementById(“sc-explain”).textContent = explain;
-  document.getElementById(“sc-ai”).textContent = aiScore + “/10”;
-  document.getElementById(“sc-pay”).textContent = best.wage ? INR(best.wage) + “/mo” : “—“;
-  document.getElementById(“sc-edu”).textContent = EDU[best.education] || “—“;
-  document.getElementById(“sc-formal”).textContent = (best.formality * 100).toFixed(0) + “% formal”;
-  document.getElementById(“sc-workers”).textContent = best.employment.toFixed(1) + “M”;
-  card.style.display = “block”;
+  document.getElementById("sc-explain").textContent = explain;
+  document.getElementById("sc-ai").textContent = aiScore + "/10";
+  document.getElementById("sc-pay").textContent = best.wage ? INR(best.wage) + "/mo" : "--";
+  document.getElementById("sc-edu").textContent = EDU[best.education] || "--";
+  document.getElementById("sc-formal").textContent = (best.formality * 100).toFixed(0) + "% formal";
+  document.getElementById("sc-workers").textContent = best.employment.toFixed(1) + "M";
+  card.style.display = "block";
 }
 document.getElementById("run").onclick = runPrompt;
 document.getElementById("q").addEventListener("keydown", e=>{ if(e.key==="Enter") runPrompt(); });
 function setStatus(t){ document.getElementById("status").textContent = t; }
 
 // ============================================================================
-//  Full data table — every occupation, sortable + paginated
+//  Full data table -- every occupation, sortable + paginated
 // ============================================================================
 let tPage = 0, tSize = 50, tSort = { key: "employment", dir: -1 };
 const COLS = [
@@ -384,7 +384,7 @@ function renderTable(){
   document.getElementById("tablecap").textContent =
     `${all.length} occupations${filter?" (filtered)":""} · ${m.badge}. Click a column to sort.`;
   document.getElementById("pageinfo").textContent =
-    `${all.length?start+1:0}–${Math.min(start+size, all.length)} of ${all.length}`;
+    `${all.length?start+1:0}-${Math.min(start+size, all.length)} of ${all.length}`;
   document.getElementById("prev").disabled = tPage<=0;
   document.getElementById("next").disabled = tPage>=pages-1;
 
