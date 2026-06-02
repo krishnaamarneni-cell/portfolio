@@ -8,6 +8,7 @@ import {
   uploadToCloudinary,
   isInstagramUrl,
   fetchInstagramMeta,
+  transcribeViaOracle,
 } from "@/lib/video-to-post";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +49,17 @@ export async function POST(request: Request) {
       title = meta.title;
       thumbnail = meta.thumbnail;
       channel = meta.author;
-      transcript = meta.title; // Instagram oEmbed only gives caption text
+    }
+
+    // Try Oracle worker for FULL video transcription (yt-dlp + Whisper).
+    // This actually downloads the Instagram video and transcribes the audio.
+    const oracleResult = await transcribeViaOracle(url);
+    if (oracleResult) {
+      transcript = oracleResult.transcript;
+      if (!title) title = oracleResult.title;
+    } else {
+      // Fallback to caption text from oEmbed (thin, but better than nothing)
+      transcript = meta?.title || "";
     }
   } else {
     // YouTube
@@ -65,12 +76,19 @@ export async function POST(request: Request) {
       channel = meta.channel;
     }
 
+    // Try built-in captions first (fastest, no download needed)
     const captions = await fetchTranscript(videoId);
     if (captions) {
       transcript = captions;
     } else {
-      // No captions available, use title + description
-      transcript = title;
+      // No captions — try Oracle worker (downloads + Whisper transcribes)
+      const oracleResult = await transcribeViaOracle(url);
+      if (oracleResult) {
+        transcript = oracleResult.transcript;
+      } else {
+        // Final fallback: just use the title
+        transcript = title;
+      }
     }
   }
 

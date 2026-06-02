@@ -155,3 +155,45 @@ export async function fetchInstagramMeta(url: string): Promise<{
     return null;
   }
 }
+
+/**
+ * Transcribe any video via the Oracle Cloud worker.
+ *
+ * The worker downloads the video via yt-dlp, extracts audio, and
+ * transcribes via Groq Whisper. Works for YouTube, Instagram reels,
+ * TikTok, Twitter videos — anything yt-dlp supports.
+ *
+ * Env vars needed:
+ *   TRANSCRIBER_URL=http://157.151.190.221:8090
+ *   TRANSCRIBER_SECRET=your-secret
+ */
+export async function transcribeViaOracle(url: string): Promise<{
+  transcript: string;
+  title: string;
+  duration: number;
+} | null> {
+  const workerUrl = process.env.TRANSCRIBER_URL;
+  const workerSecret = process.env.TRANSCRIBER_SECRET;
+  if (!workerUrl) return null;
+
+  try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (workerSecret) headers["Authorization"] = `Bearer ${workerSecret}`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180_000);
+    const r = await fetch(`${workerUrl}/transcribe`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ url }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data.transcript ? { transcript: data.transcript, title: data.title || "", duration: data.duration || 0 } : null;
+  } catch {
+    return null;
+  }
+}
