@@ -16,6 +16,7 @@
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.2",
     "@types/three": "^0.183.1",
+    "cloudinary": "^2.10.0",
     "framer-motion": "^12.38.0",
     "groq-sdk": "^1.2.1",
     "html-to-image": "^1.11.13",

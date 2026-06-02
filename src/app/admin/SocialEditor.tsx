@@ -570,6 +570,18 @@ export default function SocialEditor({
             </select>
           </div>
         </div>
+        {/* Video-to-post: paste a YouTube/Instagram URL */}
+        <VideoToPost onGenerated={(data: { summary?: string; linkedin?: string; twitter?: string; instagram?: string; imageUrl?: string }) => {
+          setTopic(data.summary || "");
+          setComposition((prev) => ({
+            ...prev,
+            linkedin: data.linkedin || "",
+            x: data.twitter || "",
+            instagram: data.instagram || "",
+          }));
+          if (data.imageUrl) setImageUrl(data.imageUrl);
+        }} />
+
         <textarea
           rows={3}
           value={topic}
@@ -1467,6 +1479,82 @@ function CampaignCard({
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ---- Video to Post component ---- */
+
+function VideoToPost({ onGenerated }: {
+  onGenerated: (data: { summary?: string; linkedin?: string; twitter?: string; instagram?: string; imageUrl?: string }) => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<{ title: string; channel: string; source: string } | null>(null);
+
+  async function process() {
+    if (!url.trim()) return;
+    setLoading(true);
+    setError("");
+    setResult(null);
+    try {
+      const r = await fetch("/api/admin/video-to-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url.trim() }),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        setError(j.error || "Failed to process video");
+        setLoading(false);
+        return;
+      }
+      setResult({ title: j.title, channel: j.channel, source: j.source });
+      onGenerated({
+        summary: j.posts?.suggested_title || j.posts?.summary || j.title,
+        linkedin: j.posts?.linkedin || "",
+        twitter: j.posts?.twitter || "",
+        instagram: j.posts?.instagram || "",
+        imageUrl: j.cloudinaryUrl || j.thumbnail || "",
+      });
+    } catch {
+      setError("Network error");
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div className="rounded-xl bg-[#0f0f0f] border border-white/[0.06] p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <FiExternalLink size={12} className="text-[#ff8c38] shrink-0" />
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[#888]">
+          Video to Post
+        </span>
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Paste YouTube or Instagram URL..."
+          className="flex-1 px-3 py-2 rounded-lg bg-[#1a1a1a] border border-white/[0.08] text-xs text-white placeholder:text-[#555] focus:outline-none focus:border-[#ff6b00]/60"
+          onKeyDown={(e) => { if (e.key === "Enter") process(); }}
+        />
+        <button
+          type="button"
+          onClick={process}
+          disabled={loading || !url.trim()}
+          className="px-4 py-2 rounded-lg bg-[#ff6b00]/15 border border-[#ff6b00]/30 text-[10px] font-bold text-[#ff8c38] hover:bg-[#ff6b00]/25 disabled:opacity-40"
+        >
+          {loading ? "Reading..." : "Generate Posts"}
+        </button>
+      </div>
+      {error && <p className="text-[10px] text-red-400">{error}</p>}
+      {result && (
+        <p className="text-[10px] text-emerald-400">
+          Generated from {result.source}: "{result.title}" by {result.channel}. Posts filled below.
+        </p>
       )}
     </div>
   );
