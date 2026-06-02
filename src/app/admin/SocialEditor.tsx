@@ -1005,6 +1005,11 @@ function PlatformCard({
         placeholder={`Generated ${platform.label} post will appear here…`}
       />
 
+      {/* AI rewrite toolbar */}
+      {text.trim() && (
+        <PostRewriteBar text={text} platform={platform.label} onChange={onChange} />
+      )}
+
       {/* Buffer profile picker */}
       {!profilesError && (
         <div className="mt-3">
@@ -1556,6 +1561,73 @@ function VideoToPost({ onGenerated }: {
           Generated from {result.source}: "{result.title}" by {result.channel}. Posts filled below.
         </p>
       )}
+    </div>
+  );
+}
+
+/* ---- AI Rewrite toolbar for each platform post ---- */
+
+function PostRewriteBar({ text, platform, onChange }: {
+  text: string;
+  platform: string;
+  onChange: (v: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [custom, setCustom] = useState("");
+
+  async function rewrite(instruction: string) {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/rewrite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          instruction,
+          context: `Platform: ${platform}. This is a social media post.`,
+        }),
+      });
+      const j = await r.json();
+      if (j.rewritten) onChange(j.rewritten);
+    } catch {}
+    setBusy(false);
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mt-2">
+      <span className="text-[9px] font-mono uppercase tracking-widest text-violet-400 mr-0.5">AI</span>
+      {[
+        { key: "elaborate", label: "+Elaborate" },
+        { key: "shorter", label: "-Shorter" },
+        { key: "friendly", label: "Friendly" },
+        { key: "professional", label: "Professional" },
+        { key: "confident", label: "Confident" },
+        { key: "casual", label: "Casual" },
+        { key: "grammar", label: "Fix Grammar" },
+      ].map((btn) => (
+        <button
+          key={btn.key}
+          type="button"
+          disabled={busy}
+          onClick={() => rewrite(btn.key)}
+          className="px-2 py-1 rounded-md bg-violet-500/10 border border-violet-500/20 text-[9px] font-bold text-violet-300 hover:bg-violet-500/20 disabled:opacity-40"
+        >
+          {btn.label}
+        </button>
+      ))}
+      <input
+        value={custom}
+        onChange={(e) => setCustom(e.target.value)}
+        placeholder="Custom..."
+        className="w-24 px-2 py-1 rounded-md bg-[#0a0a0a] border border-white/[0.06] text-[9px] text-white placeholder:text-[#555] focus:outline-none focus:border-violet-500/40"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && custom.trim()) {
+            rewrite(custom);
+            setCustom("");
+          }
+        }}
+      />
+      {busy && <span className="text-[9px] text-violet-400/60 animate-pulse">...</span>}
     </div>
   );
 }
