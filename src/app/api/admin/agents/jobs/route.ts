@@ -10,6 +10,7 @@ import {
 } from "@/lib/search";
 import { buildFactsContext } from "@/lib/facts";
 import { fetchJobRss, rssItemsToSearchResult } from "@/lib/rss";
+import { fetchJobDivaListings, jobDivaToContext } from "@/lib/jobdiva";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -130,8 +131,16 @@ export async function POST(request: Request) {
         (c) => `${c} careers hiring ${INDEED_QUERIES[profile][0]} ${location || ""}`
       );
 
-  const [indeedJobs, ...webResults] = await Promise.all([
+  // Fan out: Indeed RSS + JobDiva portal + web search in parallel.
+  const jobDivaKeywords = profile === "sap"
+    ? ["SAP", "S/4HANA", "Ariba"]
+    : profile === "software"
+    ? ["software engineer", "AI engineer", "full stack"]
+    : ["SAP", "AI engineer", "software"];
+
+  const [indeedJobs, jobDivaJobs, ...webResults] = await Promise.all([
     fetchJobRss(indeedQueries, location || "remote"),
+    fetchJobDivaListings(jobDivaKeywords).catch(() => []),
     ...(whichSearchProvider()
       ? webSearchQueries.map((q) =>
           search({ query: q, maxResults: 5 }).catch(
@@ -146,6 +155,9 @@ export async function POST(request: Request) {
     `Indeed job listings (${indeedJobs.length} found)`,
     indeedJobs.slice(0, 20)
   );
+
+  // JobDiva listings as a separate context block (not SearchResult shape).
+  const jobDivaBlock = jobDivaToContext(jobDivaJobs.slice(0, 15));
 
   let searchResults: SearchResult[] = [indeedResult, ...webResults];
   searchResults = searchResults.map((r) => ({
@@ -178,7 +190,7 @@ export async function POST(request: Request) {
   const factsBlock = await buildFactsContext();
   const system = `You are Krishna's job scout. Match real job postings to his resume.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
-Below are REAL job listings from Indeed RSS and web search. Every item with a URL is an actual posting.
+Below are REAL job listings from Indeed RSS, JobDiva (Abacus Service Corp portal), and web search. Every item with a URL is an actual posting.
 
 YOUR JOB:
 1. Read each listing title + snippet
@@ -213,7 +225,9 @@ ${experience || "(no jobs on file)"}
 Skills: ${skills.join(", ") || "(none)"}
 
 JOB LISTINGS (from Indeed RSS + web search):
-${searchBlock}`;
+${searchBlock}
+
+${jobDivaBlock ? `JOBDIVA PORTAL (Abacus Service Corp — ${jobDivaJobs.length} listings):\n${jobDivaBlock}` : ""}`;
 
   const model = resolveAgentModel(body.model);
   const result = await runAgent({
@@ -236,10 +250,11 @@ ${searchBlock}`;
       location: location || null,
       resumeJobs: jobs.length,
       indeedJobsFound: indeedJobs.length,
+      jobDivaFound: jobDivaJobs.length,
       webSearchHits: webResults.reduce((n, r) => n + r.hits.length, 0),
       model: result.modelUsed ?? model,
       modelRequested: model,
-      provider: `indeed-rss${whichSearchProvider() ? ` + ${whichSearchProvider()}` : ""}`,
+      provider: `indeed-rss + jobdiva${whichSearchProvider() ? ` + ${whichSearchProvider()}` : ""}`,
     },
   });
 }
