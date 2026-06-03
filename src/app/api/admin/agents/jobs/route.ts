@@ -203,13 +203,19 @@ RULES:
 - Max 8 jobs. Rank by relevance to his resume.
 - If a listing is clearly not a job (article, blog) — skip it
 
-FORMAT — 2-3 sentences per job:
+FORMAT — include match percentage for each job:
 
-**SAP S/4HANA Consultant** at Deloitte — Remote
+**SAP S/4HANA Consultant** at Deloitte — Remote — 88% match
 Fit: 4 years S/4HANA at TCS, Ariba procurement experience, MM/SD module specialist. [Apply](url)
 
-**Senior AI Engineer** at Stripe — San Francisco
-Fit: Built AI portfolio tools with Next.js + Python, LLM experience. [Apply](url)`;
+**Senior AI Engineer** at Stripe — San Francisco — 75% match
+Fit: Built AI portfolio tools with Next.js + Python, LLM experience. [Apply](url)
+
+Match scoring guide:
+90-100%: Exact skill match + same level + same domain
+80-89%: Strong match, most skills align
+70-79%: Good match, some skills overlap
+Below 70%: Skip, don't show`;
 
   const modeBlurb = isBroadMarket
     ? "Broad market scan."
