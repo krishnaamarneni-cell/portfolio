@@ -53,7 +53,7 @@ async function fetchViaApi(keyword: string): Promise<JobDivaListing[]> {
       date: String(j.postedDate || j.date || j.createdDate || ""),
       jobId: String(j.jobId || j.id || j.refId || ""),
       location: String(j.location || j.city || ""),
-      url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/${j.jobId || j.id || ""}`,
+      url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/${j.jobId || j.id || ""}`,
     })).filter((j: JobDivaListing) => j.title);
   } catch {
     return [];
@@ -72,73 +72,73 @@ const KNOWN_SAP_JOBS: JobDivaListing[] = [
     title: "IT - ADMIN - SAP Developer/Global Support Manager",
     description: "SAP Developer and Global Support Manager in Columbia, SC. SAP professional for the South Carolina Enterprise Information System (SCEIS) team. SAP Basis and Infrastructure architecture guidance and administration services.",
     date: "06/01/2026", jobId: "26-03123", location: "Columbia, SC",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-03123`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-03123`,
   },
   {
     title: "IT - ADMIN - SAP Technical Support Engineer I",
     description: "SAP Technical Support Engineer. 100% remote. Department of Enterprise Applications (DEA) in South Carolina. Enhance SAP environment across state agencies. Work from anywhere in the United States.",
     date: "06/01/2026", jobId: "26-03122", location: "100% remote, SC",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-03122`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-03122`,
   },
   {
     title: "IT - ADMIN - SAP Senior Developer/Consulting Director",
     description: "Staff Augmentation. 40 Hours/Week. Hourly. Projected Start Date 07/01/2026. Duration 12 Months. Columbia, SC.",
     date: "06/01/2026", jobId: "26-03124", location: "Columbia, SC",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-03124`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-03124`,
   },
   {
     title: "SAP Frontend Developer",
     description: "SaskPower. SAP developers responsible for creating, testing, and implementing SAP solutions. Period: 03/15/2026 - 03/31/2027. Regina, SK (Offsite).",
     date: "03/04/2026", jobId: "26-01333", location: "Regina, SK",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-01333`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-01333`,
   },
   {
     title: "Lead II - Enterprise Solutions",
     description: "Primary point person for coordinating FSD integration data requests across IT, ERP teams, application owners, business SMEs. Remote opportunity based out of Aliso Viejo, CA.",
     date: "05/11/2026", jobId: "26-02700", location: "Aliso Viejo, CA (Remote)",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-02700`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-02700`,
   },
   {
     title: "ERP Change Manager",
     description: "Lead and drive organizational change initiatives associated with ERP implementations and enhancements. Pennsylvania, PA with flexible remote work option.",
     date: "05/22/2026", jobId: "26-02983", location: "Pennsylvania, PA (Remote option)",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-02983`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-02983`,
   },
   {
     title: "Materials Planner III - SAP APO",
     description: "Manage finite scheduling and SAP APO master data at Mondelez Chicago plant. Liaison to corporate Product Supply. Supply chain operations.",
     date: "04/28/2026", jobId: "26-02470", location: "Chicago, IL",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-02470`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-02470`,
   },
   {
     title: "Business Analyst - Data Driven Decisions",
     description: "Business Analyst in Oakland, CA. Analyze modern data, drive data-driven decisions. Hybrid work model. Oakland or Sacramento office once a week.",
     date: "05/19/2026", jobId: "26-02873", location: "Oakland, CA (Hybrid)",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-02873`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-02873`,
   },
   {
     title: "Materials Planning & Supplier Operations Manager",
     description: "Ensuring end-to-end material and service availability for safe, compliant manufacturing operations at Indianapolis campus.",
     date: "05/08/2026", jobId: "26-02670", location: "Indianapolis, IN",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-02670`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-02670`,
   },
   {
     title: "IT Business Analysis Lead - ERP/Warehouse",
     description: "Business Analyst Lead with strong background in warehouse management and ERP systems. Aliso Viejo, CA. 3-5 years experience.",
     date: "05/13/2026", jobId: "26-02762", location: "Aliso Viejo, CA",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-02762`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-02762`,
   },
   {
     title: "Data Modeler C - Advanced (FDOT)",
     description: "Florida Department of Transportation. Data Modeler Advanced role. Tallahassee, FL.",
     date: "05/08/2026", jobId: "26-02682", location: "Tallahassee, FL",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-02682`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-02682`,
   },
   {
     title: "Supply Planner II - Mondelez",
     description: "Supply Planning team at Mondelez International. Lead Daily Management System meetings, risk mitigation. East Hanover, NJ.",
     date: "05/27/2026", jobId: "26-03041", location: "East Hanover, NJ",
-    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/job/26-03041`,
+    url: `https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0#/26-03041`,
   },
 ];
 
@@ -175,9 +175,10 @@ export async function fetchJobDivaListings(
 /** Format JobDiva listings for the LLM context. */
 export function jobDivaToContext(listings: JobDivaListing[]): string {
   if (listings.length === 0) return "";
+  const portalUrl = "https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0";
   return listings
     .map((j, i) => {
-      return `[${i + 1}] ${j.title}${j.location ? " - " + j.location : ""}${j.date ? " (" + j.date + ")" : ""}\n    ${j.description.slice(0, 300)}\n    ${j.url}`;
+      return `[${i + 1}] ${j.title}${j.location ? " - " + j.location : ""} (Job ID: ${j.jobId}, ${j.date})\n    ${j.description.slice(0, 300)}\n    Portal: ${portalUrl} (search by job title or ID ${j.jobId})`;
     })
     .join("\n\n");
 }
