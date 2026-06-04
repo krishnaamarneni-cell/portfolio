@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FiSave,
   FiTrash2,
@@ -187,6 +187,9 @@ export default function ConnectorsEditor({ onSuccess, onError, sessionEmail }: P
 
       {/* Face Lock + Trusted devices */}
       <FaceLockCard onSuccess={onSuccess} onError={onError} />
+
+      {/* Resume upload */}
+      <ResumeCard onSuccess={onSuccess} onError={onError} />
 
       {/* Lucy vault import + knowledge library */}
       <LucyImportCard onSuccess={onSuccess} onError={onError} />
@@ -970,6 +973,96 @@ function McpHubCard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─────────────── Resume Upload card ─────────────── */
+
+function ResumeCard({
+  onSuccess,
+  onError,
+}: {
+  onSuccess: (m: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [current, setCurrent] = useState<{ url: string; name: string; source: string; updatedAt?: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/resume").then((r) => r.json()).then(setCurrent).catch(() => {});
+  }, []);
+
+  async function upload(file: File) {
+    setUploading(true);
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const r = await fetch("/api/admin/resume", { method: "POST", body: form });
+      const j = await r.json();
+      if (r.ok) {
+        setCurrent({ url: j.url, name: j.name, source: "supabase" });
+        onSuccess("Resume updated");
+      } else {
+        onError(j.error || "Upload failed");
+      }
+    } catch {
+      onError("Network error");
+    }
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  return (
+    <div className="mt-6 rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5 space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-300 flex items-center justify-center">
+          <FiSave size={16} />
+        </div>
+        <div className="flex-1">
+          <h3 className="font-bold text-white">Resume</h3>
+          <p className="text-[11px] text-[#666]">
+            Used by auto-reply emails, job scouts, and MCP tools. Upload a new version anytime.
+          </p>
+        </div>
+      </div>
+
+      {current && (
+        <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-[#0a0a0a] border border-white/[0.05]">
+          <span className="text-xs text-white truncate flex-1">{current.name}</span>
+          <span className="text-[9px] font-mono text-[#666]">{current.source}</span>
+          {current.updatedAt && (
+            <span className="text-[9px] text-[#666]">{new Date(current.updatedAt).toLocaleDateString()}</span>
+          )}
+          <a href={current.url} target="_blank" rel="noopener noreferrer"
+            className="text-[10px] text-[#ff8c38] hover:underline">
+            Download
+          </a>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.docx,.doc"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) upload(f);
+          }}
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="px-4 py-2 rounded-xl bg-blue-500/15 border border-blue-500/30 text-xs font-bold text-blue-300 hover:bg-blue-500/25 disabled:opacity-50"
+        >
+          {uploading ? "Uploading..." : "Upload new resume"}
+        </button>
+        <span className="text-[10px] text-[#555]">PDF or DOCX, max 10MB</span>
+      </div>
     </div>
   );
 }
