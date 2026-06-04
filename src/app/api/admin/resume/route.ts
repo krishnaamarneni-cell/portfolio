@@ -101,12 +101,15 @@ export async function POST(request: Request) {
 
   // Also update site_content so the public "Download CV" button uses the new resume
   try {
-    const { data: site } = await supabase.from("site_content").select("*").eq("id", "singleton").maybeSingle();
+    const { data: site } = await supabase.from("site_content").select("data").eq("id", "main").maybeSingle();
     if (site?.data) {
       const content = typeof site.data === "string" ? JSON.parse(site.data) : site.data;
       if (content.about) {
         content.about.resume_url = publicUrl;
-        await supabase.from("site_content").update({ data: content, updated_at: new Date().toISOString() }).eq("id", "singleton");
+        await supabase.from("site_content").update({
+          data: content,
+          updated_at: new Date().toISOString(),
+        }).eq("id", "main");
       }
     }
   } catch {} // non-critical
