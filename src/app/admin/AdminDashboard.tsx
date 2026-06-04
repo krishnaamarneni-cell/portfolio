@@ -1083,11 +1083,26 @@ function ProjectEditor({
             type="url"
             value={form.link}
             onChange={(e) => patch("link", e.target.value)}
+            onBlur={(e) => {
+              // Auto-capture website screenshot when URL is entered
+              const url = e.target.value.trim();
+              if (url && url.startsWith("http") && !form.preview) {
+                const screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url`;
+                fetch(screenshotUrl)
+                  .then((r) => r.json())
+                  .then((d) => {
+                    if (d.status === "success" && d.data?.screenshot?.url) {
+                      patch("preview", d.data.screenshot.url);
+                    }
+                  })
+                  .catch(() => {});
+              }
+            }}
             className={inputClass}
-            placeholder="https://example.com"
+            placeholder="https://example.com — screenshot auto-captured on blur"
           />
         </Field>
-        <Field label="Preview image" hint="Paste a /previews/… path or upload below.">
+        <Field label="Preview image" hint="Auto-captured from link, or upload manually.">
           <ImageUpload
             value={form.preview}
             kind="preview"
