@@ -190,15 +190,15 @@ export const FALLBACK_PROJECTS: Project[] = [
   },
   {
     id: "seed-proj-5",
-    title: "Lucy AI",
-    subtitle: "Autonomous AI Agent",
+    title: "EchoNest",
+    subtitle: "AI Music Platform",
     number: "05",
     description:
-      "An autonomous agent handling 50+ tasks: Gmail, Calendar, social media, job applications, writes & deploys her own code, daily briefings.",
-    link: "https://www.lucyaiagent.com",
-    tags: ["Python", "Claude AI", "Next.js", "Supabase", "Vercel"],
-    gradient: "from-[#ff6b00] to-[#ff3d00]",
-    preview: "/previews/lucyaiagent.png",
+      "A music streaming and discovery platform powered by AI. Features smart playlists, listening analytics, music recommendations, and MCP integration for agent-to-agent communication.",
+    link: "https://echonest-app.vercel.app",
+    tags: ["Next.js", "AI", "Music", "Streaming", "MCP"],
+    gradient: "from-[#00868e] to-[#006b72]",
+    preview: "/previews/echonest.png",
     sort_order: 50,
   },
 ];
