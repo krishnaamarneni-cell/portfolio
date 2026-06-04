@@ -1079,28 +1079,37 @@ function ProjectEditor({
           />
         </Field>
         <Field label="Link">
-          <input
-            type="url"
-            value={form.link}
-            onChange={(e) => patch("link", e.target.value)}
-            onBlur={(e) => {
-              // Auto-capture website screenshot when URL is entered
-              const url = e.target.value.trim();
-              if (url && url.startsWith("http") && !form.preview) {
-                const screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url`;
-                fetch(screenshotUrl)
-                  .then((r) => r.json())
-                  .then((d) => {
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={form.link}
+              onChange={(e) => patch("link", e.target.value)}
+              className={inputClass + " flex-1"}
+              placeholder="https://example.com"
+            />
+            {form.link && form.link.startsWith("http") && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const r = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(form.link)}&screenshot=true&meta=false&embed=screenshot.url`);
+                    const d = await r.json();
                     if (d.status === "success" && d.data?.screenshot?.url) {
                       patch("preview", d.data.screenshot.url);
+                    } else {
+                      // Fallback: use thumbnail from microlink
+                      const r2 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(form.link)}`);
+                      const d2 = await r2.json();
+                      if (d2.data?.image?.url) patch("preview", d2.data.image.url);
                     }
-                  })
-                  .catch(() => {});
-              }
-            }}
-            className={inputClass}
-            placeholder="https://example.com — screenshot auto-captured on blur"
-          />
+                  } catch {}
+                }}
+                className="px-3 py-2 rounded-xl bg-[#ff6b00]/15 border border-[#ff6b00]/30 text-xs font-bold text-[#ff8c38] hover:bg-[#ff6b00]/25 whitespace-nowrap"
+              >
+                Capture
+              </button>
+            )}
+          </div>
         </Field>
         <Field label="Preview image" hint="Auto-captured from link, or upload manually.">
           <ImageUpload
