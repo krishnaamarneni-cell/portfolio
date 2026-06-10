@@ -8,12 +8,10 @@ import {
 } from "@/lib/personal";
 import { fetchHoldingSymbols, fetchPortfolioSnapshot, runAgent } from "@/lib/agents";
 import { search, searchResultsToContext, whichSearchProvider, type SearchResult } from "@/lib/search";
-import { fetchTickerNews, rssItemsToSearchResult, FINANCE_FEEDS, fetchManyFeeds, filterByQuery, fetchJobRss } from "@/lib/rss";
+import { fetchTickerNews, FINANCE_FEEDS, TECH_FEEDS, INDIA_FEEDS, GEOPOLITICS_FEEDS, JOB_MARKET_FEEDS, fetchManyFeeds, filterByQuery, type RssItem } from "@/lib/rss";
 import { sendEmailUnified } from "@/lib/resend";
 import { buildFactsContext } from "@/lib/facts";
 import { habitsWithStreaks } from "@/lib/habits";
-import { fetchJobs, fetchSiteContent } from "@/lib/content";
-import { listRecentMessages } from "@/lib/gmail";
 
 export type AdminSettings = {
   id: string;
@@ -87,7 +85,6 @@ export type BriefingPayload = {
   lifeMarkdown: string;
   newsMarkdown: string;
   wealthMarkdown: string;
-  jobsMarkdown: string;
   stats: {
     noteCount: number;
     overdue: number;
@@ -107,20 +104,16 @@ export async function buildBriefing(): Promise<BriefingPayload> {
   const stats = computeStats(notes, now);
 
   // Run all agents in parallel for speed.
-  const [lifeMarkdown, newsMarkdown, wealthMarkdown, jobsMarkdown] =
+  const [lifeMarkdown, newsMarkdown, wealthMarkdown] =
     await Promise.all([
       runLifeAgent(apiKey, notes, now),
       runNewsAgent(apiKey).catch(
         (err) =>
-          `## Markets & AI\n\n${err instanceof Error ? err.message : String(err)}`
+          `## News\n\n${err instanceof Error ? err.message : String(err)}`
       ),
       runWealthAgent(apiKey).catch(
         (err) =>
           `## Net Worth\n\n${err instanceof Error ? err.message : String(err)}`
-      ),
-      runJobsAgent(apiKey).catch(
-        (err) =>
-          `## Job Radar\n\n${err instanceof Error ? err.message : String(err)}`
       ),
     ]);
 
@@ -135,12 +128,11 @@ export async function buildBriefing(): Promise<BriefingPayload> {
     lifeMarkdown,
     newsMarkdown,
     wealthMarkdown,
-    jobsMarkdown,
     stats,
     now,
   });
-  const text = [subject, stripMarkdown(wealthMarkdown), stripMarkdown(newsMarkdown), stripMarkdown(lifeMarkdown), stripMarkdown(jobsMarkdown)].join("\n\n");
-  return { subject, html, text, lifeMarkdown, newsMarkdown, wealthMarkdown, jobsMarkdown, stats };
+  const text = [subject, stripMarkdown(wealthMarkdown), stripMarkdown(newsMarkdown), stripMarkdown(lifeMarkdown)].join("\n\n");
+  return { subject, html, text, lifeMarkdown, newsMarkdown, wealthMarkdown, stats };
 }
 
 function computeStats(notes: PersonalNote[], now: Date) {
@@ -222,47 +214,93 @@ ${searchBlock ? `Live web-search results (use ONLY these URLs):\n${searchBlock}`
   return result.content || "## Life\n\n(agent returned nothing)";
 }
 
-/* ─────────────── News Agent (Markets + AI) ─────────────── */
+/* ─────────────── News Agent (Geopolitics + Tech + India + Portfolio + Jobs) ─────────────── */
 
 async function runNewsAgent(apiKey: string): Promise<string> {
   const { symbols } = await fetchHoldingSymbols();
-  const tickersClause = symbols.length
-    ? symbols.slice(0, 8).join(" OR ")
-    : "S&P 500";
-  const queries = [
-    `${tickersClause} stock news today`,
-    "new AI tools models released this week",
-    "tech layoffs job market news 2025",
-  ];
-  const searchBlock = await safeSearchBlock(queries);
-  if (!searchBlock) {
-    return "## Markets & AI\n\n(no search provider configured)";
-  }
 
-  const system = `Phone-screen news briefing. One line per item. Only URLs from search results.
+  // Fetch all RSS feeds in parallel
+  const [geopoliticsItems, techItems, indiaItems, portfolioItems, jobMarketItems, searchBlock] =
+    await Promise.all([
+      fetchManyFeeds(GEOPOLITICS_FEEDS).catch(() => []),
+      fetchManyFeeds(TECH_FEEDS).catch(() => []),
+      fetchManyFeeds(INDIA_FEEDS).catch(() => []),
+      fetchTickerNews(symbols.slice(0, 10)).catch(() => []),
+      fetchManyFeeds([...JOB_MARKET_FEEDS, ...FINANCE_FEEDS.slice(0, 2)]).catch(() => []),
+      safeSearchBlock([
+        "US India geopolitics news today",
+        "tech layoffs hiring freeze 2025 2026",
+        symbols.length ? `${symbols.slice(0, 5).join(" ")} stock news` : "S&P 500 market today",
+      ]),
+    ]);
 
-## Markets
-**AAPL** — Earnings beat +12%, guidance raised. [Source](url)
-**AMD** — Sector rally, tech up 3%. [Source](url)
+  const formatItems = (items: RssItem[], limit: number) =>
+    items.slice(0, limit).map((i) => `- ${i.title} (${i.link})`).join("\n");
 
-## AI
-**Opus 4.8** — New agent workflow tools shipped. [Source](url)
+  const geopoliticsBlock = formatItems(geopoliticsItems, 10);
+  const techBlock = formatItems(techItems, 8);
+  const indiaBlock = formatItems(indiaItems, 8);
+  const portfolioBlock = formatItems(portfolioItems, 10);
 
-## Job Market
-**SAP hiring +15%** — S/4HANA demand up globally. [Source](url)
+  const layoffItems = filterByQuery(jobMarketItems, "layoff layoffs hiring freeze restructuring job cuts downsizing", 8);
+  const jobMarketBlock = layoffItems.length > 0
+    ? formatItems(layoffItems, 6)
+    : formatItems(filterByQuery(jobMarketItems, "jobs hiring employment labor economy workforce", 6), 6);
 
-Max 3 per section. One line each. No explanation paragraphs.`;
+  const system = `Phone-screen news briefing for Krishna. Pick the most important stories from each section. One line per item with [Source](url). Only use URLs from the data below.
 
-  const userPrompt = `Tickers: ${symbols.join(", ") || "(unknown)"}.\n\n${searchBlock}`;
+## Geopolitics (US & India)
+Top 3 items about US-India relations, US policy, India policy, global tensions. Lead with bold keyword.
+**Trade deal** — US-India semiconductor pact signed. [Source](url)
+
+## Tech & AI
+Top 3 items: new AI models, product launches, big tech moves. Lead with bold keyword.
+**GPT-5** — OpenAI ships reasoning model. [Source](url)
+
+## India Headlines
+Top 3 Indian news headlines. Lead with bold keyword.
+**Sensex** — Markets rally on RBI rate cut. [Source](url)
+
+## Portfolio News
+Top 3 items about Krishna's holdings: ${symbols.slice(0, 8).join(", ") || "S&P 500"}. Lead with ticker.
+**AAPL** — Record iPhone sales in India. [Source](url)
+
+## Job Market & Layoffs
+Top 3 items: layoffs, hiring freezes, SAP/tech job market shifts. Lead with bold keyword.
+**Meta** — 10k layoffs in Reality Labs division. [Source](url)
+
+RULES:
+- Exactly 3 items per section, one line each
+- Bold the lead keyword
+- Always include [Source](actual_url) — never invent URLs
+- If a section has no relevant news, write "No major updates today."
+- No filler, no explanation paragraphs`;
+
+  const userPrompt = `Geopolitics feed items:
+${geopoliticsBlock || "(no items)"}
+
+Tech & AI feed items:
+${techBlock || "(no items)"}
+
+India headlines:
+${indiaBlock || "(no items)"}
+
+Portfolio ticker news (holdings: ${symbols.join(", ") || "none"}):
+${portfolioBlock || "(no ticker news)"}
+
+Job market / layoffs:
+${jobMarketBlock || "(no items)"}
+
+${searchBlock ? `Web search results:\n${searchBlock}` : ""}`;
 
   const result = await runAgent({
     apiKey,
     model: GROQ_MODEL_FOR_BRIEFING,
     systemPrompt: system,
     userPrompt,
-    maxTokens: 1000,
+    maxTokens: 1500,
   });
-  return result.content || "## Markets & AI\n\n(empty model response)";
+  return result.content || "## News\n\n(empty model response)";
 }
 
 /* ─────────────── Wealth / Net Worth Agent ─────────────── */
@@ -327,92 +365,6 @@ ${indianBlock || "(no Indian market news)"}`;
   return result.content || "## Net Worth\n\n(agent returned nothing)";
 }
 
-/* ─────────────── Jobs Agent (>70% match + Gmail scan) ─────────────── */
-
-async function runJobsAgent(apiKey: string): Promise<string> {
-  // Pull resume for matching
-  const [jobs, site] = await Promise.all([
-    fetchJobs().catch(() => []),
-    fetchSiteContent(),
-  ]);
-  const experience = jobs
-    .map((j) => {
-      const head = `- **${j.title}** @ ${j.company} (${j.period}, ${j.location})`;
-      const desc = j.description ? `\n  ${j.description}` : "";
-      const tags = j.tags?.length ? `\n  Tags: ${j.tags.join(", ")}` : "";
-      return head + desc + tags;
-    })
-    .join("\n");
-  const skills = (site.skills?.skills ?? []).slice(0, 40);
-
-  // Indeed RSS — actual job listings, not search pages.
-  const indeedQueries = [
-    "SAP S/4HANA consultant",
-    "senior AI engineer",
-    "full stack engineer",
-    "SAP Ariba analyst",
-  ];
-  const [indeedJobs, gmailBlock] = await Promise.all([
-    fetchJobRss(indeedQueries, "remote"),
-    (async () => {
-      try {
-        const { messages } = await listRecentMessages({
-          query: "subject:(job OR hiring OR opportunity OR role OR position OR engineer OR consultant) newer_than:3d",
-          maxResults: 15,
-        });
-        if (messages.length > 0) {
-          return messages
-            .map((m) => `- From: ${m.from ?? "?"} | Subject: ${m.subject ?? "?"} | ${m.snippet ?? ""}`)
-            .join("\n");
-        }
-        return "";
-      } catch {
-        return "";
-      }
-    })(),
-  ]);
-
-  const indeedResult = rssItemsToSearchResult(
-    `Indeed job listings (${indeedJobs.length} found)`,
-    indeedJobs.slice(0, 15)
-  );
-  const searchResults: SearchResult[] = [indeedResult].map((r) => ({
-    ...r,
-    hits: r.hits.filter((h) => h.url && /^https?:\/\//i.test(h.url)),
-  }));
-  const searchBlock = searchResultsToContext(searchResults);
-
-  const factsBlock = await buildFactsContext();
-
-  const system = `Job radar for morning briefing. Every item below is a REAL job listing from Indeed with an apply link.
-${factsBlock ? `\n${factsBlock}\n` : ""}
-Match each job to Krishna's resume. Only include >70% match. Use [Apply](url) markdown links.
-
-**SAP S/4HANA Consultant** at Deloitte — Remote. 85% match: 4yr S/4HANA + Ariba. [Apply](url)
-**AI Engineer** at Stripe — SF. 75% match: LLM + Next.js. [Apply](url)
-
-Max 6 jobs. If nothing matches >70%: "No strong matches today."`;
-
-  const userPrompt = `RESUME:
-${experience || "(no jobs on file)"}
-
-Skills: ${skills.join(", ") || "(none)"}
-
-JOB LISTINGS:
-${searchBlock || "(no listings found)"}
-
-${gmailBlock ? `Recent Gmail inbox (job-related):\n${gmailBlock}` : "Gmail: not connected or no recent job emails"}`;
-
-  const result = await runAgent({
-    apiKey,
-    model: GROQ_MODEL_FOR_BRIEFING,
-    systemPrompt: system,
-    userPrompt,
-    maxTokens: 800,
-  });
-  return result.content || "## Job Radar\n\n(agent returned nothing)";
-}
-
 /* ─────────────── Search helper ─────────────── */
 
 async function safeSearchBlock(queries: string[]): Promise<string> {
@@ -437,21 +389,18 @@ function renderHtml(opts: {
   lifeMarkdown: string;
   newsMarkdown: string;
   wealthMarkdown: string;
-  jobsMarkdown: string;
   stats: { noteCount: number; overdue: number; urgent: number };
   now: Date;
 }): string {
   const wealthHtml = markdownToHtml(opts.wealthMarkdown);
   const newsHtml = markdownToHtml(opts.newsMarkdown);
   const lifeHtml = markdownToHtml(opts.lifeMarkdown);
-  const jobsHtml = markdownToHtml(opts.jobsMarkdown);
   const dateLine = opts.now.toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
-  // Inline styles only — most email clients strip <style>.
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1f2937">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7f9;padding:24px 12px">
@@ -469,16 +418,12 @@ function renderHtml(opts: {
         ${wealthHtml}
       </td></tr>
       <tr><td style="padding:24px 28px;font-size:15px;line-height:1.6;border-bottom:1px solid #f1f2f5">
-        ${sectionHeader("Markets, AI & Job Market", "#2563eb")}
+        ${sectionHeader("News — Geopolitics, Tech, India, Markets, Layoffs", "#2563eb")}
         ${newsHtml}
       </td></tr>
-      <tr><td style="padding:24px 28px;font-size:15px;line-height:1.6;border-bottom:1px solid #f1f2f5">
+      <tr><td style="padding:24px 28px;font-size:15px;line-height:1.6">
         ${sectionHeader("Life", "#7c3aed")}
         ${lifeHtml}
-      </td></tr>
-      <tr><td style="padding:24px 28px;font-size:15px;line-height:1.6">
-        ${sectionHeader("Job Radar", "#dc2626")}
-        ${jobsHtml}
       </td></tr>
       <tr><td style="padding:18px 28px;background:#fafbfc;font-size:12px;color:#6b7280">
         Lucy Morning Briefing · <a href="https://krishnaamarneni.com/admin?tab=personal" style="color:#ff6b00">Open Life Cockpit</a>

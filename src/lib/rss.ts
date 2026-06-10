@@ -38,6 +38,26 @@ export const TECH_FEEDS: Array<{ url: string; source: string }> = [
   { url: "https://techcrunch.com/feed/", source: "techcrunch" },
 ];
 
+/** India top headlines — English editions. */
+export const INDIA_FEEDS: Array<{ url: string; source: string }> = [
+  { url: "https://timesofindia.indiatimes.com/rssfeedstopstories.cms", source: "times_of_india" },
+  { url: "https://feeds.feedburner.com/ndtvnews-top-stories", source: "ndtv" },
+  { url: "https://economictimes.indiatimes.com/rssfeedstopstories.cms", source: "economic_times" },
+];
+
+/** Geopolitics / world news feeds. */
+export const GEOPOLITICS_FEEDS: Array<{ url: string; source: string }> = [
+  { url: "https://feeds.apnews.com/rss/apf-topnews", source: "ap_news" },
+  { url: "https://feeds.bbci.co.uk/news/world/rss.xml", source: "bbc_world" },
+  { url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", source: "nytimes_world" },
+];
+
+/** Job market / layoffs feeds. */
+export const JOB_MARKET_FEEDS: Array<{ url: string; source: string }> = [
+  { url: "https://feeds.feedburner.com/ndtvprofit-latest", source: "ndtv_profit" },
+  { url: "https://www.cnbc.com/id/10000664/device/rss/rss.html", source: "cnbc_economy" },
+];
+
 /** Yahoo Finance per-ticker headlines — the most reliable per-stock signal. */
 export function yahooTickerFeedUrl(ticker: string): string {
   // Strip exchange suffix (e.g. RELIANCE.NS) — Yahoo uses base symbols here.
