@@ -13,6 +13,15 @@ import { upsertContact } from "@/lib/contacts";
 
 const TABLE = "replied_emails";
 
+const SIGNATURE_HTML = `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:14px;color:#4b5563;line-height:1.6">
+<strong style="color:#1f2937">Krishna Amarneni</strong><br>
+(203) 804-9291<br>
+<a href="https://krishnaamarneni.com" style="color:#ff6b00;text-decoration:none">krishnaamarneni.com</a><br>
+<a href="https://www.linkedin.com/in/krishnaamarneni/" style="color:#0a66c2;text-decoration:none">LinkedIn</a>
+</div>`;
+
+const SIGNATURE_TEXT = `\n\n---\nKrishna Amarneni\n(203) 804-9291\nkrishnaamarneni.com\nhttps://www.linkedin.com/in/krishnaamarneni/`;
+
 /** Check if we already replied to this email. */
 async function alreadyReplied(messageId: string): Promise<boolean> {
   const supabase = requireSupabaseAdmin();
@@ -108,8 +117,16 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
     buildFactsContext(),
   ]);
   const experience = jobs
-    .map((j) => `- ${j.title} @ ${j.company} (${j.period}, ${j.location})`)
-    .join("\n");
+    .map((j) => {
+      const head = `- ${j.title} @ ${j.company} (${j.period}, ${j.location})`;
+      const desc = j.description ? `\n  ${j.description}` : "";
+      const highlights = j.highlights?.length
+        ? "\n  " + j.highlights.slice(0, 3).join("; ")
+        : "";
+      const tags = j.tags?.length ? `\n  Skills: ${j.tags.join(", ")}` : "";
+      return head + desc + highlights + tags;
+    })
+    .join("\n\n");
   const skills = (site.skills?.skills ?? []).slice(0, 30);
   const resumeUrl = site.about?.resume_url || "/Krishna_Amarneni_Resume.docx";
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://krishnaamarneni.com";
@@ -125,12 +142,16 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
       continue;
     }
 
-    // Ask LLM to score the match and generate a reply.
+    // Ask LLM to score the match and generate a reply using two templates.
     const scoreResult = await runAgent({
       apiKey,
       model: "llama-3.3-70b-versatile",
-      systemPrompt: `You are a job-match scorer. Given a recruiter email and Krishna's resume, output ONLY a JSON object:
-{"match":85,"reply":"Your 2-3 sentence reply here","company":"Company Name","role":"Role Title"}
+      systemPrompt: `You are a job-match scorer and reply writer. Given a recruiter email and Krishna's resume, output ONLY a JSON object.
+
+STEP 1: Read the recruiter email carefully — extract the role, company, and required skills.
+STEP 2: Compare against Krishna's resume — find SPECIFIC matching experience, projects, companies, and skills.
+STEP 3: Score the match.
+STEP 4: Write a reply using one of two templates below.
 
 Match scoring:
 - 80-100: Skills + experience directly match (same tech stack, similar level)
@@ -138,22 +159,32 @@ Match scoring:
 - 40-59: Weak overlap
 - 0-39: No real match
 
-Reply rules:
-- Sound human. 2-3 sentences. Lead with something specific from the email.
-- BANNED: "excited about the opportunity", "leverage my expertise", any **bold** or asterisks — plain text only
-- End with "Happy to jump on a call this week" or similar casual CTA.
-- Do NOT include greetings or signature — those are added automatically.
+TEMPLATE A — use when the email has a clear JD or role description:
+"Thank you for reaching out about the {job_title} role at {company}. This aligns well with my background — I have {X years} of hands-on experience in {matching_skills}, most recently at {recent_company} where I {specific_achievement}. Looking at the requirements, my experience with {skill_1}, {skill_2}, and {skill_3} maps directly to what you are looking for. I would welcome the chance to discuss how my work on {relevant_project} translates to this position. Would you be available for a quick call this week?"
 
-Output ONLY the JSON, nothing else.`,
+TEMPLATE B — use when the email is vague or just asking about availability:
+"Thanks for considering me for the {job_title} position. I am currently working in {domain} with a focus on {top_skills}, and this opportunity caught my attention. My background includes {years} years in {domain} — specifically {relevant_experience} across projects at {company_1} and {company_2}. I would be interested to learn more about the role, the team, and how my experience could contribute. Looking forward to connecting."
+
+RULES:
+- Pick Template A if the email mentions specific skills, JD details, or tech stack. Pick Template B otherwise.
+- Replace ALL placeholders with REAL data from Krishna's resume. Never leave {placeholders}.
+- Reference SPECIFIC projects, companies, and achievements from the resume — not generic claims.
+- NEVER use ** bold **, asterisks, or markdown formatting. Plain text only.
+- BANNED phrases: "excited about the opportunity", "leverage my expertise", "confident in my ability", "drive business growth"
+- Do NOT include "Hi Name" greeting or signature — those are added automatically.
+
+Output format (JSON only, nothing else):
+{"match":85,"reply":"the full reply body","company":"Company Name","role":"Role Title","template":"A"}`,
       userPrompt: `RECRUITER EMAIL:
 From: ${msg.from}
 Subject: ${msg.subject}
 Preview: ${msg.snippet}
 
-KRISHNA'S RESUME:
+KRISHNA'S FULL RESUME:
 ${experience}
+
 Skills: ${skills.join(", ")}`,
-      maxTokens: 400,
+      maxTokens: 600,
     });
 
     if (!scoreResult.ok || !scoreResult.content) continue;
@@ -208,10 +239,13 @@ Skills: ${skills.join(", ")}`,
       const subject = `Re: ${msg.subject || score.role || "Opportunity"}`;
       const from = process.env.RESEND_FROM_EMAIL || "Lucy <onboarding@resend.dev>";
 
+      const resumeLink = resumeUrl.startsWith("http") ? resumeUrl : `${siteUrl}${resumeUrl}`;
       const htmlBody = `<p>Hi ${name.split(" ")[0] || "there"},</p>
 <p>${score.reply.replace(/\n/g, "<br>")}</p>
-<p>I've attached my resume for reference. You can also view my full portfolio at <a href="${siteUrl}">${siteUrl.replace("https://", "")}</a>.</p>
-<p>Krishna Amarneni</p>`;
+<p style="margin-top:12px;font-size:14px">Resume: <a href="${resumeLink}" style="color:#ff6b00">${resumeLink}</a></p>
+${SIGNATURE_HTML}`;
+
+      const plainText = `Hi ${name.split(" ")[0]},\n\n${score.reply}\n\nResume: ${resumeLink}${SIGNATURE_TEXT}`;
 
       const resend = new Resend(resendKey);
       const sendResult = await resend.emails.send({
@@ -219,7 +253,7 @@ Skills: ${skills.join(", ")}`,
         to: email,
         subject,
         html: htmlBody,
-        text: `Hi ${name.split(" ")[0]},\n\n${score.reply}\n\nI've attached my resume. Portfolio: ${siteUrl}\n\nKrishna Amarneni`,
+        text: plainText,
         ...(resumeBuffer
           ? {
               attachments: [

@@ -12,6 +12,15 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const SIGNATURE_HTML = `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:14px;color:#4b5563;line-height:1.6">
+<strong style="color:#1f2937">Krishna Amarneni</strong><br>
+(203) 804-9291<br>
+<a href="https://krishnaamarneni.com" style="color:#ff6b00;text-decoration:none">krishnaamarneni.com</a><br>
+<a href="https://www.linkedin.com/in/krishnaamarneni/" style="color:#0a66c2;text-decoration:none">LinkedIn</a>
+</div>`;
+
+const SIGNATURE_TEXT = `\n\n---\nKrishna Amarneni\n(203) 804-9291\nkrishnaamarneni.com\nhttps://www.linkedin.com/in/krishnaamarneni/`;
+
 type Body = {
   contactId: string;
   to: string;
@@ -43,9 +52,9 @@ export async function POST(request: Request) {
   let htmlBody: string;
 
   if (body.customMessage) {
-    // User wrote their own message.
+    // User wrote their own message — still append signature.
     subject = `${body.rolePitched ? `Re: ${body.rolePitched}` : "Following up on opportunity"}`;
-    htmlBody = body.customMessage.replace(/\n/g, "<br>");
+    htmlBody = `<p>${body.customMessage.replace(/\n/g, "<br>")}</p>${SIGNATURE_HTML}`;
   } else if (apiKey) {
     // AI-generate a professional outreach email.
     const [jobs, site, factsBlock, learningCtx] = await Promise.all([
@@ -55,37 +64,44 @@ export async function POST(request: Request) {
       buildLearningContext().catch(() => ""),
     ]);
     const experience = jobs
-      .slice(0, 4)
-      .map((j) => `${j.title} @ ${j.company} (${j.period})`)
-      .join("; ");
+      .map((j) => {
+        const head = `- ${j.title} @ ${j.company} (${j.period}, ${j.location})`;
+        const desc = j.description ? `\n  ${j.description}` : "";
+        const highlights = j.highlights?.length
+          ? "\n  " + j.highlights.slice(0, 3).join("; ")
+          : "";
+        const tags = j.tags?.length ? `\n  Skills: ${j.tags.join(", ")}` : "";
+        return head + desc + highlights + tags;
+      })
+      .join("\n\n");
     const skills = (site.skills?.skills ?? []).slice(0, 20).join(", ");
 
-    const system = `You write recruiter reply emails for Krishna Amarneni. Write like a real person, not a template.
+    const system = `You write recruiter reply emails for Krishna Amarneni. Use one of two templates based on context.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
 
-STYLE RULES:
-- Sound human. Write like you're texting a professional contact, not writing a cover letter.
-- NO corporate filler: "excited about the opportunity", "leverage my expertise", "drive business growth", "make a significant impact" — ALL BANNED.
-- NO "I am confident in my ability" — BANNED.
-- NEVER use **bold** markdown, asterisks, or any formatting symbols. Plain text only.
-- Lead with a SPECIFIC thing from the role/company that caught your eye.
-- Name-drop ONE concrete project or result from Krishna's past (a client, a system he built, a metric).
-- 2-3 sentences max. End with a casual call to action ("Happy to jump on a call this week" not "I welcome the chance to discuss").
-- Output ONLY the body paragraphs. No "Hi Name" (added automatically). No signature (added automatically).
+TEMPLATE A — use when a specific role/JD is known:
+"Thank you for reaching out about the {job_title} role at {company}. This aligns well with my background — I have {X years} of hands-on experience in {matching_skills}, most recently at {recent_company} where I {specific_achievement}. Looking at the requirements, my experience with {skill_1}, {skill_2}, and {skill_3} maps directly to what you are looking for. I would welcome the chance to discuss how my work on {relevant_project} translates to this position. Would you be available for a quick call this week?"
 
-GOOD EXAMPLE:
-"Saw the S/4HANA rollout role — I just wrapped a similar migration at Coca-Cola covering MM/SD and Ariba procurement. Would love to hear more about the scope. Free for a quick call this week?"
+TEMPLATE B — use when the role is vague or this is a cold follow-up:
+"Thanks for considering me for the {job_title} position. I am currently working in {domain} with a focus on {top_skills}, and this opportunity caught my attention. My background includes {years} years in {domain} — specifically {relevant_experience} across projects at {company_1} and {company_2}. I would be interested to learn more about the role, the team, and how my experience could contribute. Looking forward to connecting."
 
-BAD EXAMPLE (do NOT write like this):
-"I am excited about the opportunity to leverage my technical expertise in SAP S/4HANA to drive business growth. With my experience, I am confident in my ability to make a significant impact."
+RULES:
+- Replace ALL {placeholders} with REAL data from Krishna's resume below. Never leave placeholders.
+- Reference SPECIFIC companies, projects, and achievements from the resume.
+- NEVER use ** bold **, asterisks, or markdown formatting. Plain text only.
+- BANNED: "excited about the opportunity", "leverage my expertise", "confident in my ability", "drive business growth"
+- Output ONLY the body text. No "Hi Name" greeting, no signature — those are added automatically.
 ${learningCtx}`;
 
     const userPrompt = `Recruiter: ${body.recruiterName} at ${body.company || "a company"}
 Role they pitched: ${body.rolePitched || "not specified"}
-Krishna's recent work: ${experience || "SAP + AI engineering"}
+
+KRISHNA'S FULL RESUME:
+${experience || "SAP + AI engineering"}
+
 Key skills: ${skills || "SAP S/4HANA, AI/ML, Next.js, Python"}
 
-Write 2-3 sentences. Human tone. No template language.`;
+Pick Template A if a specific role is mentioned, Template B if vague. Fill in real experience.`;
 
     const result = await runAgent({
       apiKey,
@@ -106,8 +122,7 @@ Write 2-3 sentences. Human tone. No template language.`;
 
     htmlBody = `<p>Hi ${body.recruiterName},</p>
 <p>${generatedBody.replace(/\n/g, "<br>")}</p>
-<p>Krishna Amarneni<br>
-<a href="https://krishnaamarneni.com" style="color:#ff6b00">krishnaamarneni.com</a></p>`;
+${SIGNATURE_HTML}`;
   } else {
     return NextResponse.json(
       { error: "GROQ_API_KEY not set and no custom message provided" },
@@ -125,7 +140,8 @@ Write 2-3 sentences. Human tone. No template language.`;
 ${htmlBody}
 </body></html>`;
 
-  const plainText = htmlBody.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
+  const plainTextBody = htmlBody.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ");
+  const plainText = plainTextBody.includes("Krishna Amarneni") ? plainTextBody : plainTextBody + SIGNATURE_TEXT;
 
   // Send with optional resume attachment.
   const attachResume = body.attachResume !== false; // default true

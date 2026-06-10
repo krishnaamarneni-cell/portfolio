@@ -67,8 +67,16 @@ export async function POST(request: Request) {
     buildLearningContext().catch(() => ""),
   ]);
   const experience = jobs
-    .map((j) => `- ${j.title} @ ${j.company} (${j.period})`)
-    .join("\n");
+    .map((j) => {
+      const head = `- ${j.title} @ ${j.company} (${j.period}, ${j.location})`;
+      const desc = j.description ? `\n  ${j.description}` : "";
+      const highlights = j.highlights?.length
+        ? "\n  " + j.highlights.slice(0, 3).join("; ")
+        : "";
+      const tags = j.tags?.length ? `\n  Skills: ${j.tags.join(", ")}` : "";
+      return head + desc + highlights + tags;
+    })
+    .join("\n\n");
   const skills = (site.skills?.skills ?? []).slice(0, 30);
 
   const emailsBlock = messages
@@ -117,19 +125,26 @@ CRITICAL: After the markdown, output TWO JSON blocks:
 ]
 \`\`\`
 
-2. Draft replies for each job/recruiter email (Krishna will approve/edit before sending):
+2. Draft replies using TWO templates. Read each email carefully and compare against Krishna's resume — reference SPECIFIC matching experience, projects, and companies.
+
+TEMPLATE A (use when email has clear JD/role/skills):
+"Thank you for reaching out about the {job_title} role at {company}. This aligns well with my background — I have {X years} of hands-on experience in {matching_skills}, most recently at {recent_company} where I {specific_achievement}. Looking at the requirements, my experience with {skill_1}, {skill_2}, and {skill_3} maps directly to what you are looking for. I would welcome the chance to discuss how my work on {relevant_project} translates to this position. Would you be available for a quick call this week?"
+
+TEMPLATE B (use when email is vague/exploratory/just asking availability):
+"Thanks for considering me for the {job_title} position. I am currently working in {domain} with a focus on {top_skills}, and this opportunity caught my attention. My background includes {years} years in {domain} — specifically {relevant_experience} across projects at {company_1} and {company_2}. I would be interested to learn more about the role, the team, and how my experience could contribute. Looking forward to connecting."
+
 \`\`\`drafts
 [
-  {"to":"john@acme.com","name":"John Smith","subject":"Re: Senior SAP Consultant","body":"Saw the S/4HANA role — I just wrapped a similar migration at Coca-Cola covering MM/SD and Ariba. Would love to hear more about the scope. Free for a quick call this week?","match":85},
-  {"to":"jane@startup.io","name":"Jane Doe","subject":"Re: AI Engineer role","body":"Thanks for reaching out. The AI engineer role looks interesting — I've been building LLM-powered agent systems with Next.js and Python. Happy to chat if the role is still open.","match":40}
+  {"to":"john@acme.com","name":"John Smith","subject":"Re: Senior SAP Consultant","body":"Thank you for reaching out about the Senior SAP Consultant role at Acme Corp. This aligns well with my background — I have 4 years of hands-on experience in SAP S/4HANA and Ariba, most recently at Coca-Cola where I led the MM/SD module migration across 12 plants. Looking at the requirements, my experience with S/4HANA, Ariba procurement, and supply chain integration maps directly to what you are looking for. Would you be available for a quick call this week?","match":85,"template":"A"},
+  {"to":"jane@startup.io","name":"Jane Doe","subject":"Re: AI role","body":"Thanks for considering me for the AI Engineer position. I am currently working in AI and full-stack development with a focus on LLM agent systems and Next.js, and this opportunity caught my attention. My background includes experience building production AI tools across projects at WealthClaude and EchoNest. I would be interested to learn more about the role and team. Looking forward to connecting.","match":40,"template":"B"}
 ]
 \`\`\`
 
 RULES for drafts:
-- Sound human, not templated. Lead with something specific from the email.
-- 2-3 sentences max. End with a casual call-to-action.
+- Replace ALL {placeholders} with REAL data from Krishna's resume. Reference specific companies, projects, skills.
 - BANNED: "excited about the opportunity", "leverage my expertise", "confident in my ability", any **bold** markdown or asterisks — plain text only
 - Include ALL job emails, not just strong matches — Krishna decides which to send
+- Do NOT include greeting ("Hi Name") or signature — those are added automatically by the UI
 ${learningCtx}`;
 
   const userPrompt = `KRISHNA'S RESUME:
