@@ -212,8 +212,8 @@ Skills: ${skills.join(", ")}`,
 
     result.matched++;
 
-    // Only auto-reply if >70% match.
-    if (score.match < 70) continue;
+    // Only auto-reply if >65% match.
+    if (score.match < 65) continue;
 
     // Build and send the email with resume attachment.
     try {
