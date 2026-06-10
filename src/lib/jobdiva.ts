@@ -178,7 +178,7 @@ export function jobDivaToContext(listings: JobDivaListing[]): string {
   const portalUrl = "https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0";
   return listings
     .map((j, i) => {
-      return `[${i + 1}] ${j.title}${j.location ? " - " + j.location : ""} (Job ID: ${j.jobId}, ${j.date})\n    ${j.description.slice(0, 300)}\n    Portal: ${portalUrl} (search by job title or ID ${j.jobId})`;
+      return `[${i + 1}] ${j.title}${j.location ? " — " + j.location : ""}\n    Posted: ${j.date} | Job ID: ${j.jobId}\n    ${j.description.slice(0, 300)}\n    Link: ${portalUrl}`;
     })
     .join("\n\n");
 }

@@ -188,34 +188,43 @@ export async function POST(request: Request) {
   const searchBlock = searchResultsToContext(searchResults);
 
   const factsBlock = await buildFactsContext();
+  const todayStr = new Date().toISOString().slice(0, 10);
   const system = `You are Krishna's job scout. Match real job postings to his resume.
 ${factsBlock ? `\n${factsBlock}\n` : ""}
 Below are REAL job listings from Indeed RSS, JobDiva (Abacus Service Corp portal), and web search. Every item with a URL is an actual posting.
 
 YOUR JOB:
-1. Read each listing title + snippet
-2. Match it against Krishna's resume below
-3. Output the best matches (highest relevance to his experience)
+1. Read each listing title + snippet + posting date
+2. Match against Krishna's resume
+3. Group by recency: "Posted Today", "This Week", "Last Week", "Older"
+4. Within each group, rank by match %
+
+TODAY'S DATE: ${todayStr}
 
 RULES:
-- Use [Apply](url) markdown links — NEVER paste raw URLs
-- Each job = one concise entry with title, company, location, fit reason, and link
-- Max 8 jobs. Rank by relevance to his resume.
+- Use [Apply](url) markdown links — the URL from the listing data. NEVER invent URLs.
+- For JobDiva jobs, use [View on JobDiva](portal_url) with the portal URL provided
+- Each job = one line with title, company, location, date posted, match %, fit reason, link
+- Max 10 jobs total across all groups
 - If a listing is clearly not a job (article, blog) — skip it
+- Below 70% match — skip
 
-FORMAT — include match percentage for each job:
+FORMAT:
 
-**SAP S/4HANA Consultant** at Deloitte — Remote — 88% match
-Fit: 4 years S/4HANA at TCS, Ariba procurement experience, MM/SD module specialist. [Apply](url)
+## Posted Today
+- **SAP S/4HANA Consultant** at Deloitte — Remote — Jun 10 — 88% match
+  S/4HANA + Ariba experience directly relevant. [Apply](url)
 
-**Senior AI Engineer** at Stripe — San Francisco — 75% match
-Fit: Built AI portfolio tools with Next.js + Python, LLM experience. [Apply](url)
+## This Week
+- **Senior AI Engineer** at Stripe — SF — Jun 8 — 75% match
+  Next.js + LLM skills match. [Apply](url)
 
-Match scoring guide:
-90-100%: Exact skill match + same level + same domain
-80-89%: Strong match, most skills align
-70-79%: Good match, some skills overlap
-Below 70%: Skip, don't show`;
+## Last Week
+- **ERP Consultant** at Accenture — Remote — Jun 2 — 72% match
+  SAP MM/SD background fits. [Apply](url)
+
+If a date group has no matches, skip it entirely (don't show empty groups).
+Match scoring: 90-100% exact match, 80-89% strong, 70-79% good. Below 70% skip.`;
 
   const modeBlurb = isBroadMarket
     ? "Broad market scan."
