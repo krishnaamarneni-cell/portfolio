@@ -12,32 +12,59 @@ type Body = {
 };
 
 const PLATFORM_RULES: Record<string, string> = {
-  LinkedIn: `LinkedIn content manager rules:
-- Hook line FIRST (max 120 chars) that makes people stop scrolling. Use a bold claim, counterintuitive take, or surprising stat.
-- Then a line break (empty line after the hook)
-- 3-5 short paragraphs. Each paragraph = 1-2 sentences max. White space is your friend.
-- Use "you" and "I" — personal, not corporate
-- End with a question or call-to-action that drives comments
-- 3-5 relevant hashtags on the last line (not inline)
+  LinkedIn: `LinkedIn rewrite rules:
+
+HOOK (first 1-2 lines, max 120 chars):
+- Must work as a stand-alone line before "see more" cutoff
+- Use one of: bold contradiction, personal confession, surprising stat, direct question, or "I did X. Here's what happened."
+- NEVER throat-clear ("In today's world..." "I wanted to share...")
+
+STRUCTURE:
+- Short lines (1-2 sentences max per line)
+- One idea per line — lots of white space
+- Use arrows or numbers for lists, not paragraphs
+- Build tension: problem -> why it matters -> insight -> resolution
+
+ENDING:
+- One clear, quotable takeaway line
+- Soft CTA: question, invite to comment, or "repost if you agree"
+- 3-5 hashtags on last line
 - Character limit: 3000
-- NO emojis except occasional arrow or bullet (use sparingly)
-- Write like a thought leader sharing real experience, not a marketing person`,
 
-  X: `Twitter/X content rules:
-- ONE sharp take. Max 270 characters.
-- No threads. No "1/x". Just one punchy statement.
-- Can include 1 hashtag if it helps reach
-- Conversational, not formal
-- Hot takes work. Questions work. Contrarian views work.`,
+TONE: confident or educational
+AUDIENCE: professionals who should feel "this is about me"`,
 
-  Instagram: `Instagram caption rules:
-- Personal story opener (1-2 sentences about YOUR experience)
-- Then the insight/lesson in 2-3 short paragraphs
-- Conversational, relatable tone
-- End with a question to drive comments
-- 5-10 hashtags on a separate last line
-- Can use 1-3 emojis naturally (not forced)
-- Character limit: 2000`,
+  X: `Twitter/X rewrite rules:
+
+ONE sharp thought (max 270 chars). No threads. No "1/x".
+
+HOOK formats that work:
+- Bold contradiction: "Stop doing X. Start doing Y."
+- Surprising stat: "[number]. Let that sink in."
+- Contrarian: "Unpopular opinion: [take]"
+
+Zero or one hashtag. Conversational, punchy, memorable.
+TONE: contrarian or punchy`,
+
+  Instagram: `Instagram caption rewrite rules:
+
+HOOK (first 1-2 lines):
+- Personal story opener or vulnerable confession
+- Must hook before the "more" cutoff
+
+STRUCTURE:
+- Short lines, one idea per line, white space between
+- Build tension: what happened -> the lesson -> the takeaway
+
+ENDING:
+- Quotable takeaway line
+- Question to drive comments
+- 8-12 hashtags on separate last line (mix big + niche)
+- 2-3 emojis placed naturally
+- Character limit: 2000
+
+TONE: vulnerable or storytelling
+AUDIENCE: people who save posts for later`,
 };
 
 const TONE_PROMPTS: Record<string, string> = {
