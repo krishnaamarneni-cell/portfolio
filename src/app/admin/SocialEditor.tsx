@@ -1096,61 +1096,38 @@ function PlatformCard({
           {copied ? <FiCheck size={11} /> : <FiCopy size={11} />}
           {copied ? "Copied" : "Copy"}
         </button>
-        <a
-          href={
-            platform.key === "linkedin"
-              ? "https://www.linkedin.com/feed/"
-              : platform.key === "x"
-              ? "https://x.com/compose/post"
-              : "https://www.instagram.com/"
-          }
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00]"
-        >
-          <FiExternalLink size={11} />
-          Open {platform.label}
-        </a>
-        {/* Copy & Post: copies text then opens compose page */}
+        {profiles.length > 0 && (
+          <button
+            type="button"
+            onClick={() => postNow("queue")}
+            disabled={posting}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-60"
+          >
+            <FiClock size={11} />
+            Queue
+          </button>
+        )}
         <button
           type="button"
-          onClick={async () => {
-            try { await navigator.clipboard.writeText(text); } catch {}
-            const url = platform.key === "linkedin"
-              ? "https://www.linkedin.com/feed/"
-              : platform.key === "x"
-              ? "https://x.com/compose/post"
-              : "https://www.instagram.com/";
-            window.open(url, "_blank");
+          onClick={() => {
+            if (profiles.length > 0) {
+              postNow("now");
+            } else {
+              navigator.clipboard.writeText(text).catch(() => {});
+              const url = platform.key === "linkedin"
+                ? "https://www.linkedin.com/feed/"
+                : platform.key === "x"
+                ? "https://x.com/compose/post"
+                : "https://www.instagram.com/";
+              window.open(url, "_blank");
+            }
           }}
-          disabled={!text}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
+          disabled={posting || overLimit || !text}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black text-xs font-semibold shadow-[0_4px_15px_rgba(255,107,0,0.35)] hover:scale-[1.03] disabled:opacity-60"
         >
           <FiSend size={11} />
-          Copy & Post
+          {posting ? "Posting..." : profiles.length > 0 ? "Post now" : "Post"}
         </button>
-        {!profilesError && profiles.length > 0 && (
-          <>
-            <button
-              type="button"
-              onClick={() => postNow("queue")}
-              disabled={posting}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-60"
-            >
-              <FiClock size={11} />
-              Queue
-            </button>
-            <button
-              type="button"
-              onClick={() => postNow("now")}
-              disabled={posting || overLimit}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black text-xs font-semibold shadow-[0_4px_15px_rgba(255,107,0,0.35)] hover:scale-[1.03] disabled:opacity-60"
-            >
-              <FiSend size={11} />
-              Post now
-            </button>
-          </>
-        )}
       </div>
     </div>
   );
