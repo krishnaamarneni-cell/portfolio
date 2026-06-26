@@ -1111,6 +1111,24 @@ function PlatformCard({
           <FiExternalLink size={11} />
           Open {platform.label}
         </a>
+        {/* Copy & Post: copies text then opens compose page */}
+        <button
+          type="button"
+          onClick={async () => {
+            try { await navigator.clipboard.writeText(text); } catch {}
+            const url = platform.key === "linkedin"
+              ? "https://www.linkedin.com/feed/"
+              : platform.key === "x"
+              ? "https://x.com/compose/post"
+              : "https://www.instagram.com/";
+            window.open(url, "_blank");
+          }}
+          disabled={!text}
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
+        >
+          <FiSend size={11} />
+          Copy & Post
+        </button>
         {!profilesError && profiles.length > 0 && (
           <>
             <button
