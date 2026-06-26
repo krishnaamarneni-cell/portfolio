@@ -6,6 +6,8 @@ import {
   deleteContact,
   toggleStar,
   markEmailed,
+  updateContactType,
+  type ContactType,
 } from "@/lib/contacts";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +43,18 @@ export async function POST(request: Request) {
   }
   if (body.action === "emailed" && typeof body.id === "string") {
     await markEmailed(body.id);
+    return NextResponse.json({ ok: true });
+  }
+  if (
+    body.action === "set_type" &&
+    typeof body.id === "string" &&
+    typeof body.contact_type === "string"
+  ) {
+    const validTypes = ["recruiter", "personal", "colleague", "unknown"];
+    if (!validTypes.includes(body.contact_type as string)) {
+      return NextResponse.json({ error: "invalid contact_type" }, { status: 400 });
+    }
+    await updateContactType(body.id, body.contact_type as ContactType);
     return NextResponse.json({ ok: true });
   }
 

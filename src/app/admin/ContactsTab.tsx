@@ -17,6 +17,8 @@ import {
   FiCheckSquare,
 } from "react-icons/fi";
 
+type ContactType = "recruiter" | "personal" | "colleague" | "unknown";
+
 type Contact = {
   id: string;
   name: string;
@@ -29,6 +31,7 @@ type Contact = {
   times_contacted: number;
   source: string;
   notes: string | null;
+  contact_type: ContactType;
   created_at: string;
   updated_at: string;
 };
@@ -61,6 +64,10 @@ export default function ContactsTab({
   const [composeAttachResume, setComposeAttachResume] = useState(true);
   const [composeSending, setComposeSending] = useState(false);
   const [composeGenerating, setComposeGenerating] = useState(false);
+
+  // Contact classification
+  const [classifying, setClassifying] = useState(false);
+  const [filterType, setFilterType] = useState<string>("all");
 
   // Bulk send
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -168,10 +175,11 @@ export default function ContactsTab({
     setSelected(next);
   }
   function selectAll() {
-    if (selected.size === filtered.length) {
+    const recruiters = filtered.filter((c) => c.contact_type === "recruiter" || c.contact_type === "unknown");
+    if (selected.size === recruiters.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(filtered.map((c) => c.id)));
+      setSelected(new Set(recruiters.map((c) => c.id)));
     }
   }
 
@@ -224,6 +232,28 @@ export default function ContactsTab({
     load();
   }
 
+  // ── Classify contacts ──
+  async function classifyContacts() {
+    setClassifying(true);
+    try {
+      const r = await fetch("/api/admin/contacts/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const j = await r.json();
+      if (j.classified !== undefined) {
+        onSuccess(`Classified ${j.classified} contacts`);
+        load();
+      } else {
+        onError(j.error || "Classification failed");
+      }
+    } catch {
+      onError("Network error");
+    }
+    setClassifying(false);
+  }
+
   // ── Filter + sort ──
   const filtered = contacts
     .filter((c) => {
@@ -234,6 +264,7 @@ export default function ContactsTab({
       if (filterMatch === "strong" && (c.match_pct ?? 0) < 70) return false;
       if (filterMatch === "weak" && (c.match_pct ?? 0) >= 70) return false;
       if (filterMatch === "starred" && !c.starred) return false;
+      if (filterType !== "all" && c.contact_type !== filterType) return false;
       return true;
     })
     .sort((a, b) => {
@@ -249,6 +280,8 @@ export default function ContactsTab({
     });
 
   const strongCount = contacts.filter((c) => (c.match_pct ?? 0) >= 70).length;
+  const recruiterCount = contacts.filter((c) => c.contact_type === "recruiter").length;
+  const unknownCount = contacts.filter((c) => c.contact_type === "unknown").length;
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -267,19 +300,32 @@ export default function ContactsTab({
             <span className="text-sm font-normal text-[#666]">{contacts.length} total · {strongCount} strong</span>
           </h2>
         </div>
-        <button
-          type="button"
-          onClick={() => { setBulkMode(!bulkMode); setSelected(new Set()); }}
-          className={`px-3 py-1.5 rounded-full text-xs font-bold border ${bulkMode ? "bg-[#ff6b00]/15 border-[#ff6b00]/40 text-[#ff8c38]" : "bg-white/[0.04] border-white/[0.08] text-[#999]"}`}
-        >
-          {bulkMode ? "Exit bulk" : "Bulk send"}
-        </button>
+        <div className="flex items-center gap-2">
+          {unknownCount > 0 && (
+            <button
+              type="button"
+              onClick={classifyContacts}
+              disabled={classifying}
+              className="px-3 py-1.5 rounded-full text-xs font-bold border bg-violet-500/15 border-violet-500/30 text-violet-300 disabled:opacity-50"
+            >
+              {classifying ? "Classifying..." : `Classify ${unknownCount}`}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setBulkMode(!bulkMode); setSelected(new Set()); }}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold border ${bulkMode ? "bg-[#ff6b00]/15 border-[#ff6b00]/40 text-[#ff8c38]" : "bg-white/[0.04] border-white/[0.08] text-[#999]"}`}
+          >
+            {bulkMode ? "Exit bulk" : "Bulk send"}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-5 gap-3">
         {[
           { label: "Total", value: contacts.length, color: "text-white" },
+          { label: "Recruiters", value: recruiterCount, color: "text-orange-300" },
           { label: "Strong", value: strongCount, color: "text-emerald-300" },
           { label: "Emailed", value: contacts.filter((c) => c.emailed_at).length, color: "text-sky-300" },
           { label: "Starred", value: contacts.filter((c) => c.starred).length, color: "text-amber-300" },
@@ -298,9 +344,17 @@ export default function ContactsTab({
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..."
             className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#1a1a1a] border border-white/[0.08] text-xs text-white placeholder:text-[#555] focus:outline-none focus:border-[#ff6b00]/60" />
         </div>
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
+          className="px-3 py-2 rounded-xl bg-[#1a1a1a] border border-white/[0.08] text-xs text-[#999]">
+          <option value="all">All types</option>
+          <option value="recruiter">Recruiters</option>
+          <option value="colleague">Colleagues</option>
+          <option value="personal">Personal</option>
+          <option value="unknown">Unknown</option>
+        </select>
         <select value={filterMatch} onChange={(e) => setFilterMatch(e.target.value)}
           className="px-3 py-2 rounded-xl bg-[#1a1a1a] border border-white/[0.08] text-xs text-[#999]">
-          <option value="all">All</option>
+          <option value="all">All match</option>
           <option value="strong">&gt;70%</option>
           <option value="weak">&lt;70%</option>
           <option value="starred">Starred</option>
@@ -321,7 +375,7 @@ export default function ContactsTab({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <button type="button" onClick={selectAll} className="text-[10px] text-[#ff8c38] underline">
-                {selected.size === filtered.length ? "Deselect all" : "Select all"}
+                {selected.size > 0 ? "Deselect all" : "Select all recruiters"}
               </button>
               <span className="text-xs text-[#888]">{selected.size} selected</span>
             </div>
@@ -410,11 +464,15 @@ export default function ContactsTab({
         <div className="space-y-2">
           {filtered.map((c) => (
             <div key={c.id} className={`rounded-xl border p-3 flex items-center gap-2.5 ${c.starred ? "border-amber-500/20 bg-amber-500/[0.02]" : "border-white/[0.06] bg-[#1a1a1a]"}`}>
-              {/* Bulk checkbox */}
+              {/* Bulk checkbox — only recruiters + unknown can be selected */}
               {bulkMode && (
-                <button type="button" onClick={() => toggleSelect(c.id)} className="shrink-0">
-                  <FiCheckSquare size={14} className={selected.has(c.id) ? "text-[#ff8c38]" : "text-[#444]"} />
-                </button>
+                c.contact_type === "personal" || c.contact_type === "colleague" ? (
+                  <span className="shrink-0 w-[14px] h-[14px] rounded-sm bg-white/[0.03] border border-white/[0.06]" title="Not a recruiter" />
+                ) : (
+                  <button type="button" onClick={() => toggleSelect(c.id)} className="shrink-0">
+                    <FiCheckSquare size={14} className={selected.has(c.id) ? "text-[#ff8c38]" : "text-[#444]"} />
+                  </button>
+                )
               )}
               {/* Star */}
               <button type="button" onClick={() => act({ action: "star", id: c.id, starred: !c.starred })} className="shrink-0">
@@ -425,6 +483,15 @@ export default function ContactsTab({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-white truncate">{c.name || c.email}</span>
                   {c.company && <span className="text-[10px] text-[#888]">@ {c.company}</span>}
+                  {c.contact_type && c.contact_type !== "unknown" && (
+                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${
+                      c.contact_type === "recruiter" ? "bg-orange-500/15 text-orange-300" :
+                      c.contact_type === "colleague" ? "bg-blue-500/15 text-blue-300" :
+                      "bg-gray-500/15 text-gray-400"
+                    }`}>
+                      {c.contact_type}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[10px] text-[#666] truncate">{c.email}{c.role_pitched ? ` — ${c.role_pitched}` : ""}</p>
               </div>

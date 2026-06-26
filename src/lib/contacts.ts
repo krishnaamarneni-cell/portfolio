@@ -7,6 +7,8 @@
 import "server-only";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 
+export type ContactType = "recruiter" | "personal" | "colleague" | "unknown";
+
 export type RecruiterContact = {
   id: string;
   name: string;
@@ -19,6 +21,7 @@ export type RecruiterContact = {
   starred: boolean;
   emailed_at: string | null;
   times_contacted: number;
+  contact_type: ContactType;
   created_at: string;
   updated_at: string;
 };
@@ -31,6 +34,7 @@ export type RecruiterContactInput = {
   match_pct?: number | null;
   source?: string;
   notes?: string | null;
+  contact_type?: ContactType;
 };
 
 const TABLE = "recruiter_contacts";
@@ -86,6 +90,7 @@ export async function upsertContact(
         match_pct: input.match_pct ?? undefined,
         source: input.source ?? undefined,
         notes: input.notes ?? undefined,
+        contact_type: input.contact_type ?? undefined,
         times_contacted: (existing.times_contacted ?? 0) + 1,
         updated_at: new Date().toISOString(),
       })
@@ -106,6 +111,7 @@ export async function upsertContact(
       match_pct: input.match_pct ?? null,
       source: input.source ?? "manual",
       notes: input.notes ?? null,
+      contact_type: input.contact_type ?? "unknown",
       times_contacted: 1,
       updated_at: new Date().toISOString(),
     })
@@ -169,6 +175,20 @@ export async function markEmailed(id: string): Promise<void> {
     .from(TABLE)
     .update({
       emailed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+}
+
+export async function updateContactType(
+  id: string,
+  contactType: ContactType
+): Promise<void> {
+  const supabase = requireSupabaseAdmin();
+  await supabase
+    .from(TABLE)
+    .update({
+      contact_type: contactType,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
