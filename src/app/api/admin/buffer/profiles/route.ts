@@ -33,7 +33,19 @@ export async function GET() {
           c.service.charAt(0).toUpperCase() + c.service.slice(1),
         avatar: c.avatar,
       }));
-    return NextResponse.json({ profiles });
+    return NextResponse.json({
+      profiles,
+      _debug: {
+        totalChannels: channels.length,
+        rawServices: channels.map((c) => ({
+          id: c.id,
+          service: c.service,
+          name: c.name,
+          displayName: c.displayName,
+          isDisconnected: c.isDisconnected,
+        })),
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 502 });

@@ -210,8 +210,12 @@ export default function SocialEditor({
     fetch("/api/admin/buffer/profiles")
       .then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
       .then(({ ok, data }) => {
+        console.log("[Buffer] profiles response:", JSON.stringify(data, null, 2));
         if (ok && Array.isArray(data.profiles)) {
           setProfiles(data.profiles);
+          if (data.profiles.length === 0 && data._debug) {
+            console.warn("[Buffer] No profiles. Raw channels:", data._debug);
+          }
         } else if (data.error) {
           setProfilesError(data.error);
         }
@@ -1113,20 +1117,14 @@ function PlatformCard({
             if (profiles.length > 0) {
               postNow("now");
             } else {
-              navigator.clipboard.writeText(text).catch(() => {});
-              const url = platform.key === "linkedin"
-                ? "https://www.linkedin.com/feed/"
-                : platform.key === "x"
-                ? "https://x.com/compose/post"
-                : "https://www.instagram.com/";
-              window.open(url, "_blank");
+              onError(`No ${platform.label} channel connected in Buffer. Go to buffer.com → Channels → connect your ${platform.label} account, then reload.`);
             }
           }}
           disabled={posting || overLimit || !text}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black text-xs font-semibold shadow-[0_4px_15px_rgba(255,107,0,0.35)] hover:scale-[1.03] disabled:opacity-60"
         >
           <FiSend size={11} />
-          {posting ? "Posting..." : profiles.length > 0 ? "Post now" : "Post"}
+          {posting ? "Posting..." : "Post now"}
         </button>
       </div>
     </div>
