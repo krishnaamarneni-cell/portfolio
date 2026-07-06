@@ -142,8 +142,8 @@ export default function ResumeCreatorTab({
         onSuccess("Resume tailored and saved");
         loadVersions();
       }
-    } catch {
-      onError("Network error");
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Network error");
     }
     setAnalyzing(false);
   }

@@ -157,21 +157,27 @@ Analyze the job description, identify critical keywords and requirements, then p
     );
   }
 
-  const saved = await saveVersion({
-    company_name: body.companyName || "",
-    job_title: body.jobTitle || "",
-    job_description: body.jobDescription,
-    base_resume_text: baseResume,
-    tailored_resume: parsed.resume,
-    analysis: parsed.analysis,
-    ats_score: parsed.analysis.atsScore ?? null,
-    tone,
-    emphasis,
-    seniority: seniority || "",
-  });
+  let savedId: string | null = null;
+  try {
+    const saved = await saveVersion({
+      company_name: body.companyName || "",
+      job_title: body.jobTitle || "",
+      job_description: body.jobDescription,
+      base_resume_text: baseResume,
+      tailored_resume: parsed.resume,
+      analysis: parsed.analysis,
+      ats_score: parsed.analysis.atsScore ?? null,
+      tone,
+      emphasis,
+      seniority: seniority || "",
+    });
+    savedId = saved.id;
+  } catch (e) {
+    console.error("[resume/tailor] saveVersion failed (table may not exist):", e);
+  }
 
   return NextResponse.json({
-    id: saved.id,
+    id: savedId,
     resume: parsed.resume,
     analysis: parsed.analysis,
   });

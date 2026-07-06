@@ -14,8 +14,12 @@ export async function GET() {
   if (!(await getSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const versions = await listVersions();
-  return NextResponse.json({ versions });
+  try {
+    const versions = await listVersions();
+    return NextResponse.json({ versions });
+  } catch {
+    return NextResponse.json({ versions: [] });
+  }
 }
 
 export async function POST(request: Request) {
