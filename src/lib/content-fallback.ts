@@ -150,10 +150,23 @@ export const FALLBACK_PROJECTS: Project[] = [
     sort_order: 10,
   },
   {
+    id: "seed-proj-asg",
+    title: "Air Surface Global",
+    subtitle: "AI Logistics & Marketing Platform",
+    number: "02",
+    description:
+      "Intelligent freight logistics platform with AI route planning across air, ocean, road, and rail — plus audience intelligence, cost optimization, and a brass-themed ops console.",
+    link: "https://www.airsurfaceglobal.com",
+    tags: ["Next.js", "GSAP", "Globe.gl", "AI", "Logistics"],
+    gradient: "from-[#b8860b] to-[#8b6914]",
+    preview: "/previews/airsurfaceglobal.png",
+    sort_order: 15,
+  },
+  {
     id: "seed-proj-2",
     title: "North Falmouth Pharmacy",
     subtitle: "LTC Pharmacy · Cape Cod",
-    number: "02",
+    number: "03",
     description:
       "Long-term care pharmacy website serving Cape Cod facilities — eMAR integration, compliance packaging, immunizations, enrollment forms.",
     link: "https://www.nfpltc.com",
@@ -166,7 +179,7 @@ export const FALLBACK_PROJECTS: Project[] = [
     id: "seed-proj-3",
     title: "Auburn RX Pharmacy",
     subtitle: "Independent Retail Pharmacy",
-    number: "03",
+    number: "04",
     description:
       "Modern pharmacy website featuring online refill requests, immunization booking, prescription transfer, and local healthcare resources.",
     link: "https://auburnrx.vercel.app",
@@ -179,7 +192,7 @@ export const FALLBACK_PROJECTS: Project[] = [
     id: "seed-proj-4",
     title: "Saint Francis Medical",
     subtitle: "Healthcare & Medical Practice",
-    number: "04",
+    number: "05",
     description:
       "Patient-focused medical practice website with appointment booking, services overview, provider profiles, and HIPAA-conscious contact forms.",
     link: "https://saint-francis-medical.vercel.app",
@@ -192,7 +205,7 @@ export const FALLBACK_PROJECTS: Project[] = [
     id: "seed-proj-5",
     title: "EchoNest",
     subtitle: "AI Music Platform",
-    number: "05",
+    number: "06",
     description:
       "A music streaming and discovery platform powered by AI. Features smart playlists, listening analytics, music recommendations, and MCP integration for agent-to-agent communication.",
     link: "https://echonest-app.vercel.app",
