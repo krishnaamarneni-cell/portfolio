@@ -25,6 +25,7 @@ import {
   FiCpu,
   FiHeart,
   FiUsers,
+  FiFileText,
 } from "react-icons/fi";
 import {
   EMPTY_JOB,
@@ -43,6 +44,7 @@ import SocialEditor from "./SocialEditor";
 import AgentsTab from "./AgentsTab";
 import ContactsTab from "./ContactsTab";
 import PersonalTab from "./PersonalTab";
+import ResumeCreatorTab from "./ResumeCreatorTab";
 import MobileBottomNav, { tabLabel } from "./MobileBottomNav";
 
 type Tab =
@@ -55,7 +57,8 @@ type Tab =
   | "contacts"
   | "personal"
   | "connectors"
-  | "chat";
+  | "chat"
+  | "resume";
 
 type Props = {
   session: { email: string };
@@ -212,6 +215,7 @@ export default function AdminDashboard({
     { id: "projects" as const, label: "Projects", icon: FiFolder, count: projects.length, hint: "Featured work" },
     { id: "social" as const, label: "Social", icon: FiShare2, hint: "Compose & post via Buffer" },
     { id: "agents" as const, label: "Agents", icon: FiCpu, hint: "News + Jobs scouts" },
+    { id: "resume" as const, label: "Resume", icon: FiFileText, hint: "Tailor & export ATS resumes" },
     { id: "contacts" as const, label: "Contacts", icon: FiUsers, hint: "Recruiter CRM + outreach" },
     { id: "personal" as const, label: "Life", icon: FiHeart, hint: "Notepad + Life agent" },
     { id: "connectors" as const, label: "Settings", icon: FiLink, hint: "2FA, Face Lock, connectors, devices" },
@@ -400,6 +404,11 @@ export default function AdminDashboard({
               />
             ) : tab === "personal" ? (
               <PersonalTab
+                onSuccess={(m) => flash("ok", m)}
+                onError={(m) => flash("err", m)}
+              />
+            ) : tab === "resume" ? (
+              <ResumeCreatorTab
                 onSuccess={(m) => flash("ok", m)}
                 onError={(m) => flash("err", m)}
               />

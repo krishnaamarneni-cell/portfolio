@@ -13,6 +13,7 @@ import {
   FiShare2,
   FiLink,
   FiUsers,
+  FiFileText,
   FiX,
 } from "react-icons/fi";
 
@@ -26,7 +27,8 @@ export type Tab =
   | "personal"
   | "connectors"
   | "contacts"
-  | "chat";
+  | "chat"
+  | "resume";
 
 /** Five-slot bottom bar. Order chosen for daily-touch frequency:
  *  Chat → Life → Social → Agents → More. iPhone 15/16 widths (393-440px)
@@ -39,6 +41,7 @@ const PRIMARY: Array<{ id: Tab; label: string; icon: React.ComponentType<{ size?
 ];
 
 const SECONDARY: Array<{ id: Tab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
+  { id: "resume", label: "Resume", icon: FiFileText },
   { id: "contacts", label: "Contacts", icon: FiUsers },
   { id: "content", label: "Site Content", icon: FiLayout },
   { id: "thoughts", label: "Notes", icon: FiZap },
