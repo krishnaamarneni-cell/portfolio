@@ -72,16 +72,26 @@ export async function POST(request: Request) {
             model: "llama-3.3-70b-versatile",
             systemPrompt: `You classify email contacts. Given email conversations between Krishna Amarneni and a contact, determine the relationship type.
 
-Output ONLY a JSON object: {"type":"recruiter"|"personal"|"colleague","reason":"one sentence"}
+Output ONLY a JSON object: {"type":"<type>","reason":"one sentence"}
 
-Definitions:
-- "recruiter": staffing agency recruiter, HR person, hiring manager, talent acquisition — anyone sending job opportunities, scheduling interviews, or discussing roles/positions
+Types (pick the BEST match):
+- "recruiter": staffing agency recruiter, talent acquisition specialist, external recruiter sending job opportunities
+- "hiring_manager": internal hiring manager, engineering manager, VP — someone at the hiring company (not an agency) who makes hiring decisions or conducts interviews
+- "visa": immigration attorney, visa consultant, anyone discussing H-1B, green card, work authorization, or immigration matters
 - "colleague": current or former coworker, professional peer, someone from the same company or project
-- "personal": friend, family, newsletter, marketing email, service notification, anything not job or work related
+- "business": business development, partnership inquiry, sales outreach, vendor pitching services
+- "vendor": SaaS tool, service provider, platform — sending invoices, account notifications, or support
+- "personal": friend, family member, personal acquaintance, non-professional contact
+- "unknown": cannot determine from available information
 
-If the emails discuss job openings, roles, interviews, resumes, or hiring → recruiter.
-If the emails discuss shared work projects, team matters, or are from a known company Krishna worked at → colleague.
-Everything else → personal.
+Priority rules:
+- If emails discuss job openings, roles, interviews, resumes, or hiring AND sender is from a staffing/recruiting firm → recruiter
+- If emails discuss job openings but sender is at the hiring company itself → hiring_manager
+- If emails discuss immigration, visa, work permit, USCIS, I-140, H-1B → visa
+- If emails discuss shared work projects, team matters → colleague
+- If emails are sales/partnership pitches → business
+- If emails are product notifications, invoices, support tickets → vendor
+- If none of the above match clearly → unknown
 
 Default to "recruiter" if the contact source is "inbox-agent" or "auto-reply" and emails mention any job-related keywords.`,
             userPrompt: `Contact: ${contact.name} <${contact.email}>
@@ -107,10 +117,8 @@ ${conversationSummary}`,
                 .replace(/```/g, "")
                 .trim();
               const parsed = JSON.parse(jsonStr);
-              if (
-                parsed.type &&
-                ["recruiter", "personal", "colleague"].includes(parsed.type)
-              ) {
+              const VALID_TYPES = ["recruiter", "hiring_manager", "visa", "personal", "colleague", "business", "vendor", "unknown"];
+              if (parsed.type && VALID_TYPES.includes(parsed.type)) {
                 classified = {
                   type: parsed.type as ContactType,
                   reason: parsed.reason || "",

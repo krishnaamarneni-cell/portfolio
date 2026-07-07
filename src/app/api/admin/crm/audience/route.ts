@@ -63,6 +63,7 @@ export async function POST(request: Request) {
         name: body.name as string,
         description: body.description as string | undefined,
         rules: body.rules as Record<string, unknown>,
+        contact_count: typeof body.contact_count === "number" ? body.contact_count : 0,
         updated_at: new Date().toISOString(),
       })
       .select()

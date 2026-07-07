@@ -1,39 +1,58 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   FiSlash,
   FiRefreshCw,
   FiPlus,
   FiTrash2,
   FiShield,
+  FiBriefcase,
+  FiMail,
+  FiGlobe,
 } from "react-icons/fi";
-import { type Exclusion, timeAgo } from "./types";
+import { timeAgo } from "./types";
 
 type Props = {
   onSuccess: (m: string) => void;
   onError: (m: string) => void;
 };
 
+type UnifiedExclusion = {
+  id: string;
+  type: "email" | "domain" | "company" | "contact";
+  value: string;
+  reason: string | null;
+  source: string;
+  created_at: string;
+};
+
 const EXCL_TYPES = [
-  { value: "email", label: "Email Address" },
-  { value: "domain", label: "Domain" },
-  { value: "company", label: "Company Name" },
+  { value: "email", label: "Email Address", icon: FiMail },
+  { value: "domain", label: "Domain", icon: FiGlobe },
+  { value: "company", label: "Company Name", icon: FiBriefcase },
 ];
 
+const SOURCE_LABELS: Record<string, string> = {
+  exclusion_table: "Manual rule",
+  contact_flag: "Contact flag",
+  company_flag: "Company flag",
+};
+
 export default function ExclusionsPanel({ onSuccess, onError }: Props) {
-  const [exclusions, setExclusions] = useState<Exclusion[]>([]);
+  const [exclusions, setExclusions] = useState<UnifiedExclusion[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [newType, setNewType] = useState("email");
   const [newValue, setNewValue] = useState("");
   const [newReason, setNewReason] = useState("");
   const [newPermanent, setNewPermanent] = useState(true);
+  const [sourceFilter, setSourceFilter] = useState<"all" | "exclusion_table" | "contact_flag" | "company_flag">("all");
 
   async function load() {
     setLoading(true);
-    const r = await fetch("/api/admin/crm/audience");
-    const d = await r.json().catch(() => ({}));
+    const r = await fetch("/api/admin/crm/exclusions");
+    const d = await r.json().catch(() => ({ exclusions: [] }));
     setExclusions(d.exclusions ?? []);
     setLoading(false);
   }
@@ -65,17 +84,45 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
     }
   }
 
-  async function remove(id: string) {
-    const r = await fetch("/api/admin/crm/audience", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "remove-exclusion", id }),
-    });
-    if (r.ok) {
-      onSuccess("Exclusion removed");
-      await load();
+  async function remove(excl: UnifiedExclusion) {
+    if (excl.source === "exclusion_table") {
+      const r = await fetch("/api/admin/crm/audience", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "remove-exclusion", id: excl.id }),
+      });
+      if (r.ok) { onSuccess("Exclusion removed"); await load(); }
+      else onError("Failed to remove");
+    } else if (excl.source === "contact_flag") {
+      const r = await fetch("/api/admin/crm/exclusions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle-contact", contactId: excl.id, excluded: false }),
+      });
+      if (r.ok) { onSuccess("Contact exclusion removed"); await load(); }
+      else onError("Failed to remove");
+    } else if (excl.source === "company_flag") {
+      const r = await fetch("/api/admin/crm/exclusions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle-company", companyId: excl.id, excluded: false }),
+      });
+      if (r.ok) { onSuccess("Company exclusion removed"); await load(); }
+      else onError("Failed to remove");
     }
   }
+
+  const filtered = useMemo(() => {
+    if (sourceFilter === "all") return exclusions;
+    return exclusions.filter((e) => e.source === sourceFilter);
+  }, [exclusions, sourceFilter]);
+
+  const stats = useMemo(() => ({
+    total: exclusions.length,
+    manual: exclusions.filter((e) => e.source === "exclusion_table").length,
+    contactFlags: exclusions.filter((e) => e.source === "contact_flag").length,
+    companyFlags: exclusions.filter((e) => e.source === "company_flag").length,
+  }), [exclusions]);
 
   if (loading) {
     return (
@@ -87,43 +134,66 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
-        <FiShield size={18} className="text-amber-500 shrink-0 mt-0.5" />
+      {/* Info banner */}
+      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3">
+        <FiShield size={18} className="text-amber-400 shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-semibold text-amber-800">Outreach Safety Rules</p>
-          <p className="text-xs text-amber-700 mt-1">
-            Exclusions prevent contacts from appearing in any audience evaluation. Use this to protect your current employer, personal contacts, and companies you should never cold-email.
+          <p className="text-sm font-semibold text-amber-300">Unified Outreach Safety</p>
+          <p className="text-xs text-amber-400/80 mt-1">
+            Shows all exclusions from three sources: manual rules, contact &ldquo;excluded from bulk&rdquo; flags, and company exclusion flags. Removing an entry here also removes the flag on the contact or company.
           </p>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="Active Rules" value={exclusions.length} />
-        <Stat label="By Email" value={exclusions.filter((e) => e.exclusion_type === "email").length} />
-        <Stat label="By Domain" value={exclusions.filter((e) => e.exclusion_type === "domain").length} />
-        <Stat label="By Company" value={exclusions.filter((e) => e.exclusion_type === "company").length} />
+        <Stat label="Total Rules" value={stats.total} />
+        <Stat label="Manual" value={stats.manual} />
+        <Stat label="Contact Flags" value={stats.contactFlags} />
+        <Stat label="Company Flags" value={stats.companyFlags} />
       </div>
 
-      {/* Add button */}
-      <button
-        onClick={() => setShowAdd(!showAdd)}
-        className="px-4 py-2.5 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] flex items-center gap-2"
-      >
-        <FiPlus size={14} /> Add Exclusion
-      </button>
+      {/* Actions */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button
+          onClick={() => setShowAdd(!showAdd)}
+          className="px-4 py-2.5 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] flex items-center gap-2"
+        >
+          <FiPlus size={14} /> Add Exclusion Rule
+        </button>
+        <div className="flex gap-1 bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-1">
+          {(["all", "exclusion_table", "contact_flag", "company_flag"] as const).map((src) => (
+            <button
+              key={src}
+              onClick={() => setSourceFilter(src)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                sourceFilter === src
+                  ? "bg-[#ff6b00] text-white"
+                  : "text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
+              }`}
+            >
+              {src === "all" ? "All" : src === "exclusion_table" ? "Manual" : src === "contact_flag" ? "Contacts" : "Companies"}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={load}
+          className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text-secondary)] hover:border-[#ff6b00] flex items-center gap-2 ml-auto"
+        >
+          <FiRefreshCw size={14} /> Refresh
+        </button>
+      </div>
 
       {/* Add form */}
       {showAdd && (
         <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-5 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-[10px] uppercase text-[#bbb] tracking-wider font-semibold">Type</label>
+              <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Type</label>
               <select
                 value={newType}
                 onChange={(e) => setNewType(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:outline-none"
               >
                 {EXCL_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -131,25 +201,25 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] uppercase text-[#bbb] tracking-wider font-semibold">Value</label>
+              <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Value</label>
               <input
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
                 placeholder={newType === "email" ? "user@example.com" : newType === "domain" ? "example.com" : "Company Name"}
-                className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:outline-none"
               />
             </div>
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] uppercase text-[#bbb] tracking-wider font-semibold">Reason (optional)</label>
+            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Reason (optional)</label>
             <input
               value={newReason}
               onChange={(e) => setNewReason(e.target.value)}
               placeholder="Why exclude this?"
-              className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
+              className="w-full px-3 py-2 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:outline-none"
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-[var(--admin-text-muted)] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-[var(--admin-text-secondary)] cursor-pointer">
             <input
               type="checkbox"
               checked={newPermanent}
@@ -162,7 +232,7 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
             <button onClick={add} className="px-4 py-2 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00]">
               Add
             </button>
-            <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-xl text-sm text-[#999] hover:text-[var(--admin-text-muted)]">
+            <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-xl text-sm text-[var(--admin-text-muted)] hover:text-[var(--admin-text-secondary)]">
               Cancel
             </button>
           </div>
@@ -170,32 +240,52 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
       )}
 
       {/* Exclusion list */}
-      {exclusions.length === 0 ? (
-        <div className="text-center py-12 text-[#999] text-sm">No exclusion rules yet. Add one above to protect contacts from bulk outreach.</div>
+      {filtered.length === 0 ? (
+        <div className="text-center py-12 text-[var(--admin-text-muted)] text-sm">
+          {exclusions.length === 0
+            ? "No exclusion rules yet. Add one above or toggle \"Exclude from Bulk\" on a contact or company."
+            : "No exclusions match this filter."
+          }
+        </div>
       ) : (
         <div className="space-y-2">
-          {exclusions.map((e) => (
-            <div key={e.id} className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4 flex items-center gap-3">
-              <FiSlash size={16} className="text-red-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-[var(--admin-text)]">{e.exclusion_value}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--admin-bg)] text-[var(--admin-text-muted)] border border-[var(--admin-border)]">{e.exclusion_type}</span>
-                  {e.is_permanent && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">permanent</span>
-                  )}
+          {filtered.map((e) => {
+            const Icon = e.type === "email" || e.type === "contact" ? FiMail
+              : e.type === "domain" ? FiGlobe
+              : FiBriefcase;
+            return (
+              <div key={`${e.source}-${e.id}`} className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
+                  <Icon size={14} className="text-red-400" />
                 </div>
-                {e.reason && <p className="text-xs text-[#888] mt-0.5">{e.reason}</p>}
-                <p className="text-[10px] text-[#bbb] mt-0.5">Added {timeAgo(e.created_at)}</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm text-[var(--admin-text)]">{e.value}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--admin-surface-hover)] text-[var(--admin-text-muted)] border border-[var(--admin-border)]">
+                      {e.type}
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                      e.source === "exclusion_table"
+                        ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                        : e.source === "contact_flag"
+                        ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                        : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                    }`}>
+                      {SOURCE_LABELS[e.source] ?? e.source}
+                    </span>
+                  </div>
+                  {e.reason && <p className="text-xs text-[var(--admin-text-muted)] mt-0.5">{e.reason}</p>}
+                  <p className="text-[10px] text-[var(--admin-text-muted)] mt-0.5">Added {timeAgo(e.created_at)}</p>
+                </div>
+                <button
+                  onClick={() => { if (confirm("Remove this exclusion?")) remove(e); }}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--admin-text-muted)] hover:text-red-400 hover:bg-red-500/10 shrink-0 transition-colors"
+                >
+                  <FiTrash2 size={14} />
+                </button>
               </div>
-              <button
-                onClick={() => { if (confirm("Remove this exclusion?")) remove(e.id); }}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-[#ccc] hover:text-red-500 hover:bg-red-50 shrink-0"
-              >
-                <FiTrash2 size={14} />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -206,7 +296,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
       <p className="text-xl font-bold text-[var(--admin-text)]">{value}</p>
-      <p className="text-[10px] uppercase tracking-wider text-[#999] mt-0.5">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)] mt-0.5">{label}</p>
     </div>
   );
 }

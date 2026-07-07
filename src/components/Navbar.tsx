@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { HiMenuAlt3, HiX } from "react-icons/hi";
 import { FiHome } from "react-icons/fi";
 import { RxDragHandleDots2 } from "react-icons/rx";
-import ThemeToggle from "./ThemeToggle";
 
 const navLinks = [
   { name: "About", href: "/#about", id: "about" },
@@ -321,8 +320,6 @@ export default function Navbar() {
             Contact me
           </a>
 
-          {/* Theme toggle */}
-          <ThemeToggle className="shrink-0" />
         </div>
 
         {/* Tooltip */}
@@ -351,7 +348,6 @@ export default function Navbar() {
           <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-[#ff6b00]">
             {active === "home" ? "/ home" : `/ ${active}`}
           </span>
-          <ThemeToggle />
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
             className="w-10 h-10 flex items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-primary)]"

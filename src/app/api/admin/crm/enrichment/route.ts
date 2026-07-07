@@ -11,9 +11,9 @@ export async function GET() {
 
   try {
     const items = await listPendingEnrichments();
-    return NextResponse.json({ items });
+    return NextResponse.json({ enrichments: items });
   } catch {
-    return NextResponse.json({ items: [] });
+    return NextResponse.json({ enrichments: [] });
   }
 }
 
@@ -26,21 +26,27 @@ export async function POST(request: Request) {
     unknown
   >;
 
+  const decision = (body.decision ?? body.status) as string | undefined;
+
   if (
     body.action === "review" &&
     typeof body.id === "string" &&
-    (body.decision === "approved" || body.decision === "rejected")
+    (decision === "approved" || decision === "rejected")
   ) {
-    await reviewEnrichment(body.id, body.decision);
+    await reviewEnrichment(body.id, decision);
     return NextResponse.json({ ok: true });
   }
 
-  if (body.action === "batch-review" && Array.isArray(body.items)) {
-    for (const item of body.items as Array<{
-      id: string;
-      decision: "approved" | "rejected";
-    }>) {
-      await reviewEnrichment(item.id, item.decision);
+  if (body.action === "batch-review") {
+    if (Array.isArray(body.items)) {
+      for (const item of body.items as Array<{ id: string; decision: string }>) {
+        const d = (item.decision ?? decision) as "approved" | "rejected";
+        if (d) await reviewEnrichment(item.id, d);
+      }
+    } else if (Array.isArray(body.ids) && decision) {
+      for (const id of body.ids as string[]) {
+        await reviewEnrichment(id, decision as "approved" | "rejected");
+      }
     }
     return NextResponse.json({ ok: true });
   }

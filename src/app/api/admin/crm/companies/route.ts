@@ -46,7 +46,8 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "update" && typeof body.id === "string") {
-    const company = await updateCompany(body.id, body.patch as Record<string, unknown>);
+    const { action: _, id: __, ...patch } = body;
+    const company = await updateCompany(body.id, patch);
     return NextResponse.json({ company });
   }
 

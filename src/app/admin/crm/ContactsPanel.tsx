@@ -14,6 +14,7 @@ import {
   FiMessageSquare,
   FiSlash,
   FiExternalLink,
+  FiDownload,
 } from "react-icons/fi";
 import { type Contact, type ContactType, CONTACT_TYPES, typeInfo, timeAgo } from "./types";
 
@@ -94,6 +95,34 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
 
   const selectedContact = selectedId ? contacts.find((c) => c.id === selectedId) ?? null : null;
 
+  function exportCSV(rows: Contact[]) {
+    if (rows.length === 0) { onError("No contacts to export"); return; }
+    const headers = ["Name", "Email", "Company", "Type", "Title", "Phone", "LinkedIn", "Match %", "Starred", "DNC", "Excluded", "Last Activity", "Source"];
+    const csvRows = [headers.join(",")];
+    for (const c of rows) {
+      const escape = (s: string | null | undefined) => {
+        if (!s) return "";
+        return `"${s.replace(/"/g, '""')}"`;
+      };
+      csvRows.push([
+        escape(c.name), escape(c.email), escape(c.company),
+        c.contact_type, escape(c.title), escape(c.phone),
+        escape(c.linkedin_url), c.match_pct ?? "",
+        c.starred ? "Yes" : "No", c.do_not_contact ? "Yes" : "No",
+        c.excluded_from_bulk ? "Yes" : "No",
+        c.last_gmail_activity_at ?? "", c.source,
+      ].join(","));
+    }
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `crm-contacts-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    onSuccess(`Exported ${rows.length} contacts`);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -141,6 +170,12 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
           className="px-4 py-2.5 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] disabled:opacity-50 whitespace-nowrap"
         >
           {classifying ? "Classifying..." : "AI Classify"}
+        </button>
+        <button
+          onClick={() => exportCSV(filtered)}
+          className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text-secondary)] hover:border-[#ff6b00] flex items-center gap-2 whitespace-nowrap"
+        >
+          <FiDownload size={14} /> Export CSV
         </button>
       </div>
 
