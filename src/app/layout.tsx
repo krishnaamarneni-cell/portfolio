@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import SeoJsonLd from "@/components/SeoJsonLd";
 import "./globals.css";
 
@@ -99,6 +100,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-[#050505] text-white">
         <SeoJsonLd />
         {children}
+        <Analytics />
       </body>
     </html>
   );
