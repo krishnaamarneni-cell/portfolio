@@ -54,19 +54,19 @@ export default function About() {
             </ScrollReveal>
 
             <ScrollReveal direction="flipX" delay={0.1}>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-8 whitespace-pre-line">
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[var(--text-primary)] leading-tight mb-8 whitespace-pre-line">
                 {about.heading_pre} <span className="text-gradient">{about.heading_accent}</span>
               </h2>
             </ScrollReveal>
 
             <ScrollReveal direction="zoom3d" delay={0.2}>
-              <p className="text-[#888] text-lg leading-relaxed mb-6">
+              <p className="text-[var(--text-secondary)] text-lg leading-relaxed mb-6">
                 {about.paragraph_one}
               </p>
             </ScrollReveal>
 
             <ScrollReveal direction="zoom3d" delay={0.3}>
-              <p className="text-[#888] text-lg leading-relaxed">
+              <p className="text-[var(--text-secondary)] text-lg leading-relaxed">
                 {about.paragraph_two}
               </p>
             </ScrollReveal>
@@ -82,7 +82,7 @@ export default function About() {
                   <div key={s.label} className="group cursor-default" style={{ perspective: "800px" }}>
                     <div className="transition-transform duration-300 group-hover:[transform:perspective(800px)_rotateY(10deg)_scale(1.05)]">
                       <p className="text-3xl md:text-4xl font-bold text-gradient">{s.value}</p>
-                      <p className="text-[#555] text-sm mt-1">{s.label}</p>
+                      <p className="text-[var(--text-muted)] text-sm mt-1">{s.label}</p>
                     </div>
                   </div>
                 ))}
@@ -103,7 +103,7 @@ export default function About() {
                 </a>
                 <button
                   onClick={copyEmail}
-                  className="flex items-center gap-2 px-6 py-3 rounded-full border border-white/[0.1] text-[#ccc] text-sm font-medium hover:border-[#ff6b00]/30 hover:text-white active:scale-[0.97] transition-all"
+                  className="flex items-center gap-2 px-6 py-3 rounded-full border border-[var(--border)] text-[var(--text-secondary)] text-sm font-medium hover:border-[#ff6b00]/30 hover:text-[var(--text-primary)] active:scale-[0.97] transition-all"
                 >
                   {copied ? <FiCheck size={16} className="text-green-400" /> : <FiCopy size={16} />}
                   {copied ? "Copied!" : "Copy email"}
@@ -111,7 +111,7 @@ export default function About() {
                 <a
                   href={about.resume_url}
                   download
-                  className="flex items-center gap-2 px-6 py-3 rounded-full border border-white/[0.1] text-[#ccc] text-sm font-medium hover:border-[#ff6b00]/30 hover:text-white active:scale-[0.97] transition-all"
+                  className="flex items-center gap-2 px-6 py-3 rounded-full border border-[var(--border)] text-[var(--text-secondary)] text-sm font-medium hover:border-[#ff6b00]/30 hover:text-[var(--text-primary)] active:scale-[0.97] transition-all"
                 >
                   <FiDownload size={16} />
                   Download CV
@@ -127,7 +127,7 @@ export default function About() {
                     <FaStar key={i} size={14} className="text-[#ff6b00]" />
                   ))}
                 </div>
-                <p className="text-[#888] text-sm mb-5">{about.trust_blurb}</p>
+                <p className="text-[var(--text-secondary)] text-sm mb-5">{about.trust_blurb}</p>
                 <div className="flex items-center gap-3">
                   {about.socials.map((s) => {
                     const Icon = SOCIAL_ICONS[s.platform] ?? FaGithub;
@@ -137,7 +137,7 @@ export default function About() {
                         href={s.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-10 h-10 rounded-xl border border-white/[0.08] flex items-center justify-center text-[#888] hover:text-[#ff6b00] hover:border-[#ff6b00]/20 transition-all"
+                        className="w-10 h-10 rounded-xl border border-[var(--border)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[#ff6b00] hover:border-[#ff6b00]/20 transition-all"
                         aria-label={s.platform}
                       >
                         <Icon size={16} />
@@ -164,8 +164,8 @@ export default function About() {
                       >
                         <Icon size={22} style={{ color: item.accent }} />
                       </div>
-                      <h3 className="text-white font-semibold text-lg mb-2">{item.title}</h3>
-                      <p className="text-[#666] text-sm leading-relaxed">{item.description}</p>
+                      <h3 className="text-[var(--text-primary)] font-semibold text-lg mb-2">{item.title}</h3>
+                      <p className="text-[var(--text-muted)] text-sm leading-relaxed">{item.description}</p>
                     </div>
                   </TiltCard>
                 </ScrollReveal>

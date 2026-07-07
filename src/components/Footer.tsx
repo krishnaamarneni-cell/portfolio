@@ -19,13 +19,13 @@ export default function Footer() {
           </ScrollReveal>
           <ScrollReveal direction="zoom3d" delay={0.1}>
             <h2 className="text-6xl md:text-8xl lg:text-[140px] font-bold leading-[0.9] tracking-tight">
-              <span className="text-white">Krishna</span>
+              <span className="text-[var(--text-primary)]">Krishna</span>
               <br />
               <span className="text-gradient">Amarneni</span>
             </h2>
           </ScrollReveal>
           <ScrollReveal direction="rotate3d" delay={0.2}>
-            <div className="mt-8 flex flex-wrap items-center gap-4 text-[#666] text-sm">
+            <div className="mt-8 flex flex-wrap items-center gap-4 text-[var(--text-muted)] text-sm">
               <span>SAP Expert</span>
               <span className="text-[#ff6b00]">&bull;</span>
               <span>Full-Stack Developer</span>
@@ -39,12 +39,12 @@ export default function Footer() {
       </div>
 
       {/* Scrolling marquee */}
-      <div className="relative overflow-hidden border-t border-b border-white/[0.04] py-6">
+      <div className="relative overflow-hidden border-t border-b border-[var(--border)] py-6">
         <div className="marquee-track flex whitespace-nowrap">
-          <span className="marquee-content text-2xl md:text-4xl font-bold text-white/[0.07] uppercase tracking-wider">
+          <span className="marquee-content text-2xl md:text-4xl font-bold text-[var(--text-primary)]/[0.07] uppercase tracking-wider">
             {repeatedText}
           </span>
-          <span className="marquee-content text-2xl md:text-4xl font-bold text-white/[0.07] uppercase tracking-wider">
+          <span className="marquee-content text-2xl md:text-4xl font-bold text-[var(--text-primary)]/[0.07] uppercase tracking-wider">
             {repeatedText}
           </span>
         </div>
@@ -63,7 +63,7 @@ export default function Footer() {
       </div>
 
       {/* Footer bar */}
-      <div className="border-t border-white/[0.04] py-10 px-6 lg:px-10">
+      <div className="border-t border-[var(--border)] py-10 px-6 lg:px-10">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-3">
@@ -71,8 +71,8 @@ export default function Footer() {
                 K
               </div>
               <div>
-                <p className="text-white font-medium text-sm">Krishna Amarneni</p>
-                <p className="text-[#555] text-xs">Full-Stack Developer &middot; AI Builder &middot; SAP Expert</p>
+                <p className="text-[var(--text-primary)] font-medium text-sm">Krishna Amarneni</p>
+                <p className="text-[var(--text-muted)] text-xs">Full-Stack Developer &middot; AI Builder &middot; SAP Expert</p>
               </div>
             </div>
 
@@ -87,7 +87,7 @@ export default function Footer() {
                   href={href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-9 h-9 rounded-lg border border-white/[0.06] flex items-center justify-center text-[#666] hover:text-[#ff6b00] hover:border-[#ff6b00]/20 transition-all"
+                  className="w-9 h-9 rounded-lg border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-[#ff6b00] hover:border-[#ff6b00]/20 transition-all"
                 >
                   <Icon size={16} />
                 </a>
@@ -104,7 +104,7 @@ export default function Footer() {
 
           <div className="section-divider mt-6 mb-4" />
 
-          <p className="text-center text-xs text-[#444]">
+          <p className="text-center text-xs text-[var(--text-muted)]">
             &copy; {new Date().getFullYear()} Krishna Amarneni &middot; Built with Next.js, Tailwind CSS &amp; TypeScript
           </p>
         </div>

@@ -138,7 +138,7 @@ export default function Experience() {
           </p>
         </ScrollReveal>
         <ScrollReveal direction="flipX" delay={0.1}>
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight">
+          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[var(--text-primary)] leading-tight">
             Professional <span className="text-gradient">Experience</span>
           </h2>
         </ScrollReveal>
@@ -206,7 +206,7 @@ export default function Experience() {
                             className={`w-full rounded-3xl p-8 lg:p-10 relative overflow-hidden border transition-colors duration-500 ${
                               isTop
                                 ? "bg-white text-[#0c0c0c] shadow-[0_30px_80px_rgba(0,0,0,0.5)] border-white/20"
-                                : "bg-[#1a1a1a] text-white shadow-[0_5px_20px_rgba(0,0,0,0.2)] border-white/[0.03]"
+                                : "bg-[var(--bg-card)] text-[var(--text-primary)] shadow-[0_5px_20px_rgba(0,0,0,0.2)] border-[var(--border)]"
                             }`}
                           >
                             {/* Category */}
@@ -221,7 +221,7 @@ export default function Experience() {
 
                             {/* Title */}
                             <h3 className={`text-3xl lg:text-4xl font-bold mb-3 leading-tight ${
-                              isTop ? "text-[#0c0c0c]" : "text-white"
+                              isTop ? "text-[#0c0c0c]" : "text-[var(--text-primary)]"
                             }`}>
                               {exp.title}
                             </h3>
@@ -235,7 +235,7 @@ export default function Experience() {
                                 {exp.company}
                               </span>
                               <span className={`flex items-center gap-1.5 text-sm ${
-                                isTop ? "text-[#888]" : "text-[#666]"
+                                isTop ? "text-[#888]" : "text-[var(--text-muted)]"
                               }`}>
                                 <FiMapPin size={13} />
                                 {exp.location}
@@ -250,7 +250,7 @@ export default function Experience() {
 
                             {/* Description */}
                             <p className={`text-base leading-relaxed mb-5 ${
-                              isTop ? "text-[#555]" : "text-[#888]"
+                              isTop ? "text-[#555]" : "text-[var(--text-secondary)]"
                             }`}>
                               {exp.description}
                             </p>
@@ -275,7 +275,7 @@ export default function Experience() {
                                   className={`text-xs px-3 py-1.5 rounded-full font-medium ${
                                     isTop
                                       ? "bg-[#ff6b00]/10 text-[#ff6b00] border border-[#ff6b00]/20"
-                                      : "bg-[#ff6b00]/[0.06] text-[#ff8c38] border border-[#ff6b00]/10"
+                                      : "bg-[#ff6b00]/[0.06] text-[#ff8c38] border border-[#ff6b00]/15"
                                   }`}
                                 >
                                   {t}
@@ -296,8 +296,8 @@ export default function Experience() {
                                 )}
                               </div>
                               <div>
-                                <p className={`text-sm font-semibold ${isTop ? "text-[#333]" : "text-white"}`}>{exp.company}</p>
-                                <p className={`text-xs ${isTop ? "text-[#999]" : "text-[#666]"}`}>{exp.location}</p>
+                                <p className={`text-sm font-semibold ${isTop ? "text-[#333]" : "text-[var(--text-primary)]"}`}>{exp.company}</p>
+                                <p className={`text-xs ${isTop ? "text-[#999]" : "text-[var(--text-muted)]"}`}>{exp.location}</p>
                               </div>
                             </div>
                           </div>
@@ -336,14 +336,14 @@ export default function Experience() {
                   </div>
 
                   <div className="text-center mt-8">
-                    <p className="text-white font-bold text-xl transition-all duration-500">
+                    <p className="text-[var(--text-primary)] font-bold text-xl transition-all duration-500">
                       {activeExp.company}
                     </p>
-                    <p className="text-[#666] text-sm mt-1 flex items-center justify-center gap-1.5">
+                    <p className="text-[var(--text-muted)] text-sm mt-1 flex items-center justify-center gap-1.5">
                       <FiMapPin size={13} />
                       {activeExp.location}
                     </p>
-                    <p className="text-[#555] text-xs font-mono mt-2">
+                    <p className="text-[var(--text-muted)] text-xs font-mono mt-2">
                       {activeExp.period}
                     </p>
                   </div>
@@ -365,7 +365,7 @@ export default function Experience() {
             </div>
             <div>
               <h3 className="font-bold text-lg mb-1">Education</h3>
-              <p className="text-[#888] text-sm">
+              <p className="text-[var(--text-secondary)] text-sm">
                 Bachelor&apos;s Degree — Automotive Engineering &nbsp;|&nbsp; Master&apos;s — Data Analytics
               </p>
             </div>
