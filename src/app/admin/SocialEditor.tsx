@@ -1117,7 +1117,7 @@ function PlatformCard({
             if (profiles.length > 0) {
               postNow("now");
             } else {
-              onError(`No ${platform.label} channel connected in Buffer. Go to buffer.com → Channels → connect your ${platform.label} account, then reload.`);
+              onError(`No ${platform.label} channel found in Buffer. Go to buffer.com → Channels → click "Connect a Channel" → select ${platform.label} → authorize, then reload this page.`);
             }
           }}
           disabled={posting || overLimit || !text}
