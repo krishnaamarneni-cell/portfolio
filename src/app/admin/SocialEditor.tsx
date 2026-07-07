@@ -211,18 +211,8 @@ export default function SocialEditor({
       .then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
       .then(({ ok, data }) => {
         console.log("[Buffer] profiles response:", JSON.stringify(data, null, 2));
-        const dbg = data._debug?.rawServices;
-        if (dbg) {
-          setDebugInfo(
-            `Raw channels (${data._debug.totalChannels}): ` +
-            dbg.map((c: { service: string; displayName: string; isDisconnected: boolean }) =>
-              `${c.displayName} [service="${c.service}", disconnected=${c.isDisconnected}]`
-            ).join(" | ") +
-            ` → Normalized profiles (${data.profiles?.length ?? 0}): ` +
-            (data.profiles ?? []).map((p: { service: string; formatted_username: string }) =>
-              `${p.formatted_username} [${p.service}]`
-            ).join(", ")
-          );
+        if (data._debug) {
+          setDebugInfo(JSON.stringify(data._debug, null, 0));
         }
         if (ok && Array.isArray(data.profiles)) {
           setProfiles(data.profiles);
