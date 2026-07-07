@@ -322,34 +322,58 @@ export default function SocialEditor({
     return d.toISOString();
   }
 
-  /** Per-platform post. */
+  /** Per-platform post — "now" goes straight to Buffer, anything else
+   *  saves to the local queue and the cron fires it at the right time. */
   async function postOne(
     key: PlatformKey,
     when: "now" | "queue" | string
   ): Promise<{ ok: boolean; error?: string }> {
     const p = PLATFORMS.find((x) => x.key === key)!;
     const text = composition[key];
-    const ids = profilesFor(profiles, key)
-      .filter((bp) => selected[bp.id])
-      .map((bp) => bp.id);
-    if (ids.length === 0) {
+    const matching = profilesFor(profiles, key).filter((bp) => selected[bp.id]);
+    if (matching.length === 0) {
       return { ok: false, error: `No ${p.label} profile selected` };
     }
     if (!text.trim()) return { ok: false, error: `${p.label} text is empty` };
     if (text.length > p.limit)
       return { ok: false, error: `${p.label} over character limit` };
-    const res = await fetch("/api/admin/buffer/post", {
+
+    if (when === "now") {
+      const res = await fetch("/api/admin/buffer/post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          profile_ids: matching.map((bp) => bp.id),
+          media_url: imageUrl || undefined,
+          when: "now",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: data.error || `${p.label} post failed` };
+      return { ok: true };
+    }
+
+    // Queue or schedule → save to local queue
+    const dueAt =
+      when === "queue"
+        ? new Date(Date.now() + 60_000).toISOString()
+        : new Date(when).toISOString();
+    const items = matching.map((bp) => ({
+      text,
+      platform: key,
+      channel_id: bp.id,
+      channel_name: bp.formatted_username,
+      image_url: imageUrl || undefined,
+      due_at: dueAt,
+    }));
+    const res = await fetch("/api/admin/social/queue", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text,
-        profile_ids: ids,
-        media_url: imageUrl || undefined,
-        when,
-      }),
+      body: JSON.stringify({ action: "add", items }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: data.error || `${p.label} post failed` };
+    if (!res.ok) return { ok: false, error: data.error || "Queue failed" };
     return { ok: true };
   }
 
@@ -881,6 +905,9 @@ export default function SocialEditor({
         </div>
       )}
 
+      {/* Queue panel */}
+      <QueuePanel onSuccess={onSuccess} onError={onError} />
+
       {/* Footer help */}
       {profilesError && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-300/90">
@@ -944,8 +971,8 @@ function PlatformCard({
   }
 
   async function postNow(when: "now" | "queue" | string) {
-    const ids = profiles.filter((p) => selectedIds[p.id]).map((p) => p.id);
-    if (ids.length === 0) {
+    const matching = profiles.filter((p) => selectedIds[p.id]);
+    if (matching.length === 0) {
       onError(`Select at least one ${platform.label} profile to post to`);
       return;
     }
@@ -958,27 +985,55 @@ function PlatformCard({
       return;
     }
     setPosting(true);
-    const res = await fetch("/api/admin/buffer/post", {
+
+    if (when === "now") {
+      const res = await fetch("/api/admin/buffer/post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          profile_ids: matching.map((p) => p.id),
+          media_url: imageUrl || undefined,
+          when: "now",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setPosting(false);
+      if (!res.ok) {
+        onError(data.error || "Post failed");
+        return;
+      }
+      onSuccess(`Posted to ${platform.label} now`);
+      return;
+    }
+
+    // Queue or schedule → local queue
+    const dueAt =
+      when === "queue"
+        ? new Date(Date.now() + 60_000).toISOString()
+        : new Date(when).toISOString();
+    const items = matching.map((p) => ({
+      text,
+      platform: platform.key,
+      channel_id: p.id,
+      channel_name: p.formatted_username,
+      image_url: imageUrl || undefined,
+      due_at: dueAt,
+    }));
+    const res = await fetch("/api/admin/social/queue", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text,
-        profile_ids: ids,
-        media_url: imageUrl || undefined,
-        when,
-      }),
+      body: JSON.stringify({ action: "add", items }),
     });
     const data = await res.json().catch(() => ({}));
     setPosting(false);
     if (!res.ok) {
-      onError(data.error || "Post failed");
+      onError(data.error || "Queue failed");
       return;
     }
     onSuccess(
-      when === "now"
-        ? `Posted to ${platform.label} now`
-        : when === "queue"
-        ? `Queued on ${platform.label}`
+      when === "queue"
+        ? `Queued on ${platform.label} (posts in ~1 min)`
         : `Scheduled on ${platform.label}`
     );
   }
@@ -1586,7 +1641,9 @@ function PostRewriteBar({ text, platform, onChange }: {
   return (
     <div className="space-y-1.5 mt-2">
       <div className="flex items-center gap-1 flex-wrap">
-        <span className="text-[9px] font-mono uppercase tracking-widest text-violet-400 mr-0.5">AI</span>
+        <span className="text-[9px] font-mono uppercase tracking-widest text-violet-400 mr-0.5">
+          AI
+        </span>
         {[
           { key: "elaborate", label: "+More" },
           { key: "shorter", label: "-Shorter" },
@@ -1624,6 +1681,229 @@ function PostRewriteBar({ text, platform, onChange }: {
         />
         {busy && <span className="text-[9px] text-violet-400/60 animate-pulse">rewriting...</span>}
       </div>
+    </div>
+  );
+}
+
+/* ---- Queue management panel ---- */
+
+type QueueRow = {
+  id: string;
+  text: string;
+  platform: string;
+  channel_id: string;
+  channel_name: string | null;
+  image_url: string | null;
+  due_at: string;
+  status: "pending" | "sent" | "failed";
+  error: string | null;
+  created_at: string;
+  sent_at: string | null;
+};
+
+function QueuePanel({
+  onSuccess,
+  onError,
+}: {
+  onSuccess: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [rows, setRows] = useState<QueueRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [acting, setActing] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/admin/social/queue");
+      const j = await r.json();
+      if (Array.isArray(j.queue)) setRows(j.queue);
+    } catch {}
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    if (open) load();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, [open]);
+
+  async function act(action: "delete" | "post-now", id: string) {
+    setActing(id);
+    try {
+      const r = await fetch("/api/admin/social/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, id }),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        onError(j.error || "Action failed");
+      } else {
+        onSuccess(action === "delete" ? "Removed from queue" : "Posted now");
+        load();
+      }
+    } catch {
+      onError("Network error");
+    }
+    setActing(null);
+  }
+
+  const pending = rows.filter((r) => r.status === "pending");
+  const sent = rows.filter((r) => r.status === "sent");
+  const failed = rows.filter((r) => r.status === "failed");
+
+  const platformIcon: Record<string, string> = {
+    linkedin: "LI",
+    x: "X",
+    instagram: "IG",
+  };
+
+  const statusColors: Record<string, string> = {
+    pending: "text-amber-400 bg-amber-400/10 border-amber-400/20",
+    sent: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
+    failed: "text-red-400 bg-red-400/10 border-red-400/20",
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-[#161616]">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between p-4 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <FiClock size={14} className="text-[#ff8c38]" />
+          <h3 className="text-sm font-bold tracking-wide uppercase text-[#ff8c38]">
+            Post Queue
+          </h3>
+          {pending.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20 text-[10px] font-bold text-amber-400">
+              {pending.length} pending
+            </span>
+          )}
+        </div>
+        <span className="text-[#666] text-xs">{open ? "▾" : "▸"}</span>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] text-[#666] font-mono">
+              Cron fires every 5 min · {rows.length} total · {pending.length} pending · {sent.length} sent · {failed.length} failed
+            </p>
+            <button
+              type="button"
+              onClick={load}
+              disabled={loading}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10px] text-[#888] hover:text-white disabled:opacity-50"
+            >
+              <FiRefreshCw size={10} className={loading ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
+
+          {rows.length === 0 ? (
+            <p className="text-xs text-[#555] py-4 text-center">
+              Queue is empty. Use "Queue" on a platform card to add posts.
+            </p>
+          ) : (
+            <ul className="divide-y divide-white/[0.05] max-h-[400px] overflow-y-auto">
+              {rows.map((row) => (
+                <li key={row.id} className="py-2.5 first:pt-0 last:pb-0">
+                  <div className="flex items-start gap-2">
+                    <span className="shrink-0 text-[10px] font-bold font-mono mt-0.5 w-5 text-center">
+                      {platformIcon[row.platform] || row.platform}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white/90 line-clamp-2 leading-relaxed">
+                        {row.text.slice(0, 140)}
+                        {row.text.length > 140 ? "…" : ""}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span
+                          className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
+                            statusColors[row.status] || ""
+                          }`}
+                        >
+                          {row.status}
+                        </span>
+                        {row.channel_name && (
+                          <span className="text-[10px] text-[#666] font-mono">
+                            @{row.channel_name}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-[#555] font-mono">
+                          due {new Date(row.due_at).toLocaleString()}
+                        </span>
+                        {row.sent_at && (
+                          <span className="text-[10px] text-emerald-400/70 font-mono">
+                            sent {new Date(row.sent_at).toLocaleString()}
+                          </span>
+                        )}
+                        {row.error && (
+                          <span className="text-[10px] text-red-400 font-mono truncate max-w-[200px]">
+                            {row.error}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {row.status === "pending" && (
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => act("post-now", row.id)}
+                          disabled={acting === row.id}
+                          className="px-2 py-1 rounded-md bg-[#ff6b00]/10 border border-[#ff6b00]/20 text-[9px] font-bold text-[#ff8c38] hover:bg-[#ff6b00]/20 disabled:opacity-40"
+                          title="Post immediately via Buffer"
+                        >
+                          <FiSend size={10} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => act("delete", row.id)}
+                          disabled={acting === row.id}
+                          className="px-2 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-[9px] font-bold text-red-400 hover:bg-red-500/20 disabled:opacity-40"
+                          title="Remove from queue"
+                        >
+                          <FiTrash2 size={10} />
+                        </button>
+                      </div>
+                    )}
+                    {row.status === "failed" && (
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => act("post-now", row.id)}
+                          disabled={acting === row.id}
+                          className="px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-[9px] font-bold text-amber-400 hover:bg-amber-500/20 disabled:opacity-40"
+                          title="Retry posting"
+                        >
+                          <FiRefreshCw size={10} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => act("delete", row.id)}
+                          disabled={acting === row.id}
+                          className="px-2 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-[9px] font-bold text-red-400 hover:bg-red-500/20 disabled:opacity-40"
+                          title="Remove from queue"
+                        >
+                          <FiTrash2 size={10} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }
