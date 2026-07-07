@@ -37,13 +37,30 @@ export async function GET(request: Request) {
     if (contactsRes.error) throw new Error(`Contacts: ${contactsRes.error.message}`);
     if (threadsRes.error) throw new Error(`Threads: ${threadsRes.error.message}`);
 
-    const emails = (contactsRes.data).map((c: Record<string, unknown>) => c.email as string).filter(Boolean);
+    const contacts = contactsRes.data ?? [];
+    const threads = threadsRes.data ?? [];
+
+    // Debug: run a separate count to verify the query
+    const { count: directCount } = await db
+      .from("recruiter_contacts")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId);
+
+    const emails = contacts.map((c: Record<string, unknown>) => c.email as string).filter(Boolean);
 
     return NextResponse.json({
       company: companyRes.data,
-      contacts: contactsRes.data,
-      threads: threadsRes.data,
+      contacts,
+      threads,
       emails: [...new Set(emails)],
+      _debug: {
+        companyId,
+        contactsReturned: contacts.length,
+        directCount: directCount ?? 0,
+        storedContactCount: companyRes.data?.contact_count ?? "N/A",
+        contactsError: contactsRes.error?.message ?? null,
+        threadsError: threadsRes.error?.message ?? null,
+      },
     });
   } catch (err) {
     return NextResponse.json(

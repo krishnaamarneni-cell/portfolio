@@ -27,6 +27,14 @@ type WorkspaceData = {
   contacts: Contact[];
   emails: string[];
   threads: CachedThread[];
+  _debug?: {
+    companyId: string;
+    contactsReturned: number;
+    directCount: number;
+    storedContactCount: number | string;
+    contactsError: string | null;
+    threadsError: string | null;
+  };
 };
 
 export default function CompaniesPanel({ onSuccess, onError }: Props) {
@@ -304,7 +312,7 @@ function CompanyWorkspace({
     );
   }
 
-  const { company: c, contacts, emails, threads } = data;
+  const { company: c, contacts, emails, threads, _debug } = data;
 
   if (threadDetail) {
     return (
@@ -331,6 +339,18 @@ function CompanyWorkspace({
           </button>
         </div>
       </div>
+
+      {_debug && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-xs font-mono text-blue-300 space-y-1">
+          <p className="font-bold text-blue-400">Debug: Workspace Query</p>
+          <p>Company ID: {_debug.companyId}</p>
+          <p>Contacts returned by query: {_debug.contactsReturned}</p>
+          <p>Direct count (same WHERE): {_debug.directCount}</p>
+          <p>Stored contact_count: {_debug.storedContactCount}</p>
+          {_debug.contactsError && <p className="text-red-400">Contacts error: {_debug.contactsError}</p>}
+          {_debug.threadsError && <p className="text-red-400">Threads error: {_debug.threadsError}</p>}
+        </div>
+      )}
 
       <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-5">
         <div className="flex items-start gap-4">
