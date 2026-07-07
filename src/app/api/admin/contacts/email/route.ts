@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { sendEmailUnified } from "@/lib/resend";
-import { markEmailed } from "@/lib/contacts";
+import { markEmailed, getContact } from "@/lib/contacts";
 import { runAgent } from "@/lib/agents";
 import { fetchJobs, fetchSiteContent } from "@/lib/content";
 import { buildFactsContext } from "@/lib/facts";
@@ -45,6 +45,18 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "to and contactId required" },
       { status: 400 }
+    );
+  }
+
+  // Exclusion safety: never send to Do Not Contact
+  const contact = await getContact(body.contactId);
+  if (!contact) {
+    return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+  }
+  if (contact.do_not_contact) {
+    return NextResponse.json(
+      { error: "This contact is marked Do Not Contact — email blocked" },
+      { status: 403 },
     );
   }
 

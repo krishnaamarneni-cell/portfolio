@@ -15,6 +15,7 @@ import {
   FiSlash,
   FiExternalLink,
   FiDownload,
+  FiSend,
 } from "react-icons/fi";
 import { type Contact, type ContactType, CONTACT_TYPES, typeInfo, timeAgo } from "./types";
 
@@ -30,6 +31,8 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
   const [filterType, setFilterType] = useState<ContactType | "all">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [classifying, setClassifying] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showCompose, setShowCompose] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -71,6 +74,15 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
     } else {
       onError(d.error || "Classification failed");
     }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   const filtered = useMemo(() => {
@@ -190,6 +202,38 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
         </button>
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 bg-[#ff6b00]/10 border border-[#ff6b00]/30 rounded-xl px-4 py-2.5 flex-wrap">
+          <span className="text-sm font-semibold text-[#ff6b00]">{selectedIds.size} selected</span>
+          <button
+            onClick={() => setShowCompose(true)}
+            className="px-3 py-1.5 rounded-lg bg-[#ff6b00] text-white text-xs font-semibold hover:bg-[#e55d00] flex items-center gap-1.5"
+          >
+            <FiSend size={12} /> Send Email
+          </button>
+          <button
+            onClick={() => exportCSV(contacts.filter(c => selectedIds.has(c.id)))}
+            className="px-3 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs font-semibold text-[var(--admin-text-secondary)] hover:border-[#ff6b00] flex items-center gap-1.5"
+          >
+            <FiDownload size={12} /> Export Selected
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={() => setSelectedIds(new Set(filtered.map(c => c.id)))}
+            className="text-xs text-[#ff6b00] hover:underline"
+          >
+            Select all ({filtered.length})
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-xs text-[var(--admin-text-muted)] hover:underline"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Contact list */}
       <div className="space-y-2">
         {filtered.length === 0 ? (
@@ -199,6 +243,8 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
             <ContactRow
               key={c.id}
               contact={c}
+              selected={selectedIds.has(c.id)}
+              onToggleSelect={() => toggleSelect(c.id)}
               onSelect={() => setSelectedId(c.id)}
               onStar={() => act({ action: "star", id: c.id, starred: !c.starred })}
               onDelete={() => {
@@ -234,6 +280,17 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
           }}
         />
       )}
+
+      {/* Bulk compose modal */}
+      {showCompose && (
+        <BulkComposeModal
+          contacts={contacts.filter(c => selectedIds.has(c.id))}
+          onClose={() => setShowCompose(false)}
+          onDone={() => { setShowCompose(false); setSelectedIds(new Set()); load(); }}
+          onSuccess={onSuccess}
+          onError={onError}
+        />
+      )}
     </div>
   );
 }
@@ -249,11 +306,15 @@ function MiniStat({ label, value }: { label: string; value: number }) {
 
 function ContactRow({
   contact: c,
+  selected,
+  onToggleSelect,
   onSelect,
   onStar,
   onDelete,
 }: {
   contact: Contact;
+  selected: boolean;
+  onToggleSelect: () => void;
   onSelect: () => void;
   onStar: () => void;
   onDelete: () => void;
@@ -264,6 +325,13 @@ function ContactRow({
       className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4 flex items-center gap-3 hover:shadow-sm transition-shadow cursor-pointer group"
       onClick={onSelect}
     >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={() => onToggleSelect()}
+        onClick={(e) => e.stopPropagation()}
+        className="w-4 h-4 rounded border-[var(--admin-border)] text-[#ff6b00] focus:ring-[#ff6b00] shrink-0 cursor-pointer accent-[#ff6b00]"
+      />
       <button
         onClick={(e) => { e.stopPropagation(); onStar(); }}
         className={`shrink-0 ${c.starred ? "text-amber-400" : "text-[#ddd] hover:text-amber-300"}`}
@@ -502,6 +570,203 @@ function ContactDetail({
               </div>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BulkComposeModal({
+  contacts,
+  onClose,
+  onDone,
+  onSuccess,
+  onError,
+}: {
+  contacts: Contact[];
+  onClose: () => void;
+  onDone: () => void;
+  onSuccess: (m: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [attachResume, setAttachResume] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{
+    sent: number;
+    errors: number;
+    skipped: number;
+    skippedDetails?: Array<{ email: string; reason: string }>;
+  } | null>(null);
+
+  const eligible = contacts.filter(
+    (c) => !c.do_not_contact && !c.excluded_from_bulk,
+  );
+  const excluded = contacts.filter(
+    (c) => c.do_not_contact || c.excluded_from_bulk,
+  );
+
+  async function handleSend() {
+    if (!subject.trim()) {
+      onError("Subject is required");
+      return;
+    }
+    if (!message.trim()) {
+      onError("Message is required");
+      return;
+    }
+    setSending(true);
+    try {
+      const r = await fetch("/api/admin/contacts/email/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactIds: eligible.map((c) => c.id),
+          subject: subject.trim(),
+          message: message.trim(),
+          attachResume,
+        }),
+      });
+      const d = await r.json();
+      setResult(d);
+      if (d.sent > 0) onSuccess(`Sent ${d.sent} emails successfully`);
+      if (d.errors > 0) onError(`${d.errors} emails failed to send`);
+    } catch {
+      onError("Network error — please try again");
+    }
+    setSending(false);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[var(--admin-surface)] rounded-2xl border border-[var(--admin-border)] shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-[var(--admin-surface)] border-b border-[var(--admin-border)] px-6 py-4 flex items-center justify-between z-10 rounded-t-2xl">
+          <h3 className="font-bold text-[var(--admin-text)] flex items-center gap-2">
+            <FiSend size={16} className="text-[#ff6b00]" /> Bulk Send Email
+          </h3>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-[var(--admin-surface-hover)] flex items-center justify-center text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
+          >
+            <FiX size={16} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          <div className="flex gap-3">
+            <div className="flex-1 bg-emerald-500/10 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-emerald-500">{eligible.length}</p>
+              <p className="text-[10px] uppercase tracking-wider text-emerald-400">Will receive</p>
+            </div>
+            {excluded.length > 0 && (
+              <div className="flex-1 bg-red-500/10 rounded-xl p-3 text-center">
+                <p className="text-lg font-bold text-red-500">{excluded.length}</p>
+                <p className="text-[10px] uppercase tracking-wider text-red-400">Excluded</p>
+              </div>
+            )}
+          </div>
+
+          {excluded.length > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex items-start gap-2">
+              <FiSlash size={14} className="text-amber-500 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-500">
+                <p className="font-semibold">These contacts will NOT receive email:</p>
+                {excluded.slice(0, 5).map((c) => (
+                  <p key={c.id} className="mt-0.5">
+                    {c.name || c.email} — {c.do_not_contact ? "Do Not Contact" : "Excluded from bulk"}
+                  </p>
+                ))}
+                {excluded.length > 5 && <p className="mt-0.5">...and {excluded.length - 5} more</p>}
+              </div>
+            </div>
+          )}
+
+          {!result ? (
+            <>
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Subject</label>
+                <input
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Re: Opportunity discussion"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Message</label>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={6}
+                  placeholder="Write your email message... (greeting and signature are added automatically)"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none resize-none placeholder:text-[var(--admin-text-muted)]"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-[var(--admin-text-muted)] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={attachResume}
+                  onChange={(e) => setAttachResume(e.target.checked)}
+                  className="rounded border-[var(--admin-border)] text-[#ff6b00] focus:ring-[#ff6b00]"
+                />
+                Attach resume link
+              </label>
+
+              <button
+                onClick={handleSend}
+                disabled={sending || eligible.length === 0 || !subject.trim() || !message.trim()}
+                className="w-full py-3 rounded-xl bg-[#ff6b00] text-white font-semibold hover:bg-[#e55d00] disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {sending ? (
+                  <><FiRefreshCw size={14} className="animate-spin" /> Sending...</>
+                ) : (
+                  <><FiSend size={14} /> Send to {eligible.length} contact{eligible.length !== 1 ? "s" : ""}</>
+                )}
+              </button>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-emerald-500/10 rounded-xl p-3 text-center">
+                  <p className="text-lg font-bold text-emerald-500">{result.sent}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-emerald-400">Sent</p>
+                </div>
+                <div className="bg-red-500/10 rounded-xl p-3 text-center">
+                  <p className="text-lg font-bold text-red-500">{result.errors}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-red-400">Failed</p>
+                </div>
+                <div className="bg-amber-500/10 rounded-xl p-3 text-center">
+                  <p className="text-lg font-bold text-amber-500">{result.skipped}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-amber-400">Skipped</p>
+                </div>
+              </div>
+
+              {result.skippedDetails && result.skippedDetails.length > 0 && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+                  <p className="text-xs font-semibold text-amber-500 mb-1">Skipped contacts:</p>
+                  {result.skippedDetails.slice(0, 10).map((s, i) => (
+                    <p key={i} className="text-xs text-amber-400">{s.email} — {s.reason}</p>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={onDone}
+                className="w-full py-3 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-[var(--admin-text)] font-semibold hover:border-[#ff6b00]"
+              >
+                Done
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
