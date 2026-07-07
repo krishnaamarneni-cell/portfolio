@@ -118,7 +118,7 @@ export default function Hero() {
         {/* MOBILE layout: stacked vertically */}
         <div className="flex flex-col items-center justify-center md:hidden">
           <h1
-            className="text-5xl sm:text-6xl font-black leading-[0.85] tracking-tighter text-white uppercase select-none opacity-0 animate-[slideInLeft_1s_0.4s_forwards]"
+            className="text-5xl sm:text-6xl font-black leading-[0.85] tracking-tighter text-[var(--text-primary)] uppercase select-none opacity-0 animate-[slideInLeft_1s_0.4s_forwards]"
           >
             {hero.first_name}
           </h1>
@@ -134,12 +134,12 @@ export default function Hero() {
           </h1>
 
           <div className="mt-6 text-center opacity-0 animate-[fadeIn_1s_0.8s_forwards]">
-            <p className="text-[#777] text-xs italic tracking-wider mb-1">{hero.tagline_left} · {hero.tagline_right}</p>
+            <p className="text-[var(--text-secondary)] text-xs italic tracking-wider mb-1">{hero.tagline_left} · {hero.tagline_right}</p>
             <div className="text-base font-light h-7">
-              <span className="text-[#999]">{text}</span>
+              <span className="text-[var(--text-secondary)]">{text}</span>
               <span className="text-[#ff6b00] animate-pulse">|</span>
             </div>
-            <p className="text-[#777] text-xs mt-2">{hero.location} · {currentTime}</p>
+            <p className="text-[var(--text-secondary)] text-xs mt-2">{hero.location} · {currentTime}</p>
           </div>
         </div>
 
@@ -147,7 +147,7 @@ export default function Hero() {
         <div className="hidden md:flex items-center justify-center">
           {/* KRISHNA */}
           <h1
-            className="text-6xl lg:text-7xl xl:text-[90px] font-black leading-[0.85] tracking-tighter text-white uppercase select-none opacity-0 animate-[slideInLeft_1s_0.4s_forwards]"
+            className="text-6xl lg:text-7xl xl:text-[90px] font-black leading-[0.85] tracking-tighter text-[var(--text-primary)] uppercase select-none opacity-0 animate-[slideInLeft_1s_0.4s_forwards]"
             style={{
               transform: `translate(${mousePos.x * -5}px, ${mousePos.y * -3}px)`,
               transition: "transform 0.4s ease-out",
@@ -176,22 +176,22 @@ export default function Hero() {
         {/* Labels row below (desktop only) */}
         <div className="hidden md:flex justify-between items-start mt-4 opacity-0 animate-[fadeIn_1s_0.8s_forwards]">
           <div>
-            <p className="text-[#777] text-sm italic tracking-wider mb-1">{hero.tagline_left}</p>
+            <p className="text-[var(--text-secondary)] text-sm italic tracking-wider mb-1">{hero.tagline_left}</p>
             <div className="text-lg font-light h-7">
-              <span className="text-[#999]">{text}</span>
+              <span className="text-[var(--text-secondary)]">{text}</span>
               <span className="text-[#ff6b00] animate-pulse">|</span>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-[#777] text-sm italic tracking-wider mb-1">{hero.tagline_right}</p>
-            <p className="text-[#777] text-sm">{hero.location} · {currentTime}</p>
+            <p className="text-[var(--text-secondary)] text-sm italic tracking-wider mb-1">{hero.tagline_right}</p>
+            <p className="text-[var(--text-secondary)] text-sm">{hero.location} · {currentTime}</p>
           </div>
         </div>
       </div>
 
       {/* Scroll indicator */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-0 animate-[fadeIn_0.8s_1.4s_forwards]">
-        <span className="text-[#555] text-xs tracking-widest uppercase">Scroll</span>
+        <span className="text-[var(--text-muted)] text-xs tracking-widest uppercase">Scroll</span>
         <FiArrowDown className="text-[#ff6b00] animate-bounce" size={18} />
       </div>
     </section>

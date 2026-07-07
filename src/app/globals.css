@@ -1,9 +1,12 @@
 @import "tailwindcss";
 
-:root {
+/* ============ THEME: DARK (default) ============ */
+:root,
+[data-theme="dark"] {
   --bg-primary: #0c0c0c;
   --bg-secondary: #141414;
   --bg-card: #1a1a1a;
+  --bg-elevated: #222222;
   --accent: #ff6b00;
   --accent-light: #ff8c38;
   --accent-glow: rgba(255, 107, 0, 0.15);
@@ -12,6 +15,50 @@
   --text-muted: #555555;
   --border: rgba(255, 255, 255, 0.06);
   --border-hover: rgba(255, 107, 0, 0.3);
+
+  /* Admin surface (dark variant) */
+  --admin-bg: #0f0f0f;
+  --admin-surface: #1a1a1a;
+  --admin-surface-hover: #222222;
+  --admin-border: rgba(255, 255, 255, 0.08);
+  --admin-input-bg: #141414;
+  --admin-text: #ffffff;
+  --admin-text-secondary: #999999;
+  --admin-text-muted: #666666;
+  --admin-sidebar-bg: #111111;
+  --admin-sidebar-hover: #1a1a1a;
+  --admin-sidebar-active-bg: #ff6b00;
+  --admin-sidebar-active-text: #ffffff;
+}
+
+/* ============ THEME: LIGHT ============ */
+[data-theme="light"] {
+  --bg-primary: #fafafa;
+  --bg-secondary: #f0f0f0;
+  --bg-card: #ffffff;
+  --bg-elevated: #ffffff;
+  --accent: #e55d00;
+  --accent-light: #ff6b00;
+  --accent-glow: rgba(255, 107, 0, 0.1);
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --text-muted: #999999;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(255, 107, 0, 0.3);
+
+  /* Admin surface (light variant — cream) */
+  --admin-bg: #FDF6EE;
+  --admin-surface: #ffffff;
+  --admin-surface-hover: #f5f0ea;
+  --admin-border: #E8DFD4;
+  --admin-input-bg: #FAFAF8;
+  --admin-text: #1a1a1a;
+  --admin-text-secondary: #555555;
+  --admin-text-muted: #999999;
+  --admin-sidebar-bg: #ffffff;
+  --admin-sidebar-hover: #f5f0ea;
+  --admin-sidebar-active-bg: #ff6b00;
+  --admin-sidebar-active-text: #ffffff;
 }
 
 @theme inline {
@@ -64,6 +111,36 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans), system-ui, sans-serif;
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Light mode overrides for utility classes */
+[data-theme="light"] .card-dark {
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+
+[data-theme="light"] .text-gradient-white {
+  background: linear-gradient(135deg, #1a1a1a, #555555);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="light"] .text-stroke {
+  -webkit-text-stroke: 1.5px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .shadow-3d {
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.06),
+    0 8px 16px rgba(0, 0, 0, 0.04),
+    0 20px 40px rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] ::selection {
+  background: rgba(255, 107, 0, 0.25);
+  color: #1a1a1a;
 }
 
 ::selection {

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { HiMenuAlt3, HiX } from "react-icons/hi";
 import { FiHome } from "react-icons/fi";
 import { RxDragHandleDots2 } from "react-icons/rx";
+import ThemeToggle from "./ThemeToggle";
 
 const navLinks = [
   { name: "About", href: "/#about", id: "about" },
@@ -222,7 +223,7 @@ export default function Navbar() {
       >
         <div
           ref={containerRef}
-          className={`relative flex items-center gap-1 rounded-[28px] bg-[#1a1a1a]/95 backdrop-blur-2xl border border-white/[0.06] shadow-[0_10px_40px_rgba(0,0,0,0.5)] group ${
+          className={`relative flex items-center gap-1 rounded-[28px] bg-[var(--bg-card)]/95 backdrop-blur-2xl border border-[var(--border)] shadow-[0_10px_40px_rgba(0,0,0,0.3)] group ${
             isVertical ? "flex-col py-2 px-2.5" : "flex-row px-2 py-2.5"
           }`}
           style={{ transition: isDragging ? "none" : "all 0.3s ease-out" }}
@@ -238,7 +239,7 @@ export default function Navbar() {
             }}
             onDoubleClick={resetPosition}
             title="Drag to move · Touch left/right edge for vertical · Double-click to reset"
-            className={`relative z-10 flex items-center justify-center text-[#555] hover:text-[#ff6b00] transition-colors ${
+            className={`relative z-10 flex items-center justify-center text-[var(--text-muted)] hover:text-[#ff6b00] transition-colors ${
               isDragging ? "cursor-grabbing text-[#ff6b00]" : "cursor-grab"
             } ${isVertical ? "w-10 h-7" : "w-7 h-10"}`}
           >
@@ -274,7 +275,7 @@ export default function Navbar() {
               }
             }}
             className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center transition-colors duration-300 shrink-0 ${
-              active === "home" ? "text-black" : "text-[#999] hover:text-white"
+              active === "home" ? "text-black" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             }`}
           >
             <FiHome size={16} />
@@ -293,7 +294,7 @@ export default function Navbar() {
                 }
               }}
               className={`relative z-10 text-sm rounded-full transition-colors duration-300 font-medium whitespace-nowrap shrink-0 ${
-                active === link.id ? "text-black" : "text-[#888] hover:text-white"
+                active === link.id ? "text-black" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               } ${
                 isVertical
                   ? "px-4 py-2 w-full text-center"
@@ -319,6 +320,9 @@ export default function Navbar() {
           >
             Contact me
           </a>
+
+          {/* Theme toggle */}
+          <ThemeToggle className="shrink-0" />
         </div>
 
         {/* Tooltip */}
@@ -334,7 +338,7 @@ export default function Navbar() {
       {/* Mobile bottom nav */}
       <div className="fixed bottom-4 left-4 right-4 z-50 lg:hidden">
         <div
-          className={`flex items-center justify-between px-4 py-3 rounded-2xl bg-[#1a1a1a]/95 backdrop-blur-2xl border border-white/[0.06] shadow-[0_10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 ${
+          className={`flex items-center justify-between px-4 py-3 rounded-2xl bg-[var(--bg-card)]/95 backdrop-blur-2xl border border-[var(--border)] shadow-[0_10px_40px_rgba(0,0,0,0.3)] transition-all duration-500 ${
             visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
           }`}
         >
@@ -347,9 +351,10 @@ export default function Navbar() {
           <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-[#ff6b00]">
             {active === "home" ? "/ home" : `/ ${active}`}
           </span>
+          <ThemeToggle />
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="w-10 h-10 flex items-center justify-center rounded-full border border-white/10 text-white"
+            className="w-10 h-10 flex items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-primary)]"
           >
             {mobileOpen ? <HiX size={18} /> : <HiMenuAlt3 size={18} />}
           </button>
@@ -358,7 +363,7 @@ export default function Navbar() {
 
       {/* Mobile fullscreen menu */}
       <div
-        className={`fixed inset-0 z-40 bg-[#0c0c0c] transition-all duration-500 lg:hidden flex flex-col ${
+        className={`fixed inset-0 z-40 bg-[var(--bg-primary)] transition-all duration-500 lg:hidden flex flex-col ${
           mobileOpen ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
         }`}
       >
@@ -369,7 +374,7 @@ export default function Navbar() {
               href={link.href}
               onClick={() => setMobileOpen(false)}
               className={`text-4xl font-bold transition-all duration-300 py-3 ${
-                active === link.id ? "text-[#ff6b00]" : "text-white hover:text-[#ff6b00]"
+                active === link.id ? "text-[#ff6b00]" : "text-[var(--text-primary)] hover:text-[#ff6b00]"
               }`}
               style={{
                 transform: mobileOpen ? "translateY(0)" : "translateY(40px)",
