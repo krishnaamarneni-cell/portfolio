@@ -213,6 +213,9 @@ export default function SocialEditor({
         console.log("[Buffer] profiles response:", JSON.stringify(data, null, 2));
         if (ok && Array.isArray(data.profiles)) {
           setProfiles(data.profiles);
+          const auto: Record<string, boolean> = {};
+          for (const p of data.profiles) auto[p.id] = true;
+          setSelected(auto);
           if (data.profiles.length === 0 && data._debug) {
             console.warn("[Buffer] No profiles. Raw channels:", data._debug);
           }
@@ -1177,6 +1180,12 @@ function CampaignCard({
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<CampaignResult[] | null>(null);
   const [autoSchedule, setAutoSchedule] = useState(false);
+
+  useEffect(() => {
+    const auto: Record<string, boolean> = {};
+    for (const p of profiles) auto[p.id] = true;
+    setSelectedProfiles(auto);
+  }, [profiles]);
 
   // Auto-fill dates: today + 09:00, +2 days, +4 days etc.
   useEffect(() => {
