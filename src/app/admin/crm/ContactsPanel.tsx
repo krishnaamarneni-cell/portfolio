@@ -56,9 +56,13 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
     return true;
   }
 
-  async function classify() {
+  async function classify(forceAll = false) {
     setClassifying(true);
-    const r = await fetch("/api/admin/contacts/classify", { method: "POST" });
+    const r = await fetch("/api/admin/contacts/classify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(forceAll ? { forceAll: true } : {}),
+    });
     const d = await r.json().catch(() => ({}));
     setClassifying(false);
     if (r.ok) {
@@ -165,11 +169,18 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
           ))}
         </select>
         <button
-          onClick={classify}
+          onClick={() => classify(false)}
           disabled={classifying}
           className="px-4 py-2.5 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] disabled:opacity-50 whitespace-nowrap"
         >
           {classifying ? "Classifying..." : "AI Classify"}
+        </button>
+        <button
+          onClick={() => classify(true)}
+          disabled={classifying}
+          className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[#ff6b00]/40 text-sm font-semibold text-[#ff6b00] hover:bg-[#ff6b00]/10 disabled:opacity-50 whitespace-nowrap"
+        >
+          Re-classify All
         </button>
         <button
           onClick={() => exportCSV(filtered)}

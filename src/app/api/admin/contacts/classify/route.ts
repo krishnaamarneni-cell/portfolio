@@ -20,12 +20,15 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as {
     contactIds?: string[];
+    forceAll?: boolean;
   };
 
   const allContacts = await listContacts();
   const targets = body.contactIds
     ? allContacts.filter((c) => body.contactIds!.includes(c.id))
-    : allContacts.filter((c) => c.contact_type === "unknown");
+    : body.forceAll
+    ? allContacts
+    : allContacts.filter((c) => !c.contact_type || c.contact_type === "unknown");
 
   if (targets.length === 0) {
     return NextResponse.json({ classified: 0, results: [] });

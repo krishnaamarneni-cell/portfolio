@@ -31,6 +31,7 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
   const [detail, setDetail] = useState<ThreadMessage[] | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [directionFilter, setDirectionFilter] = useState<"all" | "inbound" | "outbound">("all");
+  const [syncing, setSyncing] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -138,6 +139,33 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
           ))}
         </div>
         <button
+          disabled={syncing}
+          onClick={async () => {
+            setSyncing(true);
+            try {
+              const r = await fetch("/api/admin/crm/threads", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "sync-all", limit: 100 }),
+              });
+              const d = await r.json();
+              if (r.ok) {
+                onSuccess(`Synced ${d.threadsSynced} threads from ${d.contactsProcessed} contacts`);
+                await load();
+              } else {
+                onError(d.error || "Sync failed");
+              }
+            } catch {
+              onError("Network error");
+            }
+            setSyncing(false);
+          }}
+          className="px-4 py-2.5 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] disabled:opacity-50 flex items-center gap-2"
+        >
+          <FiRefreshCw size={14} className={syncing ? "animate-spin" : ""} />
+          {syncing ? "Syncing..." : "Sync All Contacts"}
+        </button>
+        <button
           onClick={load}
           className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text-secondary)] hover:border-[#ff6b00] flex items-center gap-2"
         >
@@ -149,7 +177,7 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
       {filtered.length === 0 ? (
         <div className="text-center py-12 text-[var(--admin-text-muted)] text-sm">
           {threads.length === 0
-            ? "No conversations synced yet. Open a contact and click \"Sync Gmail\" to pull threads."
+            ? "No conversations synced yet. Click \"Sync All Contacts\" above to pull Gmail threads for all contacts."
             : "No threads match your search."
           }
         </div>

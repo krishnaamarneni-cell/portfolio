@@ -21,26 +21,28 @@ export async function GET(request: Request) {
       db.from("crm_companies").select("*").eq("id", companyId).single(),
       db
         .from("recruiter_contacts")
-        .select("id, name, email, contact_type, title, phone, linkedin_url, starred, emailed_at, last_gmail_activity_at, excluded_from_bulk, do_not_contact, tags, match_pct, role_pitched")
+        .select("*")
         .eq("company_id", companyId)
         .order("starred", { ascending: false })
         .order("name"),
       db
         .from("crm_email_threads")
-        .select("id, gmail_thread_id, subject, snippet, message_count, last_message_at, participants, direction, intent, intent_confidence")
+        .select("*")
         .eq("company_id", companyId)
         .order("last_message_at", { ascending: false })
-        .limit(20),
+        .limit(50),
     ]);
 
     if (companyRes.error) throw new Error(companyRes.error.message);
+    if (contactsRes.error) throw new Error(`Contacts: ${contactsRes.error.message}`);
+    if (threadsRes.error) throw new Error(`Threads: ${threadsRes.error.message}`);
 
-    const emails = (contactsRes.data ?? []).map((c: Record<string, unknown>) => c.email as string).filter(Boolean);
+    const emails = (contactsRes.data).map((c: Record<string, unknown>) => c.email as string).filter(Boolean);
 
     return NextResponse.json({
       company: companyRes.data,
-      contacts: contactsRes.data ?? [],
-      threads: threadsRes.data ?? [],
+      contacts: contactsRes.data,
+      threads: threadsRes.data,
       emails: [...new Set(emails)],
     });
   } catch (err) {

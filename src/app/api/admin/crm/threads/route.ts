@@ -11,7 +11,7 @@ import { getStoredTokens } from "@/lib/gmail";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
   if (!(await getSession()))
@@ -57,6 +57,39 @@ export async function POST(request: Request) {
       tokens?.email || undefined
     );
     return NextResponse.json(result);
+  }
+
+  if (body.action === "sync-all") {
+    const tokens = await getStoredTokens();
+    if (!tokens?.access_token)
+      return NextResponse.json({ error: "Gmail not connected" }, { status: 400 });
+
+    const { listContacts } = await import("@/lib/contacts");
+    const contacts = await listContacts();
+    const limit = typeof body.limit === "number" ? body.limit : 50;
+    const batch = contacts.slice(0, limit);
+
+    let synced = 0;
+    let enriched = 0;
+    let errors = 0;
+
+    for (const contact of batch) {
+      try {
+        const result = await syncThreadsForContact(contact, tokens.email || undefined);
+        synced += result.synced;
+        enriched += result.enriched;
+      } catch {
+        errors++;
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      contactsProcessed: batch.length,
+      threadsSynced: synced,
+      enriched,
+      errors,
+    });
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
