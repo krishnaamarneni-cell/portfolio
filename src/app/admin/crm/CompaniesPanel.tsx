@@ -108,7 +108,7 @@ export default function CompaniesPanel({ onSuccess, onError }: Props) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search companies..."
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none text-[#1a1a1a] placeholder:text-[#ccc]"
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none text-[var(--admin-text)] placeholder:text-[#ccc]"
           />
         </div>
         <button
@@ -121,7 +121,7 @@ export default function CompaniesPanel({ onSuccess, onError }: Props) {
         </button>
         <button
           onClick={() => setShowCreate(true)}
-          className="px-4 py-2.5 rounded-xl bg-white border border-[#E8DFD4] text-sm font-semibold text-[#555] hover:border-[#ff6b00] flex items-center gap-2 whitespace-nowrap"
+          className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text-muted)] hover:border-[#ff6b00] flex items-center gap-2 whitespace-nowrap"
         >
           <FiPlus size={14} /> Add Company
         </button>
@@ -136,11 +136,11 @@ export default function CompaniesPanel({ onSuccess, onError }: Props) {
             <div
               key={c.id}
               onClick={() => setSelectedId(c.id)}
-              className="bg-white rounded-xl border border-[#E8DFD4] p-4 hover:shadow-sm transition-shadow cursor-pointer group"
+              className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4 hover:shadow-sm transition-shadow cursor-pointer group"
             >
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
-                  <p className="font-semibold text-[#1a1a1a] text-sm truncate">{c.name}</p>
+                  <p className="font-semibold text-[var(--admin-text)] text-sm truncate">{c.name}</p>
                   <p className="text-xs text-[#999] mt-0.5">{c.domain}</p>
                 </div>
                 <div className="flex gap-1 shrink-0">
@@ -198,8 +198,8 @@ export default function CompaniesPanel({ onSuccess, onError }: Props) {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-white rounded-xl border border-[#E8DFD4] px-4 py-3">
-      <p className="text-xl font-bold text-[#1a1a1a]">{value}</p>
+    <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
+      <p className="text-xl font-bold text-[var(--admin-text)]">{value}</p>
       <p className="text-[10px] uppercase tracking-wider text-[#999] mt-0.5">{label}</p>
     </div>
   );
@@ -226,14 +226,14 @@ function CompanyDetail({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end" onClick={onClose}>
-      <div className="w-full max-w-lg bg-white h-full overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-[#E8DFD4] px-6 py-4 flex items-center justify-between z-10">
-          <h3 className="font-bold text-[#1a1a1a]">Company Detail</h3>
+      <div className="w-full max-w-lg bg-[var(--admin-surface)] h-full overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-[var(--admin-surface)] border-b border-[var(--admin-border)] px-6 py-4 flex items-center justify-between z-10">
+          <h3 className="font-bold text-[var(--admin-text)]">Company Detail</h3>
           <div className="flex items-center gap-2">
             <button onClick={onDelete} className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-500 hover:bg-red-100">
               <FiTrash2 size={14} />
             </button>
-            <button onClick={onClose} className="w-8 h-8 rounded-full bg-[#f5f0ea] flex items-center justify-center text-[#999] hover:text-[#555]">
+            <button onClick={onClose} className="w-8 h-8 rounded-full bg-[var(--admin-surface-hover)] flex items-center justify-center text-[#999] hover:text-[var(--admin-text-muted)]">
               <FiX size={16} />
             </button>
           </div>
@@ -241,7 +241,7 @@ function CompanyDetail({
 
         <div className="p-6 space-y-5">
           <div>
-            <p className="text-xl font-bold text-[#1a1a1a]">{c.name}</p>
+            <p className="text-xl font-bold text-[var(--admin-text)]">{c.name}</p>
             <p className="text-sm text-[#888]">{c.domain}</p>
             {c.aliases.length > 0 && (
               <p className="text-xs text-[#bbb] mt-1">Aliases: {c.aliases.join(", ")}</p>
@@ -255,32 +255,32 @@ function CompanyDetail({
                 value={industry}
                 onChange={(e) => setIndustry(e.target.value)}
                 onBlur={() => { if (industry !== (c.industry ?? "")) onUpdate({ industry: industry || null }); }}
-                className="w-full px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
                 placeholder="e.g. Technology"
               />
             </div>
             <div>
               <label className="text-[10px] uppercase text-[#bbb] tracking-wider block mb-1">Contacts</label>
-              <p className="text-sm text-[#1a1a1a] px-3 py-2">{c.contact_count}</p>
+              <p className="text-sm text-[var(--admin-text)] px-3 py-2">{c.contact_count}</p>
             </div>
           </div>
 
           <div className="flex gap-3">
-            <label className="flex items-center gap-2 text-sm text-[#555] cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-[var(--admin-text-muted)] cursor-pointer">
               <input
                 type="checkbox"
                 checked={c.is_current_employer}
                 onChange={(e) => onUpdate({ is_current_employer: e.target.checked })}
-                className="rounded border-[#E8DFD4] text-[#ff6b00] focus:ring-[#ff6b00]"
+                className="rounded border-[var(--admin-border)] text-[#ff6b00] focus:ring-[#ff6b00]"
               />
               Current Employer
             </label>
-            <label className="flex items-center gap-2 text-sm text-[#555] cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-[var(--admin-text-muted)] cursor-pointer">
               <input
                 type="checkbox"
                 checked={c.excluded_from_bulk}
                 onChange={(e) => onUpdate({ excluded_from_bulk: e.target.checked })}
-                className="rounded border-[#E8DFD4] text-[#ff6b00] focus:ring-[#ff6b00]"
+                className="rounded border-[var(--admin-border)] text-[#ff6b00] focus:ring-[#ff6b00]"
               />
               Exclude from Bulk
             </label>
@@ -293,7 +293,7 @@ function CompanyDetail({
               onChange={(e) => setNotes(e.target.value)}
               onBlur={() => { if (notes !== (c.notes ?? "")) onUpdate({ notes: notes || null }); }}
               rows={3}
-              className="w-full px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none resize-none"
+              className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none resize-none"
               placeholder="Notes..."
             />
           </div>
@@ -316,28 +316,28 @@ function CreateCompanyModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-bold text-[#1a1a1a]">New Company</h3>
+      <div className="bg-[var(--admin-surface)] rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-bold text-[var(--admin-text)]">New Company</h3>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Company name"
-          className="w-full px-3 py-2.5 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+          className="w-full px-3 py-2.5 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
         />
         <input
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
           placeholder="Domain (e.g. google.com)"
-          className="w-full px-3 py-2.5 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+          className="w-full px-3 py-2.5 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
         />
         <input
           value={industry}
           onChange={(e) => setIndustry(e.target.value)}
           placeholder="Industry (optional)"
-          className="w-full px-3 py-2.5 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+          className="w-full px-3 py-2.5 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
         />
         <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-[#999] hover:text-[#555]">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-[#999] hover:text-[var(--admin-text-muted)]">Cancel</button>
           <button
             onClick={() => { if (name && domain) onCreate({ name, domain, industry: industry || undefined }); }}
             disabled={!name || !domain}

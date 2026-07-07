@@ -49,7 +49,7 @@ export default function CRMWorkspace({
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
                 active
                   ? "bg-[#ff6b00] text-white shadow-md"
-                  : "bg-white border border-[#E8DFD4] text-[#666] hover:text-[#1a1a1a] hover:border-[#ff6b00]/30"
+                  : "bg-[var(--admin-surface)] border border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:text-[var(--admin-text)] hover:border-[#ff6b00]/30"
               }`}
             >
               <Icon size={15} />

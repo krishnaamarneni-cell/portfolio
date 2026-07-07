@@ -116,14 +116,14 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
 
       {/* Add form */}
       {showAdd && (
-        <div className="bg-white rounded-xl border border-[#E8DFD4] p-5 space-y-4">
+        <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-5 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-[10px] uppercase text-[#bbb] tracking-wider font-semibold">Type</label>
               <select
                 value={newType}
                 onChange={(e) => setNewType(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
               >
                 {EXCL_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -136,7 +136,7 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
                 placeholder={newType === "email" ? "user@example.com" : newType === "domain" ? "example.com" : "Company Name"}
-                className="w-full px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
               />
             </div>
           </div>
@@ -146,15 +146,15 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
               value={newReason}
               onChange={(e) => setNewReason(e.target.value)}
               placeholder="Why exclude this?"
-              className="w-full px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+              className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-[#555] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-[var(--admin-text-muted)] cursor-pointer">
             <input
               type="checkbox"
               checked={newPermanent}
               onChange={(e) => setNewPermanent(e.target.checked)}
-              className="rounded border-[#E8DFD4] text-[#ff6b00] focus:ring-[#ff6b00]"
+              className="rounded border-[var(--admin-border)] text-[#ff6b00] focus:ring-[#ff6b00]"
             />
             Permanent (cannot be overridden in audience rules)
           </label>
@@ -162,7 +162,7 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
             <button onClick={add} className="px-4 py-2 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00]">
               Add
             </button>
-            <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-xl text-sm text-[#999] hover:text-[#555]">
+            <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-xl text-sm text-[#999] hover:text-[var(--admin-text-muted)]">
               Cancel
             </button>
           </div>
@@ -175,12 +175,12 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
       ) : (
         <div className="space-y-2">
           {exclusions.map((e) => (
-            <div key={e.id} className="bg-white rounded-xl border border-[#E8DFD4] p-4 flex items-center gap-3">
+            <div key={e.id} className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4 flex items-center gap-3">
               <FiSlash size={16} className="text-red-400 shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-[#1a1a1a]">{e.exclusion_value}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">{e.exclusion_type}</span>
+                  <span className="font-semibold text-sm text-[var(--admin-text)]">{e.exclusion_value}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--admin-bg)] text-[var(--admin-text-muted)] border border-[var(--admin-border)]">{e.exclusion_type}</span>
                   {e.is_permanent && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">permanent</span>
                   )}
@@ -204,8 +204,8 @@ export default function ExclusionsPanel({ onSuccess, onError }: Props) {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-white rounded-xl border border-[#E8DFD4] px-4 py-3">
-      <p className="text-xl font-bold text-[#1a1a1a]">{value}</p>
+    <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
+      <p className="text-xl font-bold text-[var(--admin-text)]">{value}</p>
       <p className="text-[10px] uppercase tracking-wider text-[#999] mt-0.5">{label}</p>
     </div>
   );

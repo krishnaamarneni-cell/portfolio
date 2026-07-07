@@ -122,13 +122,13 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search contacts..."
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none text-[#1a1a1a] placeholder:text-[#ccc]"
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none text-[var(--admin-text)] placeholder:text-[#ccc]"
           />
         </div>
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value as ContactType | "all")}
-          className="px-3 py-2.5 rounded-xl bg-white border border-[#E8DFD4] text-sm text-[#555] focus:border-[#ff6b00] focus:outline-none"
+          className="px-3 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm text-[var(--admin-text-muted)] focus:border-[#ff6b00] focus:outline-none"
         >
           <option value="all">All types</option>
           {CONTACT_TYPES.map((t) => (
@@ -194,8 +194,8 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
 
 function MiniStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-white rounded-xl border border-[#E8DFD4] px-4 py-3">
-      <p className="text-xl font-bold text-[#1a1a1a]">{value}</p>
+    <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
+      <p className="text-xl font-bold text-[var(--admin-text)]">{value}</p>
       <p className="text-[10px] uppercase tracking-wider text-[#999] mt-0.5">{label}</p>
     </div>
   );
@@ -215,7 +215,7 @@ function ContactRow({
   const ti = typeInfo(c.contact_type);
   return (
     <div
-      className="bg-white rounded-xl border border-[#E8DFD4] p-4 flex items-center gap-3 hover:shadow-sm transition-shadow cursor-pointer group"
+      className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4 flex items-center gap-3 hover:shadow-sm transition-shadow cursor-pointer group"
       onClick={onSelect}
     >
       <button
@@ -227,7 +227,7 @@ function ContactRow({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-[#1a1a1a] text-sm truncate">{c.name || c.email}</span>
+          <span className="font-semibold text-[var(--admin-text)] text-sm truncate">{c.name || c.email}</span>
           <span className={`text-[10px] px-2 py-0.5 rounded-full border ${ti.color}`}>{ti.label}</span>
           {c.do_not_contact && (
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">DNC</span>
@@ -305,13 +305,13 @@ function ContactDetail({
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end" onClick={onClose}>
       <div
-        className="w-full max-w-lg bg-white h-full overflow-y-auto shadow-xl"
+        className="w-full max-w-lg bg-[var(--admin-surface)] h-full overflow-y-auto shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-[#E8DFD4] px-6 py-4 flex items-center justify-between z-10">
-          <h3 className="font-bold text-[#1a1a1a]">Contact Detail</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-[#f5f0ea] flex items-center justify-center text-[#999] hover:text-[#555]">
+        <div className="sticky top-0 bg-[var(--admin-surface)] border-b border-[var(--admin-border)] px-6 py-4 flex items-center justify-between z-10">
+          <h3 className="font-bold text-[var(--admin-text)]">Contact Detail</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-[var(--admin-surface-hover)] flex items-center justify-center text-[#999] hover:text-[var(--admin-text-muted)]">
             <FiX size={16} />
           </button>
         </div>
@@ -324,7 +324,7 @@ function ContactDetail({
                 {(c.name || c.email)[0].toUpperCase()}
               </div>
               <div>
-                <p className="font-bold text-[#1a1a1a]">{c.name || "Unnamed"}</p>
+                <p className="font-bold text-[var(--admin-text)]">{c.name || "Unnamed"}</p>
                 <p className="text-sm text-[#888]">{c.email}</p>
               </div>
             </div>
@@ -333,19 +333,19 @@ function ContactDetail({
               {c.company && (
                 <div>
                   <p className="text-[10px] uppercase text-[#bbb] tracking-wider">Company</p>
-                  <p className="text-[#1a1a1a]">{c.company}</p>
+                  <p className="text-[var(--admin-text)]">{c.company}</p>
                 </div>
               )}
               {c.title && (
                 <div>
                   <p className="text-[10px] uppercase text-[#bbb] tracking-wider">Title</p>
-                  <p className="text-[#1a1a1a]">{c.title}</p>
+                  <p className="text-[var(--admin-text)]">{c.title}</p>
                 </div>
               )}
               {c.phone && (
                 <div>
                   <p className="text-[10px] uppercase text-[#bbb] tracking-wider">Phone</p>
-                  <p className="text-[#1a1a1a]">{c.phone}</p>
+                  <p className="text-[var(--admin-text)]">{c.phone}</p>
                 </div>
               )}
               {c.linkedin_url && (
@@ -358,11 +358,11 @@ function ContactDetail({
               )}
               <div>
                 <p className="text-[10px] uppercase text-[#bbb] tracking-wider">Match</p>
-                <p className="text-[#1a1a1a]">{c.match_pct != null ? `${c.match_pct}%` : "N/A"}</p>
+                <p className="text-[var(--admin-text)]">{c.match_pct != null ? `${c.match_pct}%` : "N/A"}</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase text-[#bbb] tracking-wider">Last Activity</p>
-                <p className="text-[#1a1a1a]">{timeAgo(c.last_gmail_activity_at)}</p>
+                <p className="text-[var(--admin-text)]">{timeAgo(c.last_gmail_activity_at)}</p>
               </div>
             </div>
           </div>
@@ -377,7 +377,7 @@ function ContactDetail({
                 setEditType(v);
                 onUpdate({ contact_type: v });
               }}
-              className="w-full px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+              className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
             >
               {CONTACT_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
@@ -387,21 +387,21 @@ function ContactDetail({
 
           {/* Flags */}
           <div className="flex gap-3">
-            <label className="flex items-center gap-2 text-sm text-[#555] cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-[var(--admin-text-muted)] cursor-pointer">
               <input
                 type="checkbox"
                 checked={c.do_not_contact}
                 onChange={(e) => onUpdate({ do_not_contact: e.target.checked })}
-                className="rounded border-[#E8DFD4] text-[#ff6b00] focus:ring-[#ff6b00]"
+                className="rounded border-[var(--admin-border)] text-[#ff6b00] focus:ring-[#ff6b00]"
               />
               Do Not Contact
             </label>
-            <label className="flex items-center gap-2 text-sm text-[#555] cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-[var(--admin-text-muted)] cursor-pointer">
               <input
                 type="checkbox"
                 checked={c.excluded_from_bulk}
                 onChange={(e) => onUpdate({ excluded_from_bulk: e.target.checked })}
-                className="rounded border-[#E8DFD4] text-[#ff6b00] focus:ring-[#ff6b00]"
+                className="rounded border-[var(--admin-border)] text-[#ff6b00] focus:ring-[#ff6b00]"
               />
               Exclude from Bulk
             </label>
@@ -417,7 +417,7 @@ function ContactDetail({
                 if (editNotes !== (c.notes ?? "")) onUpdate({ notes: editNotes || null });
               }}
               rows={3}
-              className="w-full px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none resize-none"
+              className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none resize-none"
               placeholder="Add notes..."
             />
           </div>
@@ -443,10 +443,10 @@ function ContactDetail({
             ) : (
               <div className="space-y-2">
                 {threads.map((t) => (
-                  <div key={t.id} className="bg-[#FAFAF8] rounded-xl border border-[#E8DFD4] p-3">
+                  <div key={t.id} className="bg-[var(--admin-bg)] rounded-xl border border-[var(--admin-border)] p-3">
                     <div className="flex items-center gap-2">
                       <FiMessageSquare size={13} className={t.direction === "inbound" ? "text-blue-500" : "text-emerald-500"} />
-                      <span className="text-sm font-medium text-[#1a1a1a] truncate flex-1">{t.subject || "(no subject)"}</span>
+                      <span className="text-sm font-medium text-[var(--admin-text)] truncate flex-1">{t.subject || "(no subject)"}</span>
                       <span className="text-[10px] text-[#999]">{t.message_count} msgs</span>
                     </div>
                     <p className="text-xs text-[#888] mt-1 line-clamp-2">{t.snippet}</p>

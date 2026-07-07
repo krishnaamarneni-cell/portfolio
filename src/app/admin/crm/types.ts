@@ -112,11 +112,11 @@ export const CONTACT_TYPES: { value: ContactType; label: string; color: string }
   { value: "recruiter", label: "Recruiter", color: "bg-orange-100 text-orange-700 border-orange-200" },
   { value: "hiring_manager", label: "Hiring Manager", color: "bg-blue-100 text-blue-700 border-blue-200" },
   { value: "visa", label: "Visa/Immigration", color: "bg-purple-100 text-purple-700 border-purple-200" },
-  { value: "personal", label: "Personal", color: "bg-gray-100 text-gray-700 border-gray-200" },
+  { value: "personal", label: "Personal", color: "bg-[var(--admin-bg)] text-[var(--admin-text)] border-[var(--admin-border)]" },
   { value: "colleague", label: "Colleague", color: "bg-sky-100 text-sky-700 border-sky-200" },
   { value: "business", label: "Business", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
   { value: "vendor", label: "Vendor", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  { value: "unknown", label: "Unknown", color: "bg-gray-50 text-gray-500 border-gray-200" },
+  { value: "unknown", label: "Unknown", color: "bg-[var(--admin-surface)] text-[var(--admin-text-muted)] border-[var(--admin-border)]" },
 ];
 
 export function typeInfo(t: ContactType) {

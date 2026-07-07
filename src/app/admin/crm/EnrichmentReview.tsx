@@ -94,7 +94,7 @@ export default function EnrichmentReview({ onSuccess, onError }: Props) {
       {pending.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[#555]">Pending Review</h3>
+            <h3 className="text-sm font-semibold text-[var(--admin-text-muted)]">Pending Review</h3>
             <div className="flex gap-2">
               <button
                 onClick={() => batchAction("approved")}
@@ -113,16 +113,16 @@ export default function EnrichmentReview({ onSuccess, onError }: Props) {
 
           <div className="space-y-2">
             {pending.map((item) => (
-              <div key={item.id} className="bg-white rounded-xl border border-[#E8DFD4] p-4 flex items-center gap-3">
+              <div key={item.id} className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4 flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-white text-xs font-bold shrink-0">
                   <FiUser size={14} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-[#1a1a1a]">{item.contact_name || item.contact_email || item.contact_id}</span>
+                    <span className="font-semibold text-sm text-[var(--admin-text)]">{item.contact_name || item.contact_email || item.contact_id}</span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">{item.field}</span>
                   </div>
-                  <p className="text-sm text-[#555] mt-0.5">{item.suggested_value}</p>
+                  <p className="text-sm text-[var(--admin-text-muted)] mt-0.5">{item.suggested_value}</p>
                   <div className="flex items-center gap-3 mt-1 text-[10px] text-[#bbb]">
                     <span>Source: {item.source}</span>
                     <span>{timeAgo(item.created_at)}</span>
@@ -158,14 +158,14 @@ export default function EnrichmentReview({ onSuccess, onError }: Props) {
       {/* Reviewed history */}
       {reviewed.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-[#555]">History</h3>
+          <h3 className="text-sm font-semibold text-[var(--admin-text-muted)]">History</h3>
           <div className="space-y-1">
             {reviewed.slice(0, 20).map((item) => (
-              <div key={item.id} className="bg-[#FAFAF8] rounded-xl p-3 flex items-center gap-3 text-sm">
+              <div key={item.id} className="bg-[var(--admin-bg)] rounded-xl p-3 flex items-center gap-3 text-sm">
                 <span className={item.status === "approved" ? "text-emerald-500" : "text-red-400"}>
                   {item.status === "approved" ? <FiCheck size={14} /> : <FiX size={14} />}
                 </span>
-                <span className="text-[#1a1a1a] truncate">{item.contact_name || item.contact_id}</span>
+                <span className="text-[var(--admin-text)] truncate">{item.contact_name || item.contact_id}</span>
                 <span className="text-[10px] text-[#bbb]">{item.field}</span>
                 <span className="text-[#888] truncate flex-1">{item.suggested_value}</span>
                 <span className="text-[10px] text-[#bbb] shrink-0">{timeAgo(item.reviewed_at)}</span>
@@ -180,8 +180,8 @@ export default function EnrichmentReview({ onSuccess, onError }: Props) {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-white rounded-xl border border-[#E8DFD4] px-4 py-3">
-      <p className="text-xl font-bold text-[#1a1a1a]">{value}</p>
+    <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
+      <p className="text-xl font-bold text-[var(--admin-text)]">{value}</p>
       <p className="text-[10px] uppercase tracking-wider text-[#999] mt-0.5">{label}</p>
     </div>
   );

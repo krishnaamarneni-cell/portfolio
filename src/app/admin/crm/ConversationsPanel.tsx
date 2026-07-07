@@ -73,8 +73,8 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
           <FiArrowLeft size={14} /> Back to threads
         </button>
 
-        <div className="bg-white rounded-xl border border-[#E8DFD4] p-5">
-          <h3 className="font-bold text-[#1a1a1a]">{selectedThread.subject || "(no subject)"}</h3>
+        <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-5">
+          <h3 className="font-bold text-[var(--admin-text)]">{selectedThread.subject || "(no subject)"}</h3>
           <div className="flex items-center gap-3 mt-2 text-xs text-[#999]">
             <span>{selectedThread.message_count} messages</span>
             <span>{timeAgo(selectedThread.last_message_at)}</span>
@@ -101,17 +101,17 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
         ) : detail && detail.length > 0 ? (
           <div className="space-y-3">
             {detail.map((m, i) => (
-              <div key={i} className="bg-white rounded-xl border border-[#E8DFD4] p-4">
+              <div key={i} className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-white text-[10px] font-bold">
                     {(m.from || "?")[0].toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#1a1a1a] truncate">{m.from}</p>
+                    <p className="text-sm font-medium text-[var(--admin-text)] truncate">{m.from}</p>
                     <p className="text-[10px] text-[#bbb]">{m.date ? new Date(m.date).toLocaleString() : ""}</p>
                   </div>
                 </div>
-                <div className="text-sm text-[#555] whitespace-pre-wrap break-words leading-relaxed">
+                <div className="text-sm text-[var(--admin-text-muted)] whitespace-pre-wrap break-words leading-relaxed">
                   {m.bodyText || m.snippet || "(empty)"}
                 </div>
               </div>
@@ -134,12 +134,12 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search conversations..."
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none text-[#1a1a1a] placeholder:text-[#ccc]"
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none text-[var(--admin-text)] placeholder:text-[#ccc]"
           />
         </div>
         <button
           onClick={load}
-          className="px-4 py-2.5 rounded-xl bg-white border border-[#E8DFD4] text-sm font-semibold text-[#555] hover:border-[#ff6b00] flex items-center gap-2"
+          className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text-muted)] hover:border-[#ff6b00] flex items-center gap-2"
         >
           <FiRefreshCw size={14} /> Refresh
         </button>
@@ -155,7 +155,7 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
             <div
               key={t.id}
               onClick={() => openThread(t)}
-              className="bg-white rounded-xl border border-[#E8DFD4] p-4 hover:shadow-sm transition-shadow cursor-pointer"
+              className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4 hover:shadow-sm transition-shadow cursor-pointer"
             >
               <div className="flex items-start gap-3">
                 <FiMessageSquare
@@ -163,7 +163,7 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
                   className={`shrink-0 mt-0.5 ${t.direction === "inbound" ? "text-blue-500" : "text-emerald-500"}`}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-[#1a1a1a] truncate">{t.subject || "(no subject)"}</p>
+                  <p className="font-semibold text-sm text-[var(--admin-text)] truncate">{t.subject || "(no subject)"}</p>
                   <p className="text-xs text-[#888] mt-0.5 line-clamp-2">{t.snippet}</p>
                   <div className="flex items-center gap-3 mt-2 text-[10px] text-[#bbb]">
                     <span className="flex items-center gap-1"><FiUser size={10} />{t.participants.length} participants</span>

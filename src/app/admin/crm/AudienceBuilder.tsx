@@ -164,13 +164,13 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
       {/* Saved audiences */}
       {audiences.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-[#555]">Saved Audiences</h3>
+          <h3 className="text-sm font-semibold text-[var(--admin-text-muted)]">Saved Audiences</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {audiences.map((a) => (
-              <div key={a.id} className="bg-white rounded-xl border border-[#E8DFD4] p-4">
+              <div key={a.id} className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="font-semibold text-sm text-[#1a1a1a]">{a.name}</p>
+                    <p className="font-semibold text-sm text-[var(--admin-text)]">{a.name}</p>
                     {a.description && <p className="text-xs text-[#888] mt-0.5">{a.description}</p>}
                   </div>
                   <button
@@ -199,8 +199,8 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
       )}
 
       {/* Rule builder */}
-      <div className="bg-white rounded-xl border border-[#E8DFD4] p-5 space-y-5">
-        <h3 className="font-semibold text-[#1a1a1a] flex items-center gap-2">
+      <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-5 space-y-5">
+        <h3 className="font-semibold text-[var(--admin-text)] flex items-center gap-2">
           <FiTarget size={16} /> Build Audience
         </h3>
 
@@ -222,7 +222,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
                     })
                   }
                   className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
-                    active ? `${t.color} font-semibold` : "bg-white border-[#E8DFD4] text-[#999] hover:border-[#ff6b00]/30"
+                    active ? `${t.color} font-semibold` : "bg-[var(--admin-surface)] border-[var(--admin-border)] text-[#999] hover:border-[#ff6b00]/30"
                   }`}
                 >
                   {t.label}
@@ -250,7 +250,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
                     })
                   }
                   className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
-                    active ? "bg-red-50 text-red-600 border-red-200 font-semibold" : "bg-white border-[#E8DFD4] text-[#999] hover:border-red-200"
+                    active ? "bg-red-50 text-red-600 border-red-200 font-semibold" : "bg-[var(--admin-surface)] border-[var(--admin-border)] text-[#999] hover:border-red-200"
                   }`}
                 >
                   {t.label}
@@ -270,7 +270,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") addTag(); }}
                 placeholder="Add tag..."
-                className="flex-1 px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+                className="flex-1 px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
               />
               <button onClick={addTag} className="w-9 h-9 rounded-xl bg-[#ff6b00] text-white flex items-center justify-center hover:bg-[#e55d00]">
                 <FiPlus size={14} />
@@ -293,7 +293,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
                 onChange={(e) => setExclTagInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") addExclTag(); }}
                 placeholder="Add tag..."
-                className="flex-1 px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+                className="flex-1 px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
               />
               <button onClick={addExclTag} className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100">
                 <FiPlus size={14} />
@@ -321,7 +321,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
               value={rules.min_match_pct || ""}
               onChange={(e) => setRules({ ...rules, min_match_pct: parseInt(e.target.value) || 0 })}
               placeholder="0"
-              className="w-full px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+              className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
             />
           </div>
           <div className="space-y-2">
@@ -332,7 +332,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
               value={rules.active_within_days || ""}
               onChange={(e) => setRules({ ...rules, active_within_days: parseInt(e.target.value) || 0 })}
               placeholder="0 = any time"
-              className="w-full px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+              className="w-full px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
             />
           </div>
         </div>
@@ -347,7 +347,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
                 onChange={(e) => setCompanyInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") addCompany(); }}
                 placeholder="Company name..."
-                className="flex-1 px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+                className="flex-1 px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
               />
               <button onClick={addCompany} className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100">
                 <FiPlus size={14} />
@@ -370,7 +370,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
                 onChange={(e) => setDomainInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") addDomain(); }}
                 placeholder="domain.com..."
-                className="flex-1 px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+                className="flex-1 px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
               />
               <button onClick={addDomain} className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100">
                 <FiPlus size={14} />
@@ -399,7 +399,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
           </button>
           <button
             onClick={() => { setRules({ ...EMPTY_RULES }); setPreview(null); }}
-            className="px-4 py-2.5 rounded-xl bg-white border border-[#E8DFD4] text-sm text-[#999] hover:text-[#555]"
+            className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm text-[#999] hover:text-[var(--admin-text-muted)]"
           >
             Reset
           </button>
@@ -408,9 +408,9 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
 
       {/* Preview */}
       {preview && (
-        <div className="bg-white rounded-xl border border-[#E8DFD4] p-5 space-y-4">
+        <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-[#1a1a1a] flex items-center gap-2">
+            <h3 className="font-semibold text-[var(--admin-text)] flex items-center gap-2">
               <FiUsers size={16} /> Preview: {preview.length} contacts
             </h3>
             <div className="flex items-center gap-2">
@@ -418,7 +418,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
                 value={saveName}
                 onChange={(e) => setSaveName(e.target.value)}
                 placeholder="Audience name..."
-                className="px-3 py-2 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] text-sm focus:border-[#ff6b00] focus:outline-none"
+                className="px-3 py-2 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:outline-none"
               />
               <button
                 onClick={save}
@@ -442,7 +442,7 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#E8DFD4] text-[10px] uppercase text-[#bbb] tracking-wider">
+                <tr className="border-b border-[var(--admin-border)] text-[10px] uppercase text-[#bbb] tracking-wider">
                   <th className="text-left py-2 pr-4">Name</th>
                   <th className="text-left py-2 pr-4">Email</th>
                   <th className="text-left py-2 pr-4">Company</th>
@@ -452,12 +452,12 @@ export default function AudienceBuilder({ onSuccess, onError }: Props) {
               </thead>
               <tbody>
                 {preview.slice(0, 50).map((c) => (
-                  <tr key={c.id} className="border-b border-[#f5f0ea]">
-                    <td className="py-2 pr-4 text-[#1a1a1a]">{c.name || "—"}</td>
+                  <tr key={c.id} className="border-b border-[var(--admin-border)]">
+                    <td className="py-2 pr-4 text-[var(--admin-text)]">{c.name || "—"}</td>
                     <td className="py-2 pr-4 text-[#888]">{c.email}</td>
                     <td className="py-2 pr-4 text-[#888]">{c.company || "—"}</td>
                     <td className="py-2 pr-4">
-                      <span className="text-[10px] px-2 py-0.5 rounded-full border bg-gray-50 text-gray-600 border-gray-200">{c.contact_type}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full border bg-[var(--admin-surface)] text-[var(--admin-text-muted)] border-[var(--admin-border)]">{c.contact_type}</span>
                     </td>
                     <td className="py-2 text-right text-[#888]">{c.match_pct ?? "—"}%</td>
                   </tr>
