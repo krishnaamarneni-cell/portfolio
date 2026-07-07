@@ -15,10 +15,17 @@ const SIGNATURE_HTML = `<div style="margin-top:20px;padding-top:12px;border-top:
 </div>`;
 
 type BulkBody = {
-  contactIds: string[];
-  subject: string;
-  message: string;
+  action?: "generate-draft" | "send";
+  contactIds?: string[];
+  subject?: string;
+  message?: string;
   attachResume?: boolean;
+  contactTypes?: string[];
+  companies?: string[];
+  count?: number;
+  field?: "both" | "subject" | "message";
+  currentSubject?: string;
+  currentMessage?: string;
 };
 
 export async function POST(request: Request) {
@@ -26,6 +33,70 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await request.json().catch(() => ({}))) as BulkBody;
+
+  if (body.action === "generate-draft") {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey)
+      return NextResponse.json(
+        { error: "GROQ_API_KEY not set" },
+        { status: 503 },
+      );
+
+    const { runAgent } = await import("@/lib/agents");
+    const field = body.field || "both";
+    const types = body.contactTypes?.join(", ") || "mixed";
+    const companies = body.companies?.slice(0, 8).join(", ") || "various";
+
+    let userPrompt: string;
+    if (field === "subject") {
+      userPrompt = `Generate a better email subject line for this bulk outreach email.
+Current message body: "${body.currentMessage || ""}"
+Recipients: ${body.count || "multiple"} contacts (types: ${types}).
+Output ONLY valid JSON: {"subject": "..."}`;
+    } else if (field === "message") {
+      userPrompt = `Generate a better email body for this bulk outreach email.
+Subject line: "${body.currentSubject || ""}"
+Recipients: ${body.count || "multiple"} contacts (types: ${types}, companies: ${companies}).
+Output ONLY valid JSON: {"message": "..."}`;
+    } else {
+      userPrompt = `Generate a bulk outreach email to ${body.count || "multiple"} contacts.
+Contact types: ${types}
+Companies include: ${companies}
+Output ONLY valid JSON: {"subject": "...", "message": "..."}`;
+    }
+
+    const result = await runAgent({
+      apiKey,
+      model: "llama-3.3-70b-versatile",
+      systemPrompt: `You generate professional email content for Krishna Amarneni, an SAP S/4HANA + AI/ML engineer with 5+ years experience in enterprise systems, currently exploring AI engineering roles.
+
+Rules:
+- No markdown, no bold (**), no asterisks, no bullet points
+- No greeting line (e.g. "Hi Name") — it is prepended automatically per contact
+- No signature block — it is appended automatically
+- Body: 3-4 natural sentences, professional but warm
+- Subject: under 60 characters, specific, no "Re:" unless replying
+- BANNED phrases: "excited about the opportunity", "leverage my expertise", "confident in my ability", "passionate about", "drive business growth", "touching base"
+- Output ONLY valid JSON, nothing else`,
+      userPrompt,
+      maxTokens: 250,
+    });
+
+    try {
+      const cleaned = (result.content || "{}").replace(/```json\s*|\s*```/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      return NextResponse.json({
+        subject: parsed.subject ?? undefined,
+        message: parsed.message ?? undefined,
+      });
+    } catch {
+      return NextResponse.json({
+        subject: field !== "message" ? "Following up on our conversation" : undefined,
+        message: field !== "subject" ? (result.content || "").replace(/[{}"]/g, "").trim() : undefined,
+      });
+    }
+  }
+
   if (!body.contactIds?.length || !body.subject || !body.message) {
     return NextResponse.json(
       { error: "contactIds, subject, and message required" },

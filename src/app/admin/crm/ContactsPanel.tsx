@@ -593,6 +593,7 @@ function BulkComposeModal({
   const [message, setMessage] = useState("");
   const [attachResume, setAttachResume] = useState(true);
   const [sending, setSending] = useState(false);
+  const [generating, setGenerating] = useState<"both" | "subject" | "message" | null>(null);
   const [result, setResult] = useState<{
     sent: number;
     errors: number;
@@ -606,6 +607,48 @@ function BulkComposeModal({
   const excluded = contacts.filter(
     (c) => c.do_not_contact || c.excluded_from_bulk,
   );
+
+  const contactContext = useMemo(() => {
+    const typeCounts: Record<string, number> = {};
+    const companySet = new Set<string>();
+    for (const c of eligible) {
+      typeCounts[c.contact_type] = (typeCounts[c.contact_type] || 0) + 1;
+      if (c.company) companySet.add(c.company);
+    }
+    return {
+      types: Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).map(([t]) => t),
+      companies: [...companySet].slice(0, 10),
+    };
+  }, [eligible]);
+
+  async function generateDraft(field: "both" | "subject" | "message") {
+    setGenerating(field);
+    try {
+      const r = await fetch("/api/admin/contacts/email/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "generate-draft",
+          field,
+          count: eligible.length,
+          contactTypes: contactContext.types,
+          companies: contactContext.companies,
+          currentSubject: subject,
+          currentMessage: message,
+        }),
+      });
+      const d = await r.json();
+      if (d.subject !== undefined && field !== "message") setSubject(d.subject);
+      if (d.message !== undefined && field !== "subject") setMessage(d.message);
+    } catch {
+      onError("AI generation failed");
+    }
+    setGenerating(null);
+  }
+
+  useEffect(() => {
+    generateDraft("both");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSend() {
     if (!subject.trim()) {
@@ -691,24 +734,54 @@ function BulkComposeModal({
           {!result ? (
             <>
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Subject</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Subject</label>
+                  <button
+                    onClick={() => generateDraft("subject")}
+                    disabled={!!generating}
+                    className="text-[10px] font-semibold text-purple-400 hover:text-purple-300 disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {generating === "subject" ? <FiRefreshCw size={10} className="animate-spin" /> : <span>✦</span>}
+                    {generating === "subject" ? "Generating..." : "Rewrite with AI"}
+                  </button>
+                </div>
                 <input
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder="Re: Opportunity discussion"
+                  placeholder={generating === "both" ? "AI is generating..." : "Re: Opportunity discussion"}
                   className="w-full px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)]"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Message</label>
-                <textarea
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  rows={6}
-                  placeholder="Write your email message... (greeting and signature are added automatically)"
-                  className="w-full px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none resize-none placeholder:text-[var(--admin-text-muted)]"
-                />
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Message</label>
+                  <button
+                    onClick={() => generateDraft("message")}
+                    disabled={!!generating}
+                    className="text-[10px] font-semibold text-purple-400 hover:text-purple-300 disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {generating === "message" ? <FiRefreshCw size={10} className="animate-spin" /> : <span>✦</span>}
+                    {generating === "message" ? "Generating..." : "Rewrite with AI"}
+                  </button>
+                </div>
+                <div className="relative">
+                  <textarea
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    rows={6}
+                    placeholder={generating === "both" ? "AI is generating your email..." : "Write your email message... (greeting and signature are added automatically)"}
+                    className="w-full px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none resize-none placeholder:text-[var(--admin-text-muted)]"
+                  />
+                  {generating === "both" && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-[var(--admin-input-bg)]/80">
+                      <div className="flex items-center gap-2 text-sm text-purple-400">
+                        <FiRefreshCw size={14} className="animate-spin" />
+                        AI is writing your email...
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <label className="flex items-center gap-2 text-sm text-[var(--admin-text-muted)] cursor-pointer">
