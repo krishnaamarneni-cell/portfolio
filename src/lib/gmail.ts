@@ -250,6 +250,148 @@ export async function sendEmail(opts: {
   return { ok: true, id: j.id };
 }
 
+/* ─── Thread support for CRM ─── */
+
+export type GmailThreadMessage = {
+  id: string;
+  from: string;
+  to: string;
+  cc?: string;
+  date: string;
+  subject: string;
+  snippet: string;
+  bodyText: string;
+  bodyHtml: string;
+};
+
+export type GmailThread = {
+  id: string;
+  messages: GmailThreadMessage[];
+  subject: string;
+  snippet: string;
+  messageCount: number;
+  participants: string[];
+  lastMessageAt: string;
+};
+
+function decodeBase64Url(data: string): string {
+  const padded = data.replace(/-/g, "+").replace(/_/g, "/");
+  return Buffer.from(padded, "base64").toString("utf-8");
+}
+
+function extractBody(
+  payload: Record<string, unknown>
+): { text: string; html: string } {
+  let text = "";
+  let html = "";
+  const mimeType = payload.mimeType as string | undefined;
+  const body = payload.body as { data?: string; size?: number } | undefined;
+  const parts = payload.parts as Record<string, unknown>[] | undefined;
+
+  if (body?.data) {
+    const decoded = decodeBase64Url(body.data);
+    if (mimeType === "text/plain") text = decoded;
+    else if (mimeType === "text/html") html = decoded;
+  }
+  if (parts) {
+    for (const part of parts) {
+      const sub = extractBody(part);
+      if (sub.text && !text) text = sub.text;
+      if (sub.html && !html) html = sub.html;
+    }
+  }
+  return { text, html };
+}
+
+function extractEmails(header: string): string[] {
+  const matches = header.match(/[\w.+-]+@[\w.-]+\.\w+/gi);
+  return [...new Set(matches?.map((e) => e.toLowerCase()) ?? [])];
+}
+
+export async function getThread(threadId: string): Promise<GmailThread | null> {
+  const access = await getAccessToken();
+  if (!access) return null;
+  const r = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`,
+    { headers: { Authorization: `Bearer ${access}` }, cache: "no-store" }
+  );
+  if (!r.ok) return null;
+  const data = await r.json();
+  const rawMsgs = (data.messages ?? []) as Array<{
+    id: string;
+    snippet?: string;
+    internalDate?: string;
+    payload?: Record<string, unknown>;
+  }>;
+
+  const allParticipants = new Set<string>();
+  const messages: GmailThreadMessage[] = [];
+
+  for (const msg of rawMsgs) {
+    const headers = (msg.payload?.headers ?? []) as Array<{
+      name: string;
+      value: string;
+    }>;
+    const get = (n: string) =>
+      headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ??
+      "";
+    const from = get("From");
+    const to = get("To");
+    const cc = get("Cc");
+    extractEmails(`${from} ${to} ${cc}`).forEach((e) =>
+      allParticipants.add(e)
+    );
+    const { text, html } = msg.payload ? extractBody(msg.payload) : { text: "", html: "" };
+    messages.push({
+      id: msg.id,
+      from,
+      to,
+      cc: cc || undefined,
+      date: get("Date") || new Date(Number(msg.internalDate ?? 0)).toISOString(),
+      subject: get("Subject"),
+      snippet: msg.snippet ?? "",
+      bodyText: text,
+      bodyHtml: html,
+    });
+  }
+
+  const lastMsg = messages[messages.length - 1];
+  return {
+    id: threadId,
+    messages,
+    subject: messages[0]?.subject ?? "",
+    snippet: lastMsg?.snippet ?? "",
+    messageCount: messages.length,
+    participants: [...allParticipants],
+    lastMessageAt: lastMsg?.date ?? "",
+  };
+}
+
+export async function listThreadsForContact(
+  email: string,
+  maxResults = 50
+): Promise<{ threadIds: string[]; error?: string }> {
+  const access = await getAccessToken();
+  if (!access) return { threadIds: [], error: "Gmail not connected" };
+
+  const query = `from:${email} OR to:${email}`;
+  const listUrl = new URL(
+    "https://gmail.googleapis.com/gmail/v1/users/me/threads"
+  );
+  listUrl.searchParams.set("q", query);
+  listUrl.searchParams.set("maxResults", String(Math.min(maxResults, 100)));
+
+  const r = await fetch(listUrl.toString(), {
+    headers: { Authorization: `Bearer ${access}` },
+    cache: "no-store",
+  });
+  if (!r.ok) return { threadIds: [], error: `Gmail threads ${r.status}` };
+  const j = (await r.json()) as {
+    threads?: Array<{ id: string }>;
+  };
+  return { threadIds: (j.threads ?? []).map((t) => t.id) };
+}
+
 export async function listRecentMessages(opts: {
   query?: string;
   maxResults?: number;

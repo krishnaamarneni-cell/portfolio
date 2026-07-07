@@ -44,7 +44,7 @@ import ConnectorsEditor from "./ConnectorsEditor";
 import AdminChat from "./AdminChat";
 import SocialEditor from "./SocialEditor";
 import AgentsTab from "./AgentsTab";
-import ContactsTab from "./ContactsTab";
+import CRMWorkspace from "./crm/CRMWorkspace";
 import PersonalTab from "./PersonalTab";
 import ResumeCreatorTab from "./ResumeCreatorTab";
 
@@ -81,7 +81,7 @@ const NAV_ITEMS: Array<{
   { id: "social", label: "Social", icon: FiShare2, section: "Content" },
   { id: "agents", label: "Agents", icon: FiCpu },
   { id: "resume", label: "Resume", icon: FiFileText },
-  { id: "contacts", label: "Contacts", icon: FiUsers },
+  { id: "contacts", label: "CRM", icon: FiUsers },
   { id: "jobs", label: "Jobs", icon: FiBriefcase, section: "Data" },
   { id: "projects", label: "Projects", icon: FiFolder },
   { id: "content", label: "Site Content", icon: FiLayout },
@@ -363,7 +363,7 @@ export default function AdminDashboard({
           ) : tab === "social" ? (
             <SocialEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "contacts" ? (
-            <ContactsTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+            <CRMWorkspace onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "agents" ? (
             <AgentsTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "personal" ? (

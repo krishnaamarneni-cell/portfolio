@@ -7,6 +7,8 @@ import {
   toggleStar,
   markEmailed,
   updateContactType,
+  updateContactFields,
+  listContactsFiltered,
   type ContactType,
 } from "@/lib/contacts";
 
@@ -50,12 +52,25 @@ export async function POST(request: Request) {
     typeof body.id === "string" &&
     typeof body.contact_type === "string"
   ) {
-    const validTypes = ["recruiter", "personal", "colleague", "unknown"];
+    const validTypes = [
+      "recruiter", "hiring_manager", "visa", "personal",
+      "colleague", "business", "vendor", "unknown",
+    ];
     if (!validTypes.includes(body.contact_type as string)) {
       return NextResponse.json({ error: "invalid contact_type" }, { status: 400 });
     }
     await updateContactType(body.id, body.contact_type as ContactType);
     return NextResponse.json({ ok: true });
+  }
+
+  if (body.action === "update_fields" && typeof body.id === "string") {
+    const contact = await updateContactFields(body.id, body.patch as Record<string, unknown>);
+    return NextResponse.json({ contact });
+  }
+
+  if (body.action === "filtered") {
+    const contacts = await listContactsFiltered(body.filters as Record<string, unknown>);
+    return NextResponse.json({ contacts });
   }
 
   // Default: upsert.

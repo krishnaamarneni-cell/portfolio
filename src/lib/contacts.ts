@@ -7,21 +7,38 @@
 import "server-only";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 
-export type ContactType = "recruiter" | "personal" | "colleague" | "unknown";
+export type ContactType =
+  | "recruiter"
+  | "hiring_manager"
+  | "visa"
+  | "personal"
+  | "colleague"
+  | "business"
+  | "vendor"
+  | "unknown";
 
 export type RecruiterContact = {
   id: string;
   name: string;
   email: string;
   company: string | null;
+  company_id: string | null;
   role_pitched: string | null;
   match_pct: number | null;
-  source: string; // "inbox-agent", "manual"
+  source: string;
   notes: string | null;
   starred: boolean;
   emailed_at: string | null;
   times_contacted: number;
   contact_type: ContactType;
+  tags: string[];
+  do_not_contact: boolean;
+  excluded_from_bulk: boolean;
+  priority: number | null;
+  phone: string | null;
+  title: string | null;
+  linkedin_url: string | null;
+  last_gmail_activity_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -30,11 +47,27 @@ export type RecruiterContactInput = {
   name: string;
   email: string;
   company?: string | null;
+  company_id?: string | null;
   role_pitched?: string | null;
   match_pct?: number | null;
   source?: string;
   notes?: string | null;
   contact_type?: ContactType;
+  tags?: string[];
+  phone?: string | null;
+  title?: string | null;
+  linkedin_url?: string | null;
+};
+
+export type ContactFilters = {
+  tags?: string[];
+  companyId?: string;
+  contactType?: ContactType;
+  excludeDNC?: boolean;
+  excludeBulk?: boolean;
+  search?: string;
+  limit?: number;
+  offset?: number;
 };
 
 const TABLE = "recruiter_contacts";
@@ -192,4 +225,75 @@ export async function updateContactType(
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
+}
+
+export async function listContactsFiltered(
+  filters: ContactFilters = {}
+): Promise<RecruiterContact[]> {
+  await ensureTable();
+  const supabase = requireSupabaseAdmin();
+  let q = supabase.from(TABLE).select("*");
+
+  if (filters.companyId) q = q.eq("company_id", filters.companyId);
+  if (filters.contactType) q = q.eq("contact_type", filters.contactType);
+  if (filters.excludeDNC) q = q.eq("do_not_contact", false);
+  if (filters.excludeBulk) q = q.eq("excluded_from_bulk", false);
+  if (filters.tags?.length) q = q.contains("tags", filters.tags);
+  if (filters.search) {
+    q = q.or(
+      `name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,company.ilike.%${filters.search}%`
+    );
+  }
+
+  q = q
+    .order("starred", { ascending: false })
+    .order("last_gmail_activity_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
+  if (filters.limit) q = q.limit(filters.limit);
+  if (filters.offset) q = q.range(filters.offset, filters.offset + (filters.limit || 50) - 1);
+
+  const { data } = await q;
+  return (data ?? []) as RecruiterContact[];
+}
+
+export async function updateContactFields(
+  id: string,
+  patch: Partial<{
+    name: string;
+    email: string;
+    company: string | null;
+    company_id: string | null;
+    role_pitched: string | null;
+    notes: string | null;
+    contact_type: ContactType;
+    tags: string[];
+    do_not_contact: boolean;
+    excluded_from_bulk: boolean;
+    priority: number | null;
+    phone: string | null;
+    title: string | null;
+    linkedin_url: string | null;
+    last_gmail_activity_at: string | null;
+  }>
+): Promise<RecruiterContact | null> {
+  const supabase = requireSupabaseAdmin();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) return null;
+  return data as RecruiterContact;
+}
+
+export async function getContact(id: string): Promise<RecruiterContact | null> {
+  const supabase = requireSupabaseAdmin();
+  const { data } = await supabase
+    .from(TABLE)
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  return (data as RecruiterContact | null) ?? null;
 }
