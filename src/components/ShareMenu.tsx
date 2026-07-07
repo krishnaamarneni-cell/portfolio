@@ -131,7 +131,7 @@ export default function ShareMenu({
         onClick={() => setOpen((o) => !o)}
         className={
           buttonClassName ??
-          "inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/[0.04] border border-white/10 text-white font-semibold text-sm hover:border-[#ff6b00]/40 hover:bg-[#ff6b00]/[0.08] transition-all"
+          "inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/[0.04] border border-[var(--border)] text-[var(--text-primary)] font-semibold text-sm hover:border-[#ff6b00]/40 hover:bg-[#ff6b00]/[0.08] transition-all"
         }
         aria-expanded={open}
         aria-haspopup="menu"
@@ -143,16 +143,16 @@ export default function ShareMenu({
       {open && (
         <div
           role="menu"
-          className="absolute z-30 right-0 sm:left-0 sm:right-auto mt-2 min-w-[240px] rounded-2xl bg-[#0f0f0f] border border-white/[0.08] shadow-[0_30px_80px_rgba(0,0,0,0.5)] overflow-hidden"
+          className="absolute z-30 right-0 sm:left-0 sm:right-auto mt-2 min-w-[240px] rounded-2xl bg-[var(--bg-card)] border border-[var(--border)] shadow-[0_30px_80px_rgba(0,0,0,0.5)] overflow-hidden"
         >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
             <p className="text-[10px] font-mono tracking-[0.25em] uppercase text-[#ff8c38]">
               Share
             </p>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="w-6 h-6 rounded-full hover:bg-white/[0.06] text-[#888] flex items-center justify-center"
+              className="w-6 h-6 rounded-full hover:bg-white/[0.06] text-[var(--text-secondary)] flex items-center justify-center"
               aria-label="Close"
             >
               <FiX size={12} />
@@ -165,7 +165,7 @@ export default function ShareMenu({
                 <button
                   type="button"
                   onClick={nativeShare}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white hover:bg-[#ff6b00]/[0.1] hover:text-[#ff8c38] transition-colors"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[var(--text-primary)] hover:bg-[#ff6b00]/[0.1] hover:text-[#ff8c38] transition-colors"
                 >
                   <span className="w-7 h-7 rounded-full bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-black">
                     <FiShare2 size={13} />
@@ -182,9 +182,9 @@ export default function ShareMenu({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setOpen(false)}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#ccc] hover:bg-white/[0.04] hover:text-white transition-colors"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[var(--text-primary)] hover:bg-white/[0.04] hover:text-[var(--text-primary)] transition-colors"
                 >
-                  <span className="w-7 h-7 rounded-full bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#bbb]">
+                  <span className="w-7 h-7 rounded-full bg-white/[0.04] border border-[var(--border)] flex items-center justify-center text-[var(--text-primary)]">
                     <l.icon size={12} />
                   </span>
                   {l.label}
@@ -196,9 +196,9 @@ export default function ShareMenu({
               <button
                 type="button"
                 onClick={copy}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#ccc] hover:bg-white/[0.04] hover:text-white transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[var(--text-primary)] hover:bg-white/[0.04] hover:text-[var(--text-primary)] transition-colors"
               >
-                <span className="w-7 h-7 rounded-full bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-[#bbb]">
+                <span className="w-7 h-7 rounded-full bg-white/[0.04] border border-[var(--border)] flex items-center justify-center text-[var(--text-primary)]">
                   {copied ? <FiCheck size={12} className="text-emerald-400" /> : <FiCopy size={12} />}
                 </span>
                 {copied ? "Link copied!" : "Copy link"}
@@ -207,8 +207,8 @@ export default function ShareMenu({
           </ul>
 
           {/* URL preview */}
-          <div className="border-t border-white/[0.06] px-4 py-2.5">
-            <p className="text-[9px] font-mono text-[#666] truncate" title={url}>
+          <div className="border-t border-[var(--border)] px-4 py-2.5">
+            <p className="text-[9px] font-mono text-[var(--text-muted)] truncate" title={url}>
               {url}
             </p>
           </div>

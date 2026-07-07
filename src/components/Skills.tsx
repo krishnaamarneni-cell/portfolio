@@ -99,13 +99,13 @@ export default function Skills() {
             </ScrollReveal>
 
             <ScrollReveal direction="flipX" delay={0.1}>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-[var(--text-primary)] leading-tight mb-6">
                 {skillsContent.heading_pre} <span className="text-gradient">{skillsContent.heading_accent}</span>
               </h2>
             </ScrollReveal>
 
             <ScrollReveal direction="zoom3d" delay={0.2}>
-              <p className="text-[#777] text-lg leading-relaxed max-w-lg">
+              <p className="text-[var(--text-secondary)] text-lg leading-relaxed max-w-lg">
                 {skillsContent.intro}
               </p>
             </ScrollReveal>
@@ -117,7 +117,7 @@ export default function Skills() {
                   {[...allSkills, ...allSkills].map((skill, i) => (
                     <div
                       key={`${skill.name}-${i}`}
-                      className="inline-flex items-center gap-2 mx-2 px-4 py-2 rounded-xl bg-[#1a1a1a] border border-white/[0.04] text-[#bbb] hover:border-[#ff6b00]/30 hover:text-[#ff6b00] transition-all duration-300 cursor-default"
+                      className="inline-flex items-center gap-2 mx-2 px-4 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] hover:border-[#ff6b00]/30 hover:text-[#ff6b00] transition-all duration-300 cursor-default"
                     >
                       <skill.icon size={14} />
                       <span className="text-xs font-medium">{skill.name}</span>
@@ -158,16 +158,16 @@ export default function Skills() {
                   <div className="card-dark card-3d-shine p-7 h-full shadow-3d">
                     <div className="flex items-center gap-4 mb-4">
                       <span className="text-[#ff6b00]/30 text-sm font-mono">{svc.num}.</span>
-                      <h3 className="text-white font-bold text-xl">{svc.title}</h3>
+                      <h3 className="text-[var(--text-primary)] font-bold text-xl">{svc.title}</h3>
                     </div>
 
-                    <p className="text-[#888] text-sm leading-relaxed mb-5">{svc.description}</p>
+                    <p className="text-[var(--text-secondary)] text-sm leading-relaxed mb-5">{svc.description}</p>
 
                     <div className="flex flex-wrap gap-2">
                       {svc.tools.map((t) => (
                         <span
                           key={t}
-                          className="text-xs px-3 py-1.5 rounded-lg bg-white/[0.03] text-[#888] border border-white/[0.04] hover:border-[#ff6b00]/20 hover:text-[#ff6b00] transition-all"
+                          className="text-xs px-3 py-1.5 rounded-lg bg-white/[0.03] text-[var(--text-secondary)] border border-[var(--border)] hover:border-[#ff6b00]/20 hover:text-[#ff6b00] transition-all"
                         >
                           {t}
                         </span>

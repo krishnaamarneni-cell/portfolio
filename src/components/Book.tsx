@@ -205,7 +205,7 @@ function BookGlobe3D({ onOpenInside }: { onOpenInside: () => void }) {
           }}
         />
       </div>
-      <p className="text-center text-[10px] text-[#666] mt-10 font-mono tracking-wider uppercase">
+      <p className="text-center text-[10px] text-[var(--text-muted)] mt-10 font-mono tracking-wider uppercase">
         Hover to pause · Click to open
       </p>
     </div>
@@ -272,14 +272,14 @@ function BookPagesModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute -top-12 right-0 w-10 h-10 rounded-full bg-white/[0.06] border border-white/10 text-white hover:bg-white/[0.12] flex items-center justify-center"
+          className="absolute -top-12 right-0 w-10 h-10 rounded-full bg-white/[0.06] border border-[var(--border)] text-[var(--text-primary)] hover:bg-white/[0.12] flex items-center justify-center"
           aria-label="Close"
         >
           <FiX size={18} />
         </button>
 
         <div
-          className="relative grid grid-cols-1 sm:grid-cols-2 rounded-2xl overflow-hidden shadow-[0_40px_120px_rgba(255,107,0,0.15),0_20px_60px_rgba(0,0,0,0.8)] border border-white/[0.06]"
+          className="relative grid grid-cols-1 sm:grid-cols-2 rounded-2xl overflow-hidden shadow-[0_40px_120px_rgba(255,107,0,0.15),0_20px_60px_rgba(0,0,0,0.8)] border border-[var(--border)]"
           style={{ aspectRatio: "2 / 1.4" }}
         >
           <div className="hidden sm:block relative">
@@ -309,12 +309,12 @@ function BookPagesModal({
             type="button"
             onClick={() => setSpread((s) => Math.max(0, s - 1))}
             disabled={spread === 0}
-            className="w-10 h-10 rounded-full bg-white/[0.06] border border-white/10 text-white hover:bg-white/[0.12] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+            className="w-10 h-10 rounded-full bg-white/[0.06] border border-[var(--border)] text-[var(--text-primary)] hover:bg-white/[0.12] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
             aria-label="Previous"
           >
             <FiChevronLeft size={18} />
           </button>
-          <span className="text-[#888] text-xs font-mono">
+          <span className="text-[var(--text-secondary)] text-xs font-mono">
             Spread {spread + 1} / {totalSpreads}
           </span>
           <button
@@ -330,7 +330,7 @@ function BookPagesModal({
           </button>
         </div>
 
-        <p className="text-center text-[10px] text-[#666] mt-3 font-mono tracking-wider uppercase">
+        <p className="text-center text-[10px] text-[var(--text-muted)] mt-3 font-mono tracking-wider uppercase">
           Use ← / → keys to turn pages · Esc to close
         </p>
       </div>
@@ -500,13 +500,13 @@ export default function Book() {
           </ScrollReveal>
 
           <ScrollReveal direction="flipX" delay={0.1}>
-            <HoverSpotlight as="h2" className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6 cursor-default">
+            <HoverSpotlight as="h2" className="text-4xl md:text-5xl lg:text-6xl font-bold text-[var(--text-primary)] leading-tight mb-6 cursor-default">
               {book.heading_pre} <span className="text-gradient">{book.heading_accent}</span>
             </HoverSpotlight>
           </ScrollReveal>
 
           <ScrollReveal direction="zoom3d" delay={0.15}>
-            <p className="text-[#666] text-lg max-w-2xl">{book.intro}</p>
+            <p className="text-[var(--text-muted)] text-lg max-w-2xl">{book.intro}</p>
           </ScrollReveal>
         </div>
 
@@ -523,12 +523,12 @@ export default function Book() {
                 <span className="px-3 py-1 rounded-full bg-[#ff6b00] text-black text-[10px] font-bold tracking-[0.2em] uppercase">
                   {book.status_badge}
                 </span>
-                <span className="text-[#666] text-xs font-mono tracking-[0.15em] uppercase">
+                <span className="text-[var(--text-muted)] text-xs font-mono tracking-[0.15em] uppercase">
                   {book.publisher_tag}
                 </span>
               </div>
 
-              <h3 className="text-3xl md:text-4xl font-black text-white mb-3 leading-tight">
+              <h3 className="text-3xl md:text-4xl font-black text-[var(--text-primary)] mb-3 leading-tight">
                 {book.title}
               </h3>
               <p
@@ -538,20 +538,20 @@ export default function Book() {
                 {book.subtitle}
               </p>
 
-              <div className="space-y-4 text-[#aaa] text-base leading-relaxed mb-8 max-w-2xl">
+              <div className="space-y-4 text-[var(--text-secondary)] text-base leading-relaxed mb-8 max-w-2xl">
                 {book.blurb_paragraphs.map((p, i) => (
                   <p key={i}>{p}</p>
                 ))}
               </div>
 
               {book.chapters.length > 0 && (
-                <div className="rounded-2xl bg-[#1a1a1a] border border-white/[0.06] p-6 lg:p-7 mb-8">
+                <div className="rounded-2xl bg-[var(--bg-card)] border border-[var(--border)] p-6 lg:p-7 mb-8">
                   <p className="text-[#ff6b00] text-xs font-mono tracking-[0.25em] uppercase mb-4">
                     Inside the book
                   </p>
                   <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
                     {book.chapters.map((c, i) => (
-                      <li key={`${c}-${i}`} className="flex items-start gap-3 text-sm text-[#bbb]">
+                      <li key={`${c}-${i}`} className="flex items-start gap-3 text-sm text-[var(--text-primary)]">
                         <span className="text-[#ff6b00] font-mono text-xs w-6 shrink-0 pt-0.5">
                           {String(i + 1).padStart(2, "0")}
                         </span>
@@ -578,7 +578,7 @@ export default function Book() {
                 <a
                   href={book.pdf_url}
                   download
-                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/[0.04] border border-white/10 text-white font-semibold text-sm hover:border-[#ff6b00]/40 hover:bg-[#ff6b00]/[0.08] transition-all"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-white/[0.04] border border-[var(--border)] text-[var(--text-primary)] font-semibold text-sm hover:border-[#ff6b00]/40 hover:bg-[#ff6b00]/[0.08] transition-all"
                 >
                   <FiDownload size={16} />
                   Download PDF

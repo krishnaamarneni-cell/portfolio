@@ -24,18 +24,18 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
         className="group block w-full"
       >
         <TiltCard className="h-full rounded-[20px]" intensity={10}>
-          <div className="h-full rounded-2xl bg-[#1a1a1a] border border-white/[0.06] hover:border-[#ff6b00]/30 transition-all duration-500 overflow-hidden shadow-3d card-3d-shine">
+          <div className="h-full rounded-2xl bg-[var(--bg-card)] border border-[var(--border)] hover:border-[#ff6b00]/30 transition-all duration-500 overflow-hidden shadow-3d card-3d-shine">
             {/* === BROWSER FRAME WITH SCREENSHOT === */}
-            <div className="bg-[#0a0a0a] border-b border-white/[0.06] flex flex-col">
+            <div className="bg-[var(--bg-primary)] border-b border-[var(--border)] flex flex-col">
               {/* Browser top bar (sits ABOVE screenshot, doesn't overlay it) */}
-              <div className="h-8 bg-[#1a1a1a] border-b border-white/[0.06] flex items-center px-3 gap-2 shrink-0">
+              <div className="h-8 bg-[var(--bg-card)] border-b border-[var(--border)] flex items-center px-3 gap-2 shrink-0">
                 <div className="flex gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
                   <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
                   <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
                 </div>
-                <div className="flex-1 mx-2 h-5 rounded bg-[#0a0a0a] border border-white/[0.04] flex items-center justify-center">
-                  <span className="text-[#777] text-[10px] font-mono truncate px-2">
+                <div className="flex-1 mx-2 h-5 rounded bg-[var(--bg-primary)] border border-[var(--border)] flex items-center justify-center">
+                  <span className="text-[var(--text-secondary)] text-[10px] font-mono truncate px-2">
                     🔒 {project.link.replace(/^https?:\/\//, "")}
                   </span>
                 </div>
@@ -67,7 +67,7 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
                 </div>
 
                 {/* Project number watermark */}
-                <span className="absolute bottom-2 right-3 text-3xl font-black text-white/20 select-none drop-shadow-lg">
+                <span className="absolute bottom-2 right-3 text-3xl font-black text-[var(--text-primary)]/20 select-none drop-shadow-lg">
                   {project.number}
                 </span>
               </div>
@@ -77,11 +77,11 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
             <div className="p-6 lg:p-7">
               <div className={`h-1 w-12 rounded-full bg-gradient-to-r ${project.gradient} mb-4`} />
 
-              <h3 className="text-xl font-bold text-white mb-1 group-hover:text-[#ff6b00] transition-colors">
+              <h3 className="text-xl font-bold text-[var(--text-primary)] mb-1 group-hover:text-[#ff6b00] transition-colors">
                 {project.title}
               </h3>
               <p className="text-[#ff6b00] text-xs font-mono mb-3">{project.subtitle}</p>
-              <p className="text-[#888] text-sm leading-relaxed mb-5 line-clamp-3">
+              <p className="text-[var(--text-secondary)] text-sm leading-relaxed mb-5 line-clamp-3">
                 {project.description}
               </p>
 
@@ -89,26 +89,26 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
                 {project.tags.slice(0, 4).map((t) => (
                   <span
                     key={t}
-                    className="text-[10px] px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06] text-[#999] font-mono"
+                    className="text-[10px] px-2 py-1 rounded-md bg-white/[0.04] border border-[var(--border)] text-[var(--text-secondary)] font-mono"
                   >
                     {t}
                   </span>
                 ))}
                 {project.tags.length > 4 && (
-                  <span className="text-[10px] px-2 py-1 rounded-md text-[#555] font-mono">
+                  <span className="text-[10px] px-2 py-1 rounded-md text-[var(--text-muted)] font-mono">
                     +{project.tags.length - 4}
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-white/[0.05]">
+              <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
                 <span className="flex items-center gap-1.5 text-xs text-[#ff6b00] font-medium">
                   <FiExternalLink size={12} />
                   Visit Live Site
                 </span>
                 <FiArrowUpRight
                   size={16}
-                  className="text-[#666] group-hover:text-[#ff6b00] group-hover:rotate-45 transition-all"
+                  className="text-[var(--text-muted)] group-hover:text-[#ff6b00] group-hover:rotate-45 transition-all"
                 />
               </div>
             </div>
@@ -166,13 +166,13 @@ export default function Projects() {
             </ScrollReveal>
 
             <ScrollReveal direction="flipX" delay={0.1}>
-              <HoverSpotlight as="h2" className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6 cursor-default">
+              <HoverSpotlight as="h2" className="text-4xl md:text-5xl lg:text-6xl font-bold text-[var(--text-primary)] leading-tight mb-6 cursor-default">
                 Things I&apos;ve <span className="text-gradient">Built</span>
               </HoverSpotlight>
             </ScrollReveal>
 
             <ScrollReveal direction="zoom3d" delay={0.15}>
-              <p className="text-[#666] text-lg max-w-xl">
+              <p className="text-[var(--text-muted)] text-lg max-w-xl">
                 Real products, shipped to real users. Click any card to visit the live site.
               </p>
             </ScrollReveal>
@@ -182,12 +182,12 @@ export default function Projects() {
           <div className="hidden md:flex items-center gap-3 shrink-0">
             <button
               onClick={prev}
-              className="w-11 h-11 rounded-full bg-white/[0.04] border border-white/[0.08] hover:border-[#ff6b00]/40 hover:bg-[#ff6b00]/10 text-white flex items-center justify-center transition-all active:scale-95"
+              className="w-11 h-11 rounded-full bg-white/[0.04] border border-[var(--border)] hover:border-[#ff6b00]/40 hover:bg-[#ff6b00]/10 text-[var(--text-primary)] flex items-center justify-center transition-all active:scale-95"
               aria-label="Previous projects"
             >
               <FiChevronLeft size={18} />
             </button>
-            <span className="text-[#888] text-sm font-mono min-w-[60px] text-center">
+            <span className="text-[var(--text-secondary)] text-sm font-mono min-w-[60px] text-center">
               {page + 1} / {totalPages}
             </span>
             <button
@@ -227,12 +227,12 @@ export default function Projects() {
         <div className="flex md:hidden items-center justify-center gap-3 mt-6">
           <button
             onClick={prev}
-            className="w-10 h-10 rounded-full bg-white/[0.04] border border-white/[0.08] text-white flex items-center justify-center"
+            className="w-10 h-10 rounded-full bg-white/[0.04] border border-[var(--border)] text-[var(--text-primary)] flex items-center justify-center"
             aria-label="Previous"
           >
             <FiChevronLeft size={16} />
           </button>
-          <span className="text-[#888] text-xs font-mono min-w-[50px] text-center">
+          <span className="text-[var(--text-secondary)] text-xs font-mono min-w-[50px] text-center">
             {page + 1} / {totalPages}
           </span>
           <button

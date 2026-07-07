@@ -39,7 +39,7 @@ export default function NotesPreview() {
               </p>
             </ScrollReveal>
             <ScrollReveal direction="flipX" delay={0.1}>
-              <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
+              <h2 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] tracking-tight">
                 Things I&apos;m{" "}
                 <span className="text-gradient">thinking about</span>
               </h2>
@@ -49,7 +49,7 @@ export default function NotesPreview() {
           <ScrollReveal direction="zoom3d" delay={0.15}>
             <Link
               href="/notes"
-              className="group inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/[0.04] border border-white/[0.08] hover:border-[#ff6b00]/40 hover:bg-[#ff6b00]/10 text-white text-sm font-medium transition-all"
+              className="group inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/[0.04] border border-[var(--border)] hover:border-[#ff6b00]/40 hover:bg-[#ff6b00]/10 text-[var(--text-primary)] text-sm font-medium transition-all"
             >
               See all notes
               <FiArrowUpRight
@@ -66,7 +66,7 @@ export default function NotesPreview() {
             <ScrollReveal key={note.slug} delay={i * 0.08} direction="flipY">
               <Link
                 href={`/notes/${note.slug}`}
-                className="group block h-full rounded-2xl bg-[#1a1a1a] border border-white/[0.06] hover:border-[#ff6b00]/30 transition-all duration-300 p-5 hover:translate-y-[-2px]"
+                className="group block h-full rounded-2xl bg-[var(--bg-card)] border border-[var(--border)] hover:border-[#ff6b00]/30 transition-all duration-300 p-5 hover:translate-y-[-2px]"
               >
                 {/* Tag + date */}
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -75,34 +75,34 @@ export default function NotesPreview() {
                   >
                     {note.tag}
                   </span>
-                  <span className="text-[#666] text-[10px] flex items-center gap-1">
+                  <span className="text-[var(--text-muted)] text-[10px] flex items-center gap-1">
                     <FiCalendar size={9} />
                     {formatDate(note.date)}
                   </span>
-                  <span className="text-[#666] text-[10px] flex items-center gap-1">
+                  <span className="text-[var(--text-muted)] text-[10px] flex items-center gap-1">
                     <FiClock size={9} />
                     {note.readMinutes}m
                   </span>
                 </div>
 
                 {/* Title */}
-                <h3 className="text-base font-bold text-white leading-snug mb-2 group-hover:text-[#ff6b00] transition-colors line-clamp-2">
+                <h3 className="text-base font-bold text-[var(--text-primary)] leading-snug mb-2 group-hover:text-[#ff6b00] transition-colors line-clamp-2">
                   {note.title}
                 </h3>
 
                 {/* Summary */}
-                <p className="text-[#888] text-xs leading-relaxed line-clamp-2 mb-3">
+                <p className="text-[var(--text-secondary)] text-xs leading-relaxed line-clamp-2 mb-3">
                   {note.summary}
                 </p>
 
                 {/* Read indicator */}
-                <div className="flex items-center justify-between pt-2 border-t border-white/[0.04]">
+                <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
                   <span className="text-[10px] text-[#ff6b00] font-medium uppercase tracking-wider">
                     Read take
                   </span>
                   <FiArrowUpRight
                     size={13}
-                    className="text-[#666] group-hover:text-[#ff6b00] group-hover:rotate-45 transition-all"
+                    className="text-[var(--text-muted)] group-hover:text-[#ff6b00] group-hover:rotate-45 transition-all"
                   />
                 </div>
               </Link>

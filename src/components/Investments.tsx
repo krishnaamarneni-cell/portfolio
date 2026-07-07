@@ -53,7 +53,7 @@ function HoldingCard({ h, index }: { h: Holding; index: number }) {
     <ScrollReveal delay={index * 0.08} direction={dirs[index % dirs.length]}>
       <Wrapper {...wrapperProps} className="group block w-full">
         <TiltCard className="h-full rounded-[20px]" intensity={10}>
-          <div className="h-full rounded-2xl bg-[#1a1a1a] border border-white/[0.06] hover:border-[#ff6b00]/30 transition-all duration-500 overflow-hidden shadow-3d card-3d-shine relative">
+          <div className="h-full rounded-2xl bg-[var(--bg-card)] border border-[var(--border)] hover:border-[#ff6b00]/30 transition-all duration-500 overflow-hidden shadow-3d card-3d-shine relative">
             {/* Brand color stripe */}
             <div
               className="absolute top-0 left-0 right-0 h-1"
@@ -98,8 +98,8 @@ function HoldingCard({ h, index }: { h: Holding; index: number }) {
                     )}
                   </div>
                   <div>
-                    <h3 className="text-white font-bold text-lg leading-tight">{h.ticker}</h3>
-                    <p className="text-[#888] text-xs mt-0.5">{h.name}</p>
+                    <h3 className="text-[var(--text-primary)] font-bold text-lg leading-tight">{h.ticker}</h3>
+                    <p className="text-[var(--text-secondary)] text-xs mt-0.5">{h.name}</p>
                   </div>
                 </div>
 
@@ -116,7 +116,7 @@ function HoldingCard({ h, index }: { h: Holding; index: number }) {
               </div>
 
               {/* Thesis */}
-              <p className="text-[#bbb] text-sm leading-relaxed mb-5">{h.thesis}</p>
+              <p className="text-[var(--text-primary)] text-sm leading-relaxed mb-5">{h.thesis}</p>
 
               {/* Mini sparkline */}
               <div className="relative h-12 -mx-1 mb-4">
@@ -147,16 +147,16 @@ function HoldingCard({ h, index }: { h: Holding; index: number }) {
 
               {/* Footer */}
               {h.link ? (
-                <div className="flex items-center justify-between pt-3 border-t border-white/[0.05]">
+                <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
                   <span className="text-xs text-[#ff6b00] font-medium">View on Google Finance</span>
                   <FiArrowUpRight
                     size={14}
-                    className="text-[#666] group-hover:text-[#ff6b00] group-hover:rotate-45 transition-all"
+                    className="text-[var(--text-muted)] group-hover:text-[#ff6b00] group-hover:rotate-45 transition-all"
                   />
                 </div>
               ) : (
-                <div className="flex items-center justify-between pt-3 border-t border-white/[0.05]">
-                  <span className="text-xs text-[#666] font-mono italic">
+                <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
+                  <span className="text-xs text-[var(--text-muted)] font-mono italic">
                     🔒 Private position — locked up
                   </span>
                 </div>
@@ -186,9 +186,9 @@ function Carousel({ holdings, label }: { holdings: Holding[]; label: string }) {
       <div className="flex items-end justify-between mb-8 gap-6">
         <div className="flex items-center gap-4">
           <div className="h-1 w-12 rounded-full bg-gradient-to-r from-[#ff6b00] to-transparent" />
-          <h3 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
+          <h3 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] tracking-tight">
             {label}
-            <span className="ml-3 text-sm font-mono text-[#666]">
+            <span className="ml-3 text-sm font-mono text-[var(--text-muted)]">
               {holdings.length} {holdings.length === 1 ? "position" : "positions"}
             </span>
           </h3>
@@ -199,12 +199,12 @@ function Carousel({ holdings, label }: { holdings: Holding[]; label: string }) {
           <div className="hidden md:flex items-center gap-3 shrink-0">
             <button
               onClick={prev}
-              className="w-10 h-10 rounded-full bg-white/[0.04] border border-white/[0.08] hover:border-[#ff6b00]/40 hover:bg-[#ff6b00]/10 text-white flex items-center justify-center transition-all active:scale-95"
+              className="w-10 h-10 rounded-full bg-white/[0.04] border border-[var(--border)] hover:border-[#ff6b00]/40 hover:bg-[#ff6b00]/10 text-[var(--text-primary)] flex items-center justify-center transition-all active:scale-95"
               aria-label="Previous"
             >
               <FiChevronLeft size={16} />
             </button>
-            <span className="text-[#888] text-xs font-mono min-w-[50px] text-center">
+            <span className="text-[var(--text-secondary)] text-xs font-mono min-w-[50px] text-center">
               {page + 1} / {totalPages}
             </span>
             <button
@@ -247,12 +247,12 @@ function Carousel({ holdings, label }: { holdings: Holding[]; label: string }) {
           <div className="flex md:hidden items-center justify-center gap-3 mt-5">
             <button
               onClick={prev}
-              className="w-10 h-10 rounded-full bg-white/[0.04] border border-white/[0.08] text-white flex items-center justify-center"
+              className="w-10 h-10 rounded-full bg-white/[0.04] border border-[var(--border)] text-[var(--text-primary)] flex items-center justify-center"
               aria-label="Previous"
             >
               <FiChevronLeft size={16} />
             </button>
-            <span className="text-[#888] text-xs font-mono min-w-[50px] text-center">
+            <span className="text-[var(--text-secondary)] text-xs font-mono min-w-[50px] text-center">
               {page + 1} / {totalPages}
             </span>
             <button
@@ -290,22 +290,22 @@ export default function Investments() {
         </ScrollReveal>
 
         <ScrollReveal direction="flipX" delay={0.1}>
-          <HoverSpotlight as="h2" className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6 cursor-default">
+          <HoverSpotlight as="h2" className="text-4xl md:text-5xl lg:text-6xl font-bold text-[var(--text-primary)] leading-tight mb-6 cursor-default">
             {investments.heading_pre} <span className="text-gradient">{investments.heading_accent}</span> lives
           </HoverSpotlight>
         </ScrollReveal>
 
         <ScrollReveal direction="zoom3d" delay={0.15}>
           <div className="flex items-end justify-between flex-wrap gap-4 mb-16">
-            <p className="text-[#666] text-lg max-w-xl">
+            <p className="text-[var(--text-muted)] text-lg max-w-xl">
               {investments.intro}
-              <span className="block text-xs mt-2 text-[#555] italic">
+              <span className="block text-xs mt-2 text-[var(--text-muted)] italic">
                 {investments.disclaimer}
               </span>
             </p>
             <Link
               href="/investments"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/[0.04] border border-white/10 text-[#ccc] text-sm font-medium hover:border-[#ff6b00]/40 hover:text-[#ff6b00] hover:bg-[#ff6b00]/[0.06] transition-all"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/[0.04] border border-[var(--border)] text-[var(--text-primary)] text-sm font-medium hover:border-[#ff6b00]/40 hover:text-[#ff6b00] hover:bg-[#ff6b00]/[0.06] transition-all"
             >
               View full portfolio
               <FiArrowUpRight size={14} />
