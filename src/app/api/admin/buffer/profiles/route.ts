@@ -22,12 +22,21 @@ export async function GET() {
   }
   try {
     const channels = await getChannels(connector.bearer_token);
+    // Normalize Buffer's service names to canonical keys the UI expects.
+    function normalizeService(raw: string): string {
+      const s = raw.toLowerCase();
+      if (s.startsWith("linkedin")) return "linkedin";
+      if (s.startsWith("instagram")) return "instagram";
+      if (s.startsWith("twitter") || s === "x") return "twitter";
+      return s;
+    }
+
     // Map Buffer's Channel shape to the old "profile" shape the UI uses.
     const profiles = channels
       .filter((c) => !c.isDisconnected)
       .map((c) => ({
         id: c.id,
-        service: c.service,
+        service: normalizeService(c.service),
         formatted_username: c.displayName || c.name,
         formatted_service:
           c.service.charAt(0).toUpperCase() + c.service.slice(1),

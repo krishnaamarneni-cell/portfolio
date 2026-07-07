@@ -100,13 +100,12 @@ const textareaClass = inputClass + " resize-y leading-relaxed";
 
 /** Filter Buffer profiles for one of our 3 platforms. */
 function profilesFor(all: BufferProfile[], key: PlatformKey): BufferProfile[] {
-  return all.filter((bp) =>
-    key === "linkedin"
-      ? bp.service === "linkedin"
-      : key === "x"
-      ? bp.service === "twitter" || bp.service === "x"
-      : bp.service === "instagram"
-  );
+  return all.filter((bp) => {
+    const s = bp.service.toLowerCase();
+    if (key === "linkedin") return s.startsWith("linkedin");
+    if (key === "x") return s.startsWith("twitter") || s === "x";
+    return s.startsWith("instagram");
+  });
 }
 
 /** Initial "now-ish" datetime-local string (rounded up 10 min). */
@@ -1216,14 +1215,7 @@ function CampaignCard({
     const dueAts = dates.map((d) => new Date(d).toISOString());
     const profilesByPlatform: Partial<Record<PlatformKey, string[]>> = {};
     for (const p of selectedPlats) {
-      const matching = profiles
-        .filter((bp) =>
-          p === "linkedin"
-            ? bp.service === "linkedin"
-            : p === "x"
-            ? bp.service === "twitter" || bp.service === "x"
-            : bp.service === "instagram"
-        )
+      const matching = profilesFor(profiles, p)
         .filter((bp) => selectedProfiles[bp.id])
         .map((bp) => bp.id);
       if (matching.length > 0) profilesByPlatform[p] = matching;
