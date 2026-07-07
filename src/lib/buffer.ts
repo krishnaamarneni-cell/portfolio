@@ -48,13 +48,13 @@ export type BufferAccount = {
   id: string;
   name: string;
   email: string;
-  currentOrganization: { id: string; name: string };
+  organizations: Array<{ id: string; name: string }>;
 };
 
 export async function getAccount(token: string): Promise<BufferAccount | null> {
   const j = await bufferGraphQL<{ account: BufferAccount }>(
     token,
-    `{ account { id name email currentOrganization { id name } } }`
+    `{ account { id name email organizations { id name } } }`
   );
   return j.data?.account ?? null;
 }
@@ -71,7 +71,8 @@ export type BufferChannel = {
 
 export async function getChannels(token: string): Promise<BufferChannel[]> {
   const account = await getAccount(token);
-  if (!account?.currentOrganization?.id) return [];
+  const orgId = account?.organizations?.[0]?.id;
+  if (!orgId) return [];
   const j = await bufferGraphQL<{ channels: BufferChannel[] }>(
     token,
     `query($id: OrganizationId!) {
@@ -79,7 +80,7 @@ export async function getChannels(token: string): Promise<BufferChannel[]> {
         id name service serviceId displayName avatar isDisconnected
       }
     }`,
-    { id: account.currentOrganization.id }
+    { id: orgId }
   );
   return j.data?.channels ?? [];
 }
@@ -314,7 +315,8 @@ export async function getAllSentPosts(
   token: string
 ): Promise<{ posts: BufferSentPost[] } | { error: string }> {
   const account = await getAccount(token);
-  if (!account?.currentOrganization?.id) {
+  const orgId = account?.organizations?.[0]?.id;
+  if (!orgId) {
     return { error: "No Buffer organization found on this token" };
   }
   const schema = await discoverSchema(token);
@@ -352,7 +354,7 @@ export async function getAllSentPosts(
         };
       }>;
     };
-  }>(token, QUERY, { orgId: account.currentOrganization.id });
+  }>(token, QUERY, { orgId });
   if (j.errors && j.errors.length) {
     // Bust the cache so the next request re-introspects in case the schema moved.
     cachedSchema = null;

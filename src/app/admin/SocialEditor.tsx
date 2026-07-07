@@ -184,7 +184,6 @@ export default function SocialEditor({
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [posting, setPosting] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
 
   // Per-platform schedule pickers
   const [scheduleAt, setScheduleAt] = useState<Record<PlatformKey, string>>({
@@ -211,9 +210,6 @@ export default function SocialEditor({
       .then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
       .then(({ ok, data }) => {
         console.log("[Buffer] profiles response:", JSON.stringify(data, null, 2));
-        if (data._debug) {
-          setDebugInfo(JSON.stringify(data._debug, null, 0));
-        }
         if (ok && Array.isArray(data.profiles)) {
           setProfiles(data.profiles);
           const auto: Record<string, boolean> = {};
@@ -224,7 +220,6 @@ export default function SocialEditor({
           }
         } else if (data.error) {
           setProfilesError(data.error);
-          setDebugInfo(`Error: ${data.error}`);
         }
       });
   }, []);
@@ -466,11 +461,6 @@ export default function SocialEditor({
 
   return (
     <section className="space-y-6">
-      {debugInfo && (
-        <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/[0.06] px-4 py-3 text-[11px] text-cyan-300/90 font-mono break-all">
-          <strong>Buffer debug:</strong> {debugInfo}
-        </div>
-      )}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-xl font-bold">Social</h2>

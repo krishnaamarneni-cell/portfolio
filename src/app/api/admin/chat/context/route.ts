@@ -58,7 +58,7 @@ async function callConnector(c: Connector): Promise<ConnectorSnapshot> {
         ok: true,
         data: {
           account: { name: account.name, email: account.email },
-          organization: account.currentOrganization,
+          organization: account.organizations?.[0] ?? null,
           channels: channels.map((ch) => ({
             id: ch.id,
             service: ch.service,
