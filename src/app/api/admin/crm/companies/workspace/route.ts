@@ -58,8 +58,6 @@ export async function GET(request: Request) {
         contactsReturned: contacts.length,
         directCount: directCount ?? 0,
         storedContactCount: companyRes.data?.contact_count ?? "N/A",
-        contactsError: contactsRes.error?.message ?? null,
-        threadsError: threadsRes.error?.message ?? null,
       },
     });
   } catch (err) {

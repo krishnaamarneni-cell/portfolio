@@ -32,8 +32,6 @@ type WorkspaceData = {
     contactsReturned: number;
     directCount: number;
     storedContactCount: number | string;
-    contactsError: string | null;
-    threadsError: string | null;
   };
 };
 
@@ -347,8 +345,6 @@ function CompanyWorkspace({
           <p>Contacts returned by query: {_debug.contactsReturned}</p>
           <p>Direct count (same WHERE): {_debug.directCount}</p>
           <p>Stored contact_count: {_debug.storedContactCount}</p>
-          {_debug.contactsError && <p className="text-red-400">Contacts error: {_debug.contactsError}</p>}
-          {_debug.threadsError && <p className="text-red-400">Threads error: {_debug.threadsError}</p>}
         </div>
       )}
 
