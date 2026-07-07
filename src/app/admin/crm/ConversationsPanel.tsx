@@ -32,13 +32,35 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [directionFilter, setDirectionFilter] = useState<"all" | "inbound" | "outbound">("all");
   const [syncing, setSyncing] = useState(false);
+  const [syncDays, setSyncDays] = useState(30);
 
   async function load() {
     setLoading(true);
-    const r = await fetch("/api/admin/crm/threads?limit=100");
+    const r = await fetch("/api/admin/crm/threads?limit=500");
     const d = await r.json().catch(() => ({ threads: [] }));
     setThreads(d.threads ?? []);
     setLoading(false);
+  }
+
+  async function syncInbox(days: number) {
+    setSyncing(true);
+    try {
+      const r = await fetch("/api/admin/crm/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync-inbox", days, limit: 200 }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        onSuccess(`Pulled ${d.synced} threads from last ${days} days (${d.skipped} already cached)`);
+        await load();
+      } else {
+        onError(d.error || "Sync failed");
+      }
+    } catch {
+      onError("Network error");
+    }
+    setSyncing(false);
   }
 
   useEffect(() => { load(); }, []);
@@ -138,32 +160,33 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
             </button>
           ))}
         </div>
+        <div className="flex items-center gap-1 bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-1">
+          {([
+            { d: 1, label: "1d" },
+            { d: 7, label: "7d" },
+            { d: 30, label: "30d" },
+            { d: 90, label: "90d" },
+          ] as const).map(({ d, label }) => (
+            <button
+              key={d}
+              onClick={() => setSyncDays(d)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                syncDays === d
+                  ? "bg-[#ff6b00]/15 text-[#ff6b00]"
+                  : "text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <button
           disabled={syncing}
-          onClick={async () => {
-            setSyncing(true);
-            try {
-              const r = await fetch("/api/admin/crm/threads", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "sync-all", limit: 100 }),
-              });
-              const d = await r.json();
-              if (r.ok) {
-                onSuccess(`Synced ${d.threadsSynced} threads from ${d.contactsProcessed} contacts`);
-                await load();
-              } else {
-                onError(d.error || "Sync failed");
-              }
-            } catch {
-              onError("Network error");
-            }
-            setSyncing(false);
-          }}
+          onClick={() => syncInbox(syncDays)}
           className="px-4 py-2.5 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] disabled:opacity-50 flex items-center gap-2"
         >
           <FiRefreshCw size={14} className={syncing ? "animate-spin" : ""} />
-          {syncing ? "Syncing..." : "Sync All Contacts"}
+          {syncing ? "Pulling Gmail..." : "Sync Gmail Inbox"}
         </button>
         <button
           onClick={load}
@@ -177,7 +200,7 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
       {filtered.length === 0 ? (
         <div className="text-center py-12 text-[var(--admin-text-muted)] text-sm">
           {threads.length === 0
-            ? "No conversations synced yet. Click \"Sync All Contacts\" above to pull Gmail threads for all contacts."
+            ? "No conversations synced yet. Select a time range and click \"Sync Gmail Inbox\" to pull all threads."
             : "No threads match your search."
           }
         </div>

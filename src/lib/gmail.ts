@@ -367,6 +367,48 @@ export async function getThread(threadId: string): Promise<GmailThread | null> {
   };
 }
 
+export async function listRecentThreadIds(opts?: {
+  maxResults?: number;
+  newerThanDays?: number;
+  query?: string;
+}): Promise<{ threadIds: string[]; error?: string }> {
+  const access = await getAccessToken();
+  if (!access) return { threadIds: [], error: "Gmail not connected" };
+
+  const days = opts?.newerThanDays ?? 30;
+  const q = opts?.query || `newer_than:${days}d`;
+  const max = opts?.maxResults ?? 200;
+
+  const allThreads: string[] = [];
+  let pageToken: string | undefined;
+
+  while (allThreads.length < max) {
+    const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/threads");
+    url.searchParams.set("q", q);
+    url.searchParams.set("maxResults", String(Math.min(100, max - allThreads.length)));
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+    const r = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${access}` },
+      cache: "no-store",
+    });
+    if (!r.ok) {
+      if (allThreads.length === 0) return { threadIds: [], error: `Gmail ${r.status}` };
+      break;
+    }
+    const j = (await r.json()) as {
+      threads?: Array<{ id: string }>;
+      nextPageToken?: string;
+    };
+    const page = j.threads ?? [];
+    allThreads.push(...page.map((t) => t.id));
+    pageToken = j.nextPageToken;
+    if (!pageToken || page.length === 0) break;
+  }
+
+  return { threadIds: allThreads.slice(0, max) };
+}
+
 export async function listThreadsForContact(
   email: string,
   maxResults = 50
