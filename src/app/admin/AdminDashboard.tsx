@@ -11,7 +11,6 @@ import {
   FiEdit2,
   FiTrash2,
   FiLogOut,
-  FiArrowLeft,
   FiExternalLink,
   FiSave,
   FiX,
@@ -26,6 +25,9 @@ import {
   FiHeart,
   FiUsers,
   FiFileText,
+  FiMenu,
+  FiHome,
+  FiChevronRight,
 } from "react-icons/fi";
 import {
   EMPTY_JOB,
@@ -45,9 +47,9 @@ import AgentsTab from "./AgentsTab";
 import ContactsTab from "./ContactsTab";
 import PersonalTab from "./PersonalTab";
 import ResumeCreatorTab from "./ResumeCreatorTab";
-import MobileBottomNav, { tabLabel } from "./MobileBottomNav";
 
 type Tab =
+  | "dashboard"
   | "content"
   | "thoughts"
   | "jobs"
@@ -67,6 +69,30 @@ type Props = {
   initialSiteContent: SiteContent;
 };
 
+const NAV_ITEMS: Array<{
+  id: Tab;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  section?: string;
+}> = [
+  { id: "dashboard", label: "Dashboard", icon: FiHome },
+  { id: "chat", label: "AI Assistant", icon: FiMessageSquare },
+  { id: "personal", label: "Life", icon: FiHeart },
+  { id: "social", label: "Social", icon: FiShare2, section: "Content" },
+  { id: "agents", label: "Agents", icon: FiCpu },
+  { id: "resume", label: "Resume", icon: FiFileText },
+  { id: "contacts", label: "Contacts", icon: FiUsers },
+  { id: "jobs", label: "Jobs", icon: FiBriefcase, section: "Data" },
+  { id: "projects", label: "Projects", icon: FiFolder },
+  { id: "content", label: "Site Content", icon: FiLayout },
+  { id: "thoughts", label: "Notes", icon: FiZap },
+  { id: "connectors", label: "Settings", icon: FiLink, section: "System" },
+];
+
+export function tabLabel(tab: string): string {
+  return NAV_ITEMS.find((n) => n.id === tab)?.label ?? "Admin";
+}
+
 export default function AdminDashboard({
   session,
   initialJobs,
@@ -75,39 +101,22 @@ export default function AdminDashboard({
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Default to Chat — it's the daily-touch surface. Old default was Site
-  // Content which is something you edit rarely.
-  const [tab, setTab] = useState<Tab>("chat");
+  const [tab, setTab] = useState<Tab>("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // PWA shortcuts pass ?tab=personal etc. — sync URL → state on mount and
-  // whenever the user lands here from a deep link.
   useEffect(() => {
     const t = searchParams.get("tab");
-    if (
-      t === "content" ||
-      t === "thoughts" ||
-      t === "jobs" ||
-      t === "projects" ||
-      t === "social" ||
-      t === "agents" ||
-      t === "personal" ||
-      t === "contacts" ||
-      t === "connectors" ||
-      t === "chat"
-    ) {
-      setTab(t);
+    if (t && NAV_ITEMS.some((n) => n.id === t)) {
+      setTab(t as Tab);
     }
   }, [searchParams]);
+
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [siteContent, setSiteContent] = useState<SiteContent>(initialSiteContent);
   const [editingJob, setEditingJob] = useState<Job | "new" | null>(null);
-  const [editingProject, setEditingProject] = useState<Project | "new" | null>(
-    null
-  );
-  const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(
-    null
-  );
+  const [editingProject, setEditingProject] = useState<Project | "new" | null>(null);
+  const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
 
   const fallbackVisible = useMemo(
     () => jobs.some((j) => j.id.startsWith("seed-")),
@@ -154,10 +163,7 @@ export default function AdminDashboard({
 
   async function removeJob(id: string) {
     if (id.startsWith("seed-")) {
-      flash(
-        "err",
-        "This is fallback seed data, not a real DB row. Save a new job to start using Supabase."
-      );
+      flash("err", "This is fallback seed data, not a real DB row.");
       return;
     }
     if (!confirm("Delete this job?")) return;
@@ -191,10 +197,7 @@ export default function AdminDashboard({
 
   async function removeProject(id: string) {
     if (id.startsWith("seed-")) {
-      flash(
-        "err",
-        "This is fallback seed data, not a real DB row. Save a new project to start using Supabase."
-      );
+      flash("err", "This is fallback seed data, not a real DB row.");
       return;
     }
     if (!confirm("Delete this project?")) return;
@@ -208,267 +211,207 @@ export default function AdminDashboard({
     await refresh();
   }
 
-  const navItems = [
-    { id: "content" as const, label: "Site Content", icon: FiLayout, hint: "Hero, About, Skills, Book…" },
-    { id: "thoughts" as const, label: "Notes", icon: FiZap, hint: "Quick takes + AI formatting" },
-    { id: "jobs" as const, label: "Jobs", icon: FiBriefcase, count: jobs.length, hint: "Experience timeline" },
-    { id: "projects" as const, label: "Projects", icon: FiFolder, count: projects.length, hint: "Featured work" },
-    { id: "social" as const, label: "Social", icon: FiShare2, hint: "Compose & post via Buffer" },
-    { id: "agents" as const, label: "Agents", icon: FiCpu, hint: "News + Jobs scouts" },
-    { id: "resume" as const, label: "Resume", icon: FiFileText, hint: "Tailor & export ATS resumes" },
-    { id: "contacts" as const, label: "Contacts", icon: FiUsers, hint: "Recruiter CRM + outreach" },
-    { id: "personal" as const, label: "Life", icon: FiHeart, hint: "Notepad + Life agent" },
-    { id: "connectors" as const, label: "Settings", icon: FiLink, hint: "2FA, Face Lock, connectors, devices" },
-    { id: "chat" as const, label: "Chat", icon: FiMessageSquare, hint: "Talk to your data with Groq" },
-  ];
+  function handleNav(id: Tab) {
+    setTab(id);
+    setSidebarOpen(false);
+  }
 
   return (
-    <main
-      className="min-h-screen bg-[#050505] text-white relative"
-      style={{
-        // Bottom nav (mobile only) sits at fixed-bottom — pad content so
-        // it doesn't hide behind it.
-        paddingBottom: "calc(72px + env(safe-area-inset-bottom))",
-        // Header is now position:fixed so the iOS keyboard can't auto-scroll
-        // it out of view. Push content down by the header's height so it
-        // doesn't start under the header. 52px chrome + safe-area-top.
-        paddingTop: "calc(52px + env(safe-area-inset-top))",
-      }}
-    >
-      {/* Ambient background */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-20%] left-1/4 w-[700px] h-[700px] bg-[#ff6b00]/[0.04] rounded-full blur-[180px]" />
-        <div className="absolute bottom-[-10%] right-0 w-[500px] h-[500px] bg-[#ff3d00]/[0.03] rounded-full blur-[150px]" />
-      </div>
+    <div className="min-h-screen bg-[#FDF6EE] flex">
+      {/* Mobile overlay backdrop */}
+      {sidebarOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-      {/* Header — position:fixed, NOT sticky, so the iOS keyboard can't push
-          the page up and hide it. The main element has paddingTop equal to
-          this header's height so content starts below it. */}
-      <header
-        className="fixed top-0 left-0 right-0 z-30 bg-[#050505]/85 backdrop-blur-xl border-b border-white/[0.06]"
-        // Respect the iPhone notch / status bar.
-        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      {/* Sidebar */}
+      <aside
+        className={`
+          fixed top-0 left-0 z-50 h-full w-[260px] bg-white border-r border-[#E8DFD4]
+          flex flex-col overflow-y-auto
+          transition-transform duration-300 ease-in-out
+          lg:translate-x-0 lg:sticky lg:top-0 lg:z-auto lg:h-screen
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        `}
       >
-        <div className="max-w-7xl mx-auto px-4 lg:px-8 py-2.5 lg:py-3.5 flex items-center justify-between gap-3">
-          {/* Mobile: show current tab name in the header */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-black font-black text-sm shadow-[0_4px_15px_rgba(255,107,0,0.4)] shrink-0">
-              K
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-mono tracking-[0.2em] uppercase text-[#ff6b00] leading-none">
-                Lucy
-              </p>
-              {/* On mobile, show the current tab. On desktop, show the email handle. */}
-              <p className="text-[11px] text-[#aaa] lg:text-[10px] lg:text-[#666] mt-1 font-mono leading-none truncate">
-                <span className="lg:hidden">{tabLabel(tab)}</span>
-                <span className="hidden lg:inline">krishna-amarneni</span>
-              </p>
-            </div>
+        {/* Brand */}
+        <div className="px-5 py-5 border-b border-[#E8DFD4] flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-white font-black text-sm shadow-md shrink-0">
+            K
           </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="hidden sm:inline-flex items-center gap-2 text-[#888] text-sm hover:text-white transition-colors"
-            >
-              <FiArrowLeft size={14} />
-              <span className="hidden sm:inline">Site</span>
-            </Link>
-            <span className="hidden md:inline text-xs text-[#777] font-mono">
-              {session.email}
-            </span>
-            {/* Logout lives in Settings on mobile (per your request). Keep
-                the header button on lg+ for desktop muscle memory. */}
-            <button
-              onClick={logout}
-              className="hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10 text-sm hover:border-red-500/40 hover:text-red-300 transition-colors"
-              aria-label="Logout"
-            >
-              <FiLogOut size={13} />
-              <span>Logout</span>
-            </button>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-[#1a1a1a] leading-tight">Krishna Amarneni</p>
+            <p className="text-[11px] text-[#999] leading-tight mt-0.5">Admin Panel</p>
           </div>
-        </div>
-      </header>
-
-      <div className="relative max-w-7xl mx-auto px-4 lg:px-8 py-5 lg:py-12">
-        {/* Title row + quick stats — desktop only, takes too much real estate on phone */}
-        <div className="hidden lg:flex items-start justify-between flex-wrap gap-6 mb-8">
-          <div>
-            <h1 className="text-3xl lg:text-4xl font-black tracking-tight">
-              Welcome back,{" "}
-              <span className="bg-gradient-to-r from-[#ff6b00] via-[#ff8c38] to-[#ffaa66] bg-clip-text text-transparent">
-                Krishna
-              </span>
-            </h1>
-            <p className="text-[#888] mt-2 text-sm">
-              Your studio for everything that shows up on the site.
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <StatPill label="Jobs" value={jobs.length} />
-            <StatPill label="Projects" value={projects.length} />
-            <StatPill label="Status" value="LIVE" highlight />
-          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden ml-auto w-8 h-8 rounded-lg flex items-center justify-center text-[#999] hover:bg-[#f5f0ea]"
+          >
+            <FiX size={16} />
+          </button>
         </div>
 
-        {/* Setup banner if fallback data is showing */}
-        {fallbackVisible && (
-          <div className="mb-6 rounded-2xl border border-[#ff6b00]/30 bg-gradient-to-br from-[#ff6b00]/[0.08] to-transparent p-5 text-sm flex items-start gap-3">
-            <FiActivity className="text-[#ff8c38] mt-0.5 shrink-0" size={18} />
-            <div>
-              <p className="text-[#ffaa66] font-bold mb-1">Supabase not connected yet</p>
-              <p className="text-[#bbb] leading-relaxed">
-                Showing fallback seed data. Run{" "}
-                <code className="text-[#ff8c38]">supabase/schema.sql</code> in your Supabase
-                SQL Editor and paste your keys into{" "}
-                <code className="text-[#ff8c38]">.env.local</code> to start saving.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Main grid: sidebar + content. Sidebar hidden on mobile (bottom nav replaces it). */}
-        <div className="grid lg:grid-cols-[240px_1fr] gap-6 lg:gap-10">
-          {/* Sidebar nav — desktop only */}
-          <nav className="hidden lg:block lg:sticky lg:top-24 lg:self-start space-y-1.5">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = tab === item.id;
-              return (
+        {/* Nav */}
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
+          {NAV_ITEMS.map((item, i) => {
+            const Icon = item.icon;
+            const active = tab === item.id;
+            const showSection = item.section && (i === 0 || NAV_ITEMS[i - 1]?.section !== item.section);
+            return (
+              <div key={item.id}>
+                {showSection && (
+                  <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-[#bbb] px-3 pt-5 pb-2">
+                    {item.section}
+                  </p>
+                )}
                 <button
-                  key={item.id}
-                  onClick={() => setTab(item.id)}
-                  className={`w-full text-left rounded-2xl px-4 py-3 transition-all flex items-start gap-3 group relative ${
+                  onClick={() => handleNav(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
                     active
-                      ? "bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black shadow-[0_8px_24px_rgba(255,107,0,0.35)]"
-                      : "bg-white/[0.03] border border-white/[0.06] hover:border-[#ff6b00]/30 text-[#ccc] hover:text-white"
+                      ? "bg-[#ff6b00] text-white font-semibold shadow-[0_2px_12px_rgba(255,107,0,0.3)]"
+                      : "text-[#555] hover:bg-[#f5f0ea] hover:text-[#1a1a1a]"
                   }`}
                 >
-                  <Icon size={16} className="mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold">{item.label}</span>
-                      {typeof item.count === "number" && (
-                        <span
-                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                            active
-                              ? "bg-black/15 text-black"
-                              : "bg-white/[0.06] text-[#888]"
-                          }`}
-                        >
-                          {item.count}
-                        </span>
-                      )}
-                    </div>
-                    <p className={`text-[11px] mt-0.5 ${active ? "text-black/70" : "text-[#666]"}`}>
-                      {item.hint}
-                    </p>
-                  </div>
-                  {active && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-black" />
-                  )}
+                  <Icon size={17} className={active ? "text-white" : "text-[#999]"} />
+                  <span>{item.label}</span>
                 </button>
-              );
-            })}
-          </nav>
+              </div>
+            );
+          })}
+        </nav>
 
-          {/* Content panel */}
-          <div className="min-w-0">
-            {tab === "content" ? (
-              <SiteContentEditor
-                initial={siteContent}
-                onSaved={(c) => setSiteContent(c)}
-                onError={(m) => flash("err", m)}
-                onSuccess={(m) => flash("ok", m)}
-              />
-            ) : tab === "thoughts" ? (
-              <ThoughtsEditor
-                onSuccess={(m) => flash("ok", m)}
-                onError={(m) => flash("err", m)}
-              />
-            ) : tab === "social" ? (
-              <SocialEditor
-                onSuccess={(m) => flash("ok", m)}
-                onError={(m) => flash("err", m)}
-              />
-            ) : tab === "contacts" ? (
-              <ContactsTab
-                onSuccess={(m) => flash("ok", m)}
-                onError={(m) => flash("err", m)}
-              />
-            ) : tab === "agents" ? (
-              <AgentsTab
-                onSuccess={(m) => flash("ok", m)}
-                onError={(m) => flash("err", m)}
-              />
-            ) : tab === "personal" ? (
-              <PersonalTab
-                onSuccess={(m) => flash("ok", m)}
-                onError={(m) => flash("err", m)}
-              />
-            ) : tab === "resume" ? (
-              <ResumeCreatorTab
-                onSuccess={(m) => flash("ok", m)}
-                onError={(m) => flash("err", m)}
-              />
-            ) : tab === "connectors" ? (
-              <ConnectorsEditor
-                onSuccess={(m) => flash("ok", m)}
-                onError={(m) => flash("err", m)}
-                sessionEmail={session.email}
-              />
-            ) : tab === "chat" ? (
-              <AdminChat onError={(m) => flash("err", m)} />
-            ) : tab === "jobs" ? (
-          <section>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-bold">Experience Timeline</h2>
-              <button
-                onClick={() => setEditingJob("new")}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-semibold text-sm shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.03] transition-transform"
-              >
-                <FiPlus size={14} />
-                Add Job
-              </button>
-            </div>
-            <div className="space-y-3">
-              {jobs.map((j) => (
-                <JobRow
-                  key={j.id}
-                  job={j}
-                  onEdit={() => setEditingJob(j)}
-                  onDelete={() => removeJob(j.id)}
-                />
-              ))}
-            </div>
-          </section>
-        ) : (
-          <section>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-bold">Featured Projects</h2>
-              <button
-                onClick={() => setEditingProject("new")}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-semibold text-sm shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.03] transition-transform"
-              >
-                <FiPlus size={14} />
-                Add Project
-              </button>
-            </div>
-            <div className="grid sm:grid-cols-2 gap-4">
-              {projects.map((p) => (
-                <ProjectRow
-                  key={p.id}
-                  project={p}
-                  onEdit={() => setEditingProject(p)}
-                  onDelete={() => removeProject(p.id)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-          </div>
+        {/* Bottom */}
+        <div className="px-3 py-4 border-t border-[#E8DFD4] space-y-1">
+          <Link
+            href="/"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#555] hover:bg-[#f5f0ea] hover:text-[#1a1a1a] transition-all"
+          >
+            <FiExternalLink size={17} className="text-[#999]" />
+            View Live Site
+          </Link>
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#555] hover:bg-red-50 hover:text-red-600 transition-all"
+          >
+            <FiLogOut size={17} className="text-[#999]" />
+            Logout
+          </button>
         </div>
+      </aside>
+
+      {/* Main */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-[#E8DFD4]">
+          <div className="flex items-center justify-between px-4 lg:px-8 py-3 lg:py-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="lg:hidden w-10 h-10 rounded-xl flex items-center justify-center text-[#555] hover:bg-[#f5f0ea]"
+              >
+                <FiMenu size={20} />
+              </button>
+              <div className="min-w-0">
+                <h1 className="text-lg lg:text-xl font-bold text-[#1a1a1a] truncate">
+                  {tabLabel(tab)}
+                </h1>
+                <div className="hidden lg:flex items-center gap-1.5 text-xs text-[#999] mt-0.5">
+                  <span>Admin</span>
+                  <FiChevronRight size={10} />
+                  <span className="text-[#555]">{tabLabel(tab)}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="hidden md:block text-sm text-[#888]">{session.email}</span>
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-white font-bold text-sm">
+                K
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Content */}
+        <main className="flex-1 p-4 lg:p-8 overflow-x-hidden">
+          {fallbackVisible && (
+            <div className="mb-6 rounded-2xl border border-[#ff6b00]/30 bg-[#fff8f0] p-5 text-sm flex items-start gap-3">
+              <FiActivity className="text-[#ff8c38] mt-0.5 shrink-0" size={18} />
+              <div>
+                <p className="text-[#ff6b00] font-bold mb-1">Supabase not connected yet</p>
+                <p className="text-[#888] leading-relaxed">
+                  Showing fallback seed data. Run{" "}
+                  <code className="text-[#ff8c38] bg-[#fff0e0] px-1 py-0.5 rounded text-xs">supabase/schema.sql</code>{" "}
+                  in your Supabase SQL Editor.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {tab === "dashboard" ? (
+            <DashboardOverview jobs={jobs} projects={projects} onNavigate={handleNav} />
+          ) : tab === "content" ? (
+            <SiteContentEditor
+              initial={siteContent}
+              onSaved={(c) => setSiteContent(c)}
+              onError={(m) => flash("err", m)}
+              onSuccess={(m) => flash("ok", m)}
+            />
+          ) : tab === "thoughts" ? (
+            <ThoughtsEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          ) : tab === "social" ? (
+            <SocialEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          ) : tab === "contacts" ? (
+            <ContactsTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          ) : tab === "agents" ? (
+            <AgentsTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          ) : tab === "personal" ? (
+            <PersonalTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          ) : tab === "resume" ? (
+            <ResumeCreatorTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          ) : tab === "connectors" ? (
+            <ConnectorsEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} sessionEmail={session.email} />
+          ) : tab === "chat" ? (
+            <AdminChat onError={(m) => flash("err", m)} />
+          ) : tab === "jobs" ? (
+            <section>
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-xl font-bold text-[#1a1a1a]">Experience Timeline</h2>
+                <button
+                  onClick={() => setEditingJob("new")}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#ff6b00] text-white font-semibold text-sm shadow-md hover:bg-[#e55d00] transition-colors"
+                >
+                  <FiPlus size={14} />
+                  Add Job
+                </button>
+              </div>
+              <div className="space-y-3">
+                {jobs.map((j) => (
+                  <JobRow key={j.id} job={j} onEdit={() => setEditingJob(j)} onDelete={() => removeJob(j.id)} />
+                ))}
+              </div>
+            </section>
+          ) : (
+            <section>
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-xl font-bold text-[#1a1a1a]">Featured Projects</h2>
+                <button
+                  onClick={() => setEditingProject("new")}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#ff6b00] text-white font-semibold text-sm shadow-md hover:bg-[#e55d00] transition-colors"
+                >
+                  <FiPlus size={14} />
+                  Add Project
+                </button>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {projects.map((p) => (
+                  <ProjectRow key={p.id} project={p} onEdit={() => setEditingProject(p)} onDelete={() => removeProject(p.id)} />
+                ))}
+              </div>
+            </section>
+          )}
+        </main>
       </div>
 
       {/* Modals */}
@@ -498,112 +441,166 @@ export default function AdminDashboard({
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed right-4 lg:right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-2xl border ${
+          className={`fixed bottom-6 right-4 lg:right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-lg border ${
             toast.kind === "ok"
-              ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
-              : "bg-red-500/15 border-red-500/40 text-red-300"
+              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+              : "bg-red-50 border-red-200 text-red-700"
           }`}
-          // On mobile, float above the bottom nav. On desktop, the usual spot.
-          style={{
-            bottom: "calc(88px + env(safe-area-inset-bottom))",
-          }}
         >
           {toast.msg}
         </div>
       )}
-
-      {/* Mobile bottom tab bar — only renders on screens < lg */}
-      <MobileBottomNav active={tab} onSelect={(t) => setTab(t)} />
-    </main>
-  );
-}
-
-/* ─────────────────────────── helpers ─────────────────────────── */
-
-function StatPill({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string | number;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-2xl px-4 py-3 min-w-[88px] border ${
-        highlight
-          ? "bg-gradient-to-br from-emerald-500/15 to-emerald-500/[0.04] border-emerald-500/30"
-          : "bg-white/[0.03] border-white/[0.06]"
-      }`}
-    >
-      <p
-        className={`font-black text-xl leading-none ${
-          highlight ? "text-emerald-400" : "text-white"
-        }`}
-      >
-        {value}
-      </p>
-      <p className="text-[10px] font-mono tracking-[0.15em] uppercase text-[#666] mt-1.5">
-        {label}
-      </p>
     </div>
   );
 }
 
-function JobRow({
-  job,
-  onEdit,
-  onDelete,
+/* ─────────────────────────── Dashboard Overview ─────────────────────────── */
+
+function DashboardOverview({
+  jobs,
+  projects,
+  onNavigate,
 }: {
-  job: Job;
-  onEdit: () => void;
-  onDelete: () => void;
+  jobs: Job[];
+  projects: Project[];
+  onNavigate: (tab: Tab) => void;
+}) {
+  const quickActions: Array<{
+    id: Tab;
+    label: string;
+    desc: string;
+    icon: React.ComponentType<{ size?: number; className?: string }>;
+    color: string;
+  }> = [
+    { id: "chat", label: "AI Assistant", desc: "Talk to your data", icon: FiMessageSquare, color: "from-blue-500 to-blue-600" },
+    { id: "resume", label: "Resume", desc: "Tailor & export", icon: FiFileText, color: "from-purple-500 to-purple-600" },
+    { id: "social", label: "Social", desc: "Compose & post", icon: FiShare2, color: "from-pink-500 to-pink-600" },
+    { id: "agents", label: "Agents", desc: "News & job scouts", icon: FiCpu, color: "from-emerald-500 to-emerald-600" },
+    { id: "contacts", label: "Contacts", desc: "Recruiter CRM", icon: FiUsers, color: "from-amber-500 to-amber-600" },
+    { id: "personal", label: "Life", desc: "Notepad & agent", icon: FiHeart, color: "from-rose-400 to-rose-500" },
+  ];
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-2xl lg:text-3xl font-bold text-[#1a1a1a]">
+          Welcome back, <span className="text-[#ff6b00]">Krishna</span>
+        </h2>
+        <p className="text-[#888] mt-1 text-sm">Here&apos;s your admin overview.</p>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard label="Jobs" value={jobs.length} icon={FiBriefcase} />
+        <StatCard label="Projects" value={projects.length} icon={FiFolder} />
+        <StatCard label="Agents" value={8} icon={FiCpu} />
+        <StatCard label="Status" value="LIVE" icon={FiActivity} highlight />
+      </div>
+
+      {/* Quick actions */}
+      <div>
+        <h3 className="text-sm font-semibold text-[#999] uppercase tracking-wider mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={action.id}
+                onClick={() => onNavigate(action.id)}
+                className="bg-white rounded-2xl border border-[#E8DFD4] p-4 text-left hover:shadow-md hover:border-[#ff6b00]/30 transition-all group"
+              >
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${action.color} flex items-center justify-center mb-3`}>
+                  <Icon size={18} className="text-white" />
+                </div>
+                <p className="font-semibold text-[#1a1a1a] text-sm">{action.label}</p>
+                <p className="text-xs text-[#999] mt-0.5">{action.desc}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Recent jobs */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-[#999] uppercase tracking-wider">Recent Experience</h3>
+          <button onClick={() => onNavigate("jobs")} className="text-xs text-[#ff6b00] font-semibold hover:underline">
+            View all
+          </button>
+        </div>
+        <div className="space-y-3">
+          {jobs.slice(0, 3).map((j) => (
+            <div key={j.id} className="bg-white rounded-xl border border-[#E8DFD4] p-4 flex items-center gap-4">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 overflow-hidden"
+                style={{ backgroundColor: j.logo_bg }}
+              >
+                {j.logo_src ? (
+                  <Image src={j.logo_src} alt={j.company} width={32} height={32} className="object-contain max-w-[80%] max-h-[80%]" />
+                ) : (
+                  <span className="text-[9px] font-bold text-white">{j.company.slice(0, 3).toUpperCase()}</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-[#1a1a1a] text-sm truncate">{j.title}</p>
+                <p className="text-xs text-[#999]">{j.company} &middot; {j.period}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  highlight,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  highlight?: boolean;
 }) {
   return (
-    <div className="rounded-2xl bg-[#1a1a1a] border border-white/[0.06] p-5 flex items-start gap-4">
-      <div
-        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
-        style={{ backgroundColor: job.logo_bg }}
-      >
+    <div className={`bg-white rounded-2xl border p-4 ${highlight ? "border-emerald-200" : "border-[#E8DFD4]"}`}>
+      <Icon size={18} className={highlight ? "text-emerald-500" : "text-[#bbb]"} />
+      <p className={`text-2xl font-bold mt-2 ${highlight ? "text-emerald-600" : "text-[#1a1a1a]"}`}>{value}</p>
+      <p className="text-xs text-[#999] mt-0.5">{label}</p>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Rows ─────────────────────────── */
+
+function JobRow({ job, onEdit, onDelete }: { job: Job; onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="rounded-2xl bg-white border border-[#E8DFD4] p-5 flex items-start gap-4 hover:shadow-sm transition-shadow">
+      <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden" style={{ backgroundColor: job.logo_bg }}>
         {job.logo_src ? (
-          <Image
-            src={job.logo_src}
-            alt={job.company}
-            width={40}
-            height={40}
-            className="object-contain max-w-[80%] max-h-[80%]"
-          />
+          <Image src={job.logo_src} alt={job.company} width={40} height={40} className="object-contain max-w-[80%] max-h-[80%]" />
         ) : (
           <span className="text-[10px] font-bold text-white">{job.company.slice(0, 3).toUpperCase()}</span>
         )}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-3 flex-wrap">
-          <h3 className="font-bold text-white">{job.title}</h3>
+          <h3 className="font-bold text-[#1a1a1a]">{job.title}</h3>
           <span className="text-xs text-[#ff6b00] font-mono">{job.company}</span>
         </div>
-        <p className="text-xs text-[#666] mt-0.5">{job.period} · {job.location}</p>
-        <p className="text-sm text-[#888] mt-2 line-clamp-2">{job.description}</p>
+        <p className="text-xs text-[#999] mt-0.5">{job.period} &middot; {job.location}</p>
+        <p className="text-sm text-[#666] mt-2 line-clamp-2">{job.description}</p>
         {job.notes && (
-          <p className="text-xs italic text-[#ff8c38]/80 mt-2 border-l-2 border-[#ff6b00]/30 pl-2">
-            {job.notes}
-          </p>
+          <p className="text-xs italic text-[#ff8c38] mt-2 border-l-2 border-[#ff6b00]/30 pl-2">{job.notes}</p>
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <button
-          onClick={onEdit}
-          className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.06] hover:border-[#ff6b00]/40 hover:text-[#ff6b00] flex items-center justify-center transition-colors"
-          aria-label="Edit"
-        >
+        <button onClick={onEdit} className="w-9 h-9 rounded-full bg-[#f5f0ea] border border-[#E8DFD4] hover:border-[#ff6b00]/40 hover:text-[#ff6b00] flex items-center justify-center text-[#999] transition-colors">
           <FiEdit2 size={13} />
         </button>
-        <button
-          onClick={onDelete}
-          className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.06] hover:border-red-500/40 hover:text-red-400 flex items-center justify-center transition-colors"
-          aria-label="Delete"
-        >
+        <button onClick={onDelete} className="w-9 h-9 rounded-full bg-[#f5f0ea] border border-[#E8DFD4] hover:border-red-400 hover:text-red-500 flex items-center justify-center text-[#999] transition-colors">
           <FiTrash2 size={13} />
         </button>
       </div>
@@ -611,61 +608,31 @@ function JobRow({
   );
 }
 
-function ProjectRow({
-  project,
-  onEdit,
-  onDelete,
-}: {
-  project: Project;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
+function ProjectRow({ project, onEdit, onDelete }: { project: Project; onEdit: () => void; onDelete: () => void }) {
   return (
-    <div className="rounded-2xl bg-[#1a1a1a] border border-white/[0.06] overflow-hidden">
-      <div className="relative aspect-[16/9] bg-[#0a0a0a]">
+    <div className="rounded-2xl bg-white border border-[#E8DFD4] overflow-hidden hover:shadow-sm transition-shadow">
+      <div className="relative aspect-[16/9] bg-[#f5f0ea]">
         {project.preview ? (
-          <Image
-            src={project.preview}
-            alt={project.title}
-            fill
-            sizes="(max-width: 640px) 100vw, 50vw"
-            className="object-cover object-top"
-            unoptimized
-          />
+          <Image src={project.preview} alt={project.title} fill sizes="(max-width: 640px) 100vw, 50vw" className="object-cover object-top" unoptimized />
         ) : (
           <div className={`absolute inset-0 bg-gradient-to-br ${project.gradient} opacity-40`} />
         )}
-        <span className="absolute top-3 left-3 text-xs font-mono tracking-widest bg-black/60 px-2 py-1 rounded">
-          {project.number}
-        </span>
+        <span className="absolute top-3 left-3 text-xs font-mono tracking-widest bg-black/50 text-white px-2 py-1 rounded">{project.number}</span>
       </div>
       <div className="p-5">
-        <h3 className="font-bold text-white">{project.title}</h3>
+        <h3 className="font-bold text-[#1a1a1a]">{project.title}</h3>
         <p className="text-xs text-[#ff6b00] font-mono mt-0.5">{project.subtitle}</p>
-        <p className="text-sm text-[#888] mt-2 line-clamp-2">{project.description}</p>
+        <p className="text-sm text-[#666] mt-2 line-clamp-2">{project.description}</p>
         <div className="flex items-center justify-between mt-4">
-          <a
-            href={project.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-[#ff6b00] inline-flex items-center gap-1 hover:underline truncate"
-          >
+          <a href={project.link} target="_blank" rel="noopener noreferrer" className="text-xs text-[#ff6b00] inline-flex items-center gap-1 hover:underline truncate">
             <FiExternalLink size={11} />
             {project.link.replace(/^https?:\/\//, "").slice(0, 30)}
           </a>
           <div className="flex items-center gap-2">
-            <button
-              onClick={onEdit}
-              className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.06] hover:border-[#ff6b00]/40 hover:text-[#ff6b00] flex items-center justify-center transition-colors"
-              aria-label="Edit"
-            >
+            <button onClick={onEdit} className="w-9 h-9 rounded-full bg-[#f5f0ea] border border-[#E8DFD4] hover:border-[#ff6b00]/40 hover:text-[#ff6b00] flex items-center justify-center text-[#999] transition-colors">
               <FiEdit2 size={13} />
             </button>
-            <button
-              onClick={onDelete}
-              className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.06] hover:border-red-500/40 hover:text-red-400 flex items-center justify-center transition-colors"
-              aria-label="Delete"
-            >
+            <button onClick={onDelete} className="w-9 h-9 rounded-full bg-[#f5f0ea] border border-[#E8DFD4] hover:border-red-400 hover:text-red-500 flex items-center justify-center text-[#999] transition-colors">
               <FiTrash2 size={13} />
             </button>
           </div>
@@ -675,27 +642,15 @@ function ProjectRow({
   );
 }
 
-/* ─────────────────────────── editors ─────────────────────────── */
+/* ─────────────────────────── Editors ─────────────────────────── */
 
-function ModalShell({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
+function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl bg-[#0f0f0f] border border-white/[0.08] rounded-3xl shadow-[0_30px_80px_rgba(0,0,0,0.7)] my-8">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] sticky top-0 bg-[#0f0f0f]/95 backdrop-blur-xl rounded-t-3xl">
-          <h2 className="font-bold text-lg">{title}</h2>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/10 flex items-center justify-center hover:bg-white/[0.08]"
-            aria-label="Close"
-          >
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+      <div className="w-full max-w-2xl bg-white border border-[#E8DFD4] rounded-2xl shadow-xl my-8">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8DFD4] sticky top-0 bg-white rounded-t-2xl">
+          <h2 className="font-bold text-lg text-[#1a1a1a]">{title}</h2>
+          <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#f5f0ea] border border-[#E8DFD4] flex items-center justify-center text-[#999] hover:text-[#555]">
             <FiX size={16} />
           </button>
         </div>
@@ -705,38 +660,20 @@ function ModalShell({
   );
 }
 
-function Field({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: React.ReactNode;
-  hint?: string;
-}) {
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
     <label className="block">
-      <span className="block text-xs font-mono tracking-[0.15em] uppercase text-[#888] mb-2">
-        {label}
-      </span>
+      <span className="block text-xs font-semibold tracking-wide uppercase text-[#999] mb-2">{label}</span>
       {children}
-      {hint && <span className="block text-[11px] text-[#555] mt-1.5">{hint}</span>}
+      {hint && <span className="block text-[11px] text-[#bbb] mt-1.5">{hint}</span>}
     </label>
   );
 }
 
 const inputClass =
-  "w-full px-4 py-2.5 rounded-xl bg-[#1a1a1a] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-sm text-white placeholder:text-[#555] transition-colors";
+  "w-full px-4 py-2.5 rounded-xl bg-[#FAFAF8] border border-[#E8DFD4] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none text-sm text-[#1a1a1a] placeholder:text-[#ccc] transition-colors";
 
-function ImageUpload({
-  value,
-  kind,
-  onChange,
-}: {
-  value: string;
-  kind: "logo" | "preview";
-  onChange: (url: string) => void;
-}) {
+function ImageUpload({ value, kind, onChange }: { value: string; kind: "logo" | "preview"; onChange: (url: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -749,42 +686,23 @@ function ImageUpload({
     const res = await fetch("/api/admin/upload", { method: "POST", body: form });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
-    if (!res.ok) {
-      setErr(data.error || "Upload failed");
-      return;
-    }
+    if (!res.ok) { setErr(data.error || "Upload failed"); return; }
     onChange(data.url);
   }
 
   return (
     <div>
       <div className="flex items-center gap-3">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={inputClass}
-          placeholder="/logos/example.png"
-        />
-        <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.04] hover:border-[#ff6b00]/40 hover:text-[#ff6b00] cursor-pointer text-sm whitespace-nowrap shrink-0 transition-colors">
+        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} className={inputClass} placeholder="/logos/example.png" />
+        <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#E8DFD4] bg-[#f5f0ea] hover:border-[#ff6b00]/40 hover:text-[#ff6b00] cursor-pointer text-sm whitespace-nowrap shrink-0 text-[#555] transition-colors">
           <FiUpload size={14} />
-          {busy ? "…" : "Upload"}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) pick(f);
-              e.target.value = "";
-            }}
-          />
+          {busy ? "..." : "Upload"}
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = ""; }} />
         </label>
       </div>
-      {err && <p className="text-xs text-red-400 mt-1.5">{err}</p>}
+      {err && <p className="text-xs text-red-500 mt-1.5">{err}</p>}
       {value && (
-        <div className="mt-2 inline-block rounded-lg overflow-hidden border border-white/10 bg-[#1a1a1a]">
-          {/* preview uses native img to avoid Next/Image domain config for external URLs */}
+        <div className="mt-2 inline-block rounded-lg overflow-hidden border border-[#E8DFD4] bg-[#f5f0ea]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={value} alt="preview" className="max-h-24 max-w-[200px] object-contain" />
         </div>
@@ -793,23 +711,12 @@ function ImageUpload({
   );
 }
 
-function ChipInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string[];
-  onChange: (v: string[]) => void;
-  placeholder?: string;
-}) {
+function ChipInput({ value, onChange, placeholder }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
   const [draft, setDraft] = useState("");
   function add() {
     const v = draft.trim();
     if (!v) return;
-    if (value.includes(v)) {
-      setDraft("");
-      return;
-    }
+    if (value.includes(v)) { setDraft(""); return; }
     onChange([...value, v]);
     setDraft("");
   }
@@ -817,359 +724,105 @@ function ChipInput({
     <div>
       <div className="flex flex-wrap gap-2 mb-2">
         {value.map((v) => (
-          <span
-            key={v}
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ff6b00]/10 border border-[#ff6b00]/25 text-[#ff8c38] text-xs"
-          >
+          <span key={v} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ff6b00]/10 border border-[#ff6b00]/25 text-[#ff6b00] text-xs">
             {v}
-            <button
-              type="button"
-              onClick={() => onChange(value.filter((x) => x !== v))}
-              className="hover:text-white"
-            >
-              <FiX size={11} />
-            </button>
+            <button type="button" onClick={() => onChange(value.filter((x) => x !== v))} className="hover:text-red-500"><FiX size={11} /></button>
           </span>
         ))}
       </div>
       <div className="flex gap-2">
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === ",") {
-              e.preventDefault();
-              add();
-            }
-          }}
-          className={inputClass}
-          placeholder={placeholder ?? "Type and press Enter"}
-        />
-        <button
-          type="button"
-          onClick={add}
-          className="px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm hover:border-[#ff6b00]/40 hover:text-[#ff6b00] transition-colors"
-        >
-          Add
-        </button>
+        <input type="text" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add(); } }} className={inputClass} placeholder={placeholder ?? "Type and press Enter"} />
+        <button type="button" onClick={add} className="px-4 rounded-xl bg-[#f5f0ea] border border-[#E8DFD4] text-sm text-[#555] hover:border-[#ff6b00]/40 hover:text-[#ff6b00] transition-colors">Add</button>
       </div>
     </div>
   );
 }
 
-function JobEditor({
-  initial,
-  onClose,
-  onSave,
-}: {
-  initial: Job | null;
-  onClose: () => void;
-  onSave: (input: JobInput) => Promise<void>;
-}) {
+function JobEditor({ initial, onClose, onSave }: { initial: Job | null; onClose: () => void; onSave: (input: JobInput) => Promise<void> }) {
   const [form, setForm] = useState<JobInput>(() => {
     if (!initial) return EMPTY_JOB;
     const { id: _id, created_at: _ca, ...rest } = initial;
-    void _id;
-    void _ca;
+    void _id; void _ca;
     return rest;
   });
   const [saving, setSaving] = useState(false);
 
-  function patch<K extends keyof JobInput>(key: K, value: JobInput[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
+  function patch<K extends keyof JobInput>(key: K, value: JobInput[K]) { setForm((f) => ({ ...f, [key]: value })); }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    await onSave(form);
-    setSaving(false);
-  }
+  async function submit(e: React.FormEvent) { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }
 
   return (
     <ModalShell title={initial ? "Edit Job" : "Add Job"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-5">
         <div className="grid sm:grid-cols-2 gap-4">
-          <Field label="Title">
-            <input
-              required
-              value={form.title}
-              onChange={(e) => patch("title", e.target.value)}
-              className={inputClass}
-              placeholder="SAP Business Analyst"
-            />
-          </Field>
-          <Field label="Company">
-            <input
-              required
-              value={form.company}
-              onChange={(e) => patch("company", e.target.value)}
-              className={inputClass}
-              placeholder="The Coca-Cola Company"
-            />
-          </Field>
-          <Field label="Category">
-            <input
-              value={form.category}
-              onChange={(e) => patch("category", e.target.value)}
-              className={inputClass}
-              placeholder="Enterprise & Integration"
-            />
-          </Field>
-          <Field label="Location">
-            <input
-              value={form.location}
-              onChange={(e) => patch("location", e.target.value)}
-              className={inputClass}
-              placeholder="Atlanta, USA"
-            />
-          </Field>
-          <Field label="Period">
-            <input
-              value={form.period}
-              onChange={(e) => patch("period", e.target.value)}
-              className={inputClass}
-              placeholder="Feb 2025 – Present"
-            />
-          </Field>
-          <Field label="Sort order" hint="Lower numbers come first">
-            <input
-              type="number"
-              value={form.sort_order}
-              onChange={(e) => patch("sort_order", Number(e.target.value))}
-              className={inputClass}
-            />
-          </Field>
+          <Field label="Title"><input required value={form.title} onChange={(e) => patch("title", e.target.value)} className={inputClass} placeholder="SAP Business Analyst" /></Field>
+          <Field label="Company"><input required value={form.company} onChange={(e) => patch("company", e.target.value)} className={inputClass} placeholder="The Coca-Cola Company" /></Field>
+          <Field label="Category"><input value={form.category} onChange={(e) => patch("category", e.target.value)} className={inputClass} placeholder="Enterprise & Integration" /></Field>
+          <Field label="Location"><input value={form.location} onChange={(e) => patch("location", e.target.value)} className={inputClass} placeholder="Atlanta, USA" /></Field>
+          <Field label="Period"><input value={form.period} onChange={(e) => patch("period", e.target.value)} className={inputClass} placeholder="Feb 2025 - Present" /></Field>
+          <Field label="Sort order" hint="Lower numbers come first"><input type="number" value={form.sort_order} onChange={(e) => patch("sort_order", Number(e.target.value))} className={inputClass} /></Field>
         </div>
-
         <div className="grid sm:grid-cols-[1fr_auto] gap-4">
-          <Field label="Logo image" hint="Paste a /logos/… path or upload below.">
-            <ImageUpload
-              value={form.logo_src ?? ""}
-              kind="logo"
-              onChange={(url) => patch("logo_src", url || null)}
-            />
-          </Field>
-          <Field label="Logo background">
-            <input
-              type="color"
-              value={form.logo_bg}
-              onChange={(e) => patch("logo_bg", e.target.value)}
-              className="w-16 h-12 rounded-lg border border-white/[0.08] bg-[#1a1a1a] cursor-pointer"
-            />
-          </Field>
+          <Field label="Logo image" hint="Paste a /logos/... path or upload."><ImageUpload value={form.logo_src ?? ""} kind="logo" onChange={(url) => patch("logo_src", url || null)} /></Field>
+          <Field label="Logo bg"><input type="color" value={form.logo_bg} onChange={(e) => patch("logo_bg", e.target.value)} className="w-16 h-12 rounded-lg border border-[#E8DFD4] bg-[#FAFAF8] cursor-pointer" /></Field>
         </div>
-
-        <Field label="Description">
-          <textarea
-            value={form.description}
-            onChange={(e) => patch("description", e.target.value)}
-            rows={3}
-            className={inputClass}
-            placeholder="What you did in this role…"
-          />
-        </Field>
-
-        <Field label="Highlights" hint="One per chip. Press Enter to add.">
-          <ChipInput
-            value={form.highlights}
-            onChange={(v) => patch("highlights", v)}
-            placeholder="e.g. 99.9% master data accuracy"
-          />
-        </Field>
-
-        <Field label="Tags" hint="Tech / domain keywords">
-          <ChipInput
-            value={form.tags}
-            onChange={(v) => patch("tags", v)}
-            placeholder="e.g. SAP S/4HANA"
-          />
-        </Field>
-
-        <Field label="Personal notes / thoughts" hint="Private to you in the admin — not shown on public site… yet.">
-          <textarea
-            value={form.notes ?? ""}
-            onChange={(e) => patch("notes", e.target.value || null)}
-            rows={3}
-            className={inputClass}
-            placeholder="What I learned, why I left, what to remember…"
-          />
-        </Field>
-
+        <Field label="Description"><textarea value={form.description} onChange={(e) => patch("description", e.target.value)} rows={3} className={inputClass} placeholder="What you did..." /></Field>
+        <Field label="Highlights" hint="One per chip."><ChipInput value={form.highlights} onChange={(v) => patch("highlights", v)} placeholder="e.g. 99.9% accuracy" /></Field>
+        <Field label="Tags"><ChipInput value={form.tags} onChange={(v) => patch("tags", v)} placeholder="e.g. SAP S/4HANA" /></Field>
+        <Field label="Notes" hint="Private."><textarea value={form.notes ?? ""} onChange={(e) => patch("notes", e.target.value || null)} rows={3} className={inputClass} /></Field>
         <div className="flex items-center justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2.5 rounded-full border border-white/10 text-sm hover:bg-white/[0.04]"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-bold text-sm shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.02] disabled:opacity-60"
-          >
-            <FiSave size={14} />
-            {saving ? "Saving…" : "Save"}
-          </button>
+          <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl border border-[#E8DFD4] text-sm text-[#555] hover:bg-[#f5f0ea]">Cancel</button>
+          <button type="submit" disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#ff6b00] text-white font-bold text-sm shadow-md hover:bg-[#e55d00] disabled:opacity-60"><FiSave size={14} />{saving ? "Saving..." : "Save"}</button>
         </div>
       </form>
     </ModalShell>
   );
 }
 
-function ProjectEditor({
-  initial,
-  onClose,
-  onSave,
-}: {
-  initial: Project | null;
-  onClose: () => void;
-  onSave: (input: ProjectInput) => Promise<void>;
-}) {
+function ProjectEditor({ initial, onClose, onSave }: { initial: Project | null; onClose: () => void; onSave: (input: ProjectInput) => Promise<void> }) {
   const [form, setForm] = useState<ProjectInput>(() => {
     if (!initial) return EMPTY_PROJECT;
     const { id: _id, created_at: _ca, ...rest } = initial;
-    void _id;
-    void _ca;
+    void _id; void _ca;
     return rest;
   });
   const [saving, setSaving] = useState(false);
 
-  function patch<K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
+  function patch<K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) { setForm((f) => ({ ...f, [key]: value })); }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    await onSave(form);
-    setSaving(false);
-  }
+  async function submit(e: React.FormEvent) { e.preventDefault(); setSaving(true); await onSave(form); setSaving(false); }
 
   return (
     <ModalShell title={initial ? "Edit Project" : "Add Project"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-5">
         <div className="grid sm:grid-cols-[1fr_120px] gap-4">
-          <Field label="Title">
-            <input
-              required
-              value={form.title}
-              onChange={(e) => patch("title", e.target.value)}
-              className={inputClass}
-              placeholder="WealthClaude"
-            />
-          </Field>
-          <Field label="Number">
-            <input
-              value={form.number}
-              onChange={(e) => patch("number", e.target.value)}
-              className={inputClass}
-              placeholder="01"
-            />
-          </Field>
+          <Field label="Title"><input required value={form.title} onChange={(e) => patch("title", e.target.value)} className={inputClass} placeholder="WealthClaude" /></Field>
+          <Field label="Number"><input value={form.number} onChange={(e) => patch("number", e.target.value)} className={inputClass} placeholder="01" /></Field>
         </div>
-        <Field label="Subtitle">
-          <input
-            value={form.subtitle}
-            onChange={(e) => patch("subtitle", e.target.value)}
-            className={inputClass}
-            placeholder="AI Finance Tracking Platform"
-          />
-        </Field>
-        <Field label="Description">
-          <textarea
-            value={form.description}
-            onChange={(e) => patch("description", e.target.value)}
-            rows={3}
-            className={inputClass}
-            placeholder="What this project does…"
-          />
-        </Field>
+        <Field label="Subtitle"><input value={form.subtitle} onChange={(e) => patch("subtitle", e.target.value)} className={inputClass} placeholder="AI Finance Tracking Platform" /></Field>
+        <Field label="Description"><textarea value={form.description} onChange={(e) => patch("description", e.target.value)} rows={3} className={inputClass} placeholder="What this project does..." /></Field>
         <Field label="Link">
           <div className="flex gap-2">
-            <input
-              type="url"
-              value={form.link}
-              onChange={(e) => patch("link", e.target.value)}
-              className={inputClass + " flex-1"}
-              placeholder="https://example.com"
-            />
+            <input type="url" value={form.link} onChange={(e) => patch("link", e.target.value)} className={inputClass + " flex-1"} placeholder="https://example.com" />
             {form.link && form.link.startsWith("http") && (
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const r = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(form.link)}&screenshot=true&meta=false&embed=screenshot.url`);
-                    const d = await r.json();
-                    if (d.status === "success" && d.data?.screenshot?.url) {
-                      patch("preview", d.data.screenshot.url);
-                    } else {
-                      // Fallback: use thumbnail from microlink
-                      const r2 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(form.link)}`);
-                      const d2 = await r2.json();
-                      if (d2.data?.image?.url) patch("preview", d2.data.image.url);
-                    }
-                  } catch {}
-                }}
-                className="px-3 py-2 rounded-xl bg-[#ff6b00]/15 border border-[#ff6b00]/30 text-xs font-bold text-[#ff8c38] hover:bg-[#ff6b00]/25 whitespace-nowrap"
-              >
-                Capture
-              </button>
+              <button type="button" onClick={async () => {
+                try {
+                  const r = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(form.link)}&screenshot=true&meta=false&embed=screenshot.url`);
+                  const d = await r.json();
+                  if (d.status === "success" && d.data?.screenshot?.url) { patch("preview", d.data.screenshot.url); }
+                  else { const r2 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(form.link)}`); const d2 = await r2.json(); if (d2.data?.image?.url) patch("preview", d2.data.image.url); }
+                } catch {}
+              }} className="px-3 py-2 rounded-xl bg-[#ff6b00]/10 border border-[#ff6b00]/30 text-xs font-bold text-[#ff6b00] hover:bg-[#ff6b00]/20 whitespace-nowrap">Capture</button>
             )}
           </div>
         </Field>
-        <Field label="Preview image" hint="Auto-captured from link, or upload manually.">
-          <ImageUpload
-            value={form.preview}
-            kind="preview"
-            onChange={(url) => patch("preview", url)}
-          />
-        </Field>
-        <Field
-          label="Gradient (Tailwind class)"
-          hint='e.g. "from-[#22c55e] to-[#16a34a]" — used as the card accent.'
-        >
-          <input
-            value={form.gradient}
-            onChange={(e) => patch("gradient", e.target.value)}
-            className={`${inputClass} font-mono text-xs`}
-            placeholder="from-[#ff6b00] to-[#ff8c38]"
-          />
-        </Field>
-        <Field label="Tags">
-          <ChipInput
-            value={form.tags}
-            onChange={(v) => patch("tags", v)}
-            placeholder="e.g. Next.js"
-          />
-        </Field>
-        <Field label="Sort order" hint="Lower numbers come first">
-          <input
-            type="number"
-            value={form.sort_order}
-            onChange={(e) => patch("sort_order", Number(e.target.value))}
-            className={inputClass}
-          />
-        </Field>
-
+        <Field label="Preview image" hint="Auto-captured or upload."><ImageUpload value={form.preview} kind="preview" onChange={(url) => patch("preview", url)} /></Field>
+        <Field label="Gradient" hint='e.g. "from-[#22c55e] to-[#16a34a]"'><input value={form.gradient} onChange={(e) => patch("gradient", e.target.value)} className={`${inputClass} font-mono text-xs`} placeholder="from-[#ff6b00] to-[#ff8c38]" /></Field>
+        <Field label="Tags"><ChipInput value={form.tags} onChange={(v) => patch("tags", v)} placeholder="e.g. Next.js" /></Field>
+        <Field label="Sort order" hint="Lower = first"><input type="number" value={form.sort_order} onChange={(e) => patch("sort_order", Number(e.target.value))} className={inputClass} /></Field>
         <div className="flex items-center justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2.5 rounded-full border border-white/10 text-sm hover:bg-white/[0.04]"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-bold text-sm shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.02] disabled:opacity-60"
-          >
-            <FiSave size={14} />
-            {saving ? "Saving…" : "Save"}
-          </button>
+          <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl border border-[#E8DFD4] text-sm text-[#555] hover:bg-[#f5f0ea]">Cancel</button>
+          <button type="submit" disabled={saving} className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#ff6b00] text-white font-bold text-sm shadow-md hover:bg-[#e55d00] disabled:opacity-60"><FiSave size={14} />{saving ? "Saving..." : "Save"}</button>
         </div>
       </form>
     </ModalShell>
