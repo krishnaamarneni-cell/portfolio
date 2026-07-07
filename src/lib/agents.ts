@@ -18,7 +18,6 @@ import {
   mcpListTools,
   type McpTool,
 } from "@/lib/mcp";
-import { startRun, finishRun } from "@/lib/task-thread";
 
 /** Agentic models available on Groq — those with built-in tools. */
 export const AGENT_MODELS = [
@@ -172,39 +171,14 @@ async function runOnce(opts: {
 
 /** Run an agent with an automatic fallback chain. If the requested model
  *  returns empty content or errors, we retry on the next model down until one
- *  produces something. The model that actually answered is returned.
- *
- *  When `slug` is provided, the run is logged to agent_runs for observability.
- *  Logging is best-effort — failures never block the agent from completing. */
+ *  produces something. The model that actually answered is returned. */
 export async function runAgent(opts: {
   apiKey: string;
   model: string;
   systemPrompt: string;
   userPrompt: string;
   maxTokens?: number;
-  slug?: string;
-  taskId?: string;
-  parentRunId?: string;
-  goal?: string;
-}): Promise<{ ok: boolean; content?: string; error?: string; modelUsed?: string; runId?: string }> {
-  const t0 = Date.now();
-  let runId: string | undefined;
-
-  if (opts.slug) {
-    try {
-      const run = await startRun({
-        agent_slug: opts.slug,
-        task_id: opts.taskId,
-        parent_run_id: opts.parentRunId,
-        goal: opts.goal,
-        model: opts.model,
-      });
-      runId = run.id;
-    } catch {
-      // DB not migrated yet or insert failed — continue without logging
-    }
-  }
-
+}): Promise<{ ok: boolean; content?: string; error?: string; modelUsed?: string }> {
   const tried: Array<{ model: string; error: string }> = [];
   const fallbacks = buildFallbackChain(opts.model);
   for (const m of fallbacks) {
@@ -217,31 +191,16 @@ export async function runAgent(opts: {
         opts.maxTokens && opts.maxTokens > 0 ? opts.maxTokens : m.startsWith("compound") ? 4096 : 2400,
     });
     if (res.ok && res.content) {
-      if (runId) {
-        finishRun(runId, {
-          status: "success",
-          output: res.content.slice(0, 10_000),
-          latency_ms: Date.now() - t0,
-        }).catch(() => {});
-      }
-      return { ok: true, content: res.content, modelUsed: m, runId };
+      return { ok: true, content: res.content, modelUsed: m };
     }
     tried.push({ model: m, error: res.error ?? "unknown" });
   }
-
-  const error =
-    "All models failed. " +
-    tried.map((t) => `${t.model}: ${t.error}`).join(" · ");
-
-  if (runId) {
-    finishRun(runId, {
-      status: "failed",
-      error,
-      latency_ms: Date.now() - t0,
-    }).catch(() => {});
-  }
-
-  return { ok: false, error, runId };
+  return {
+    ok: false,
+    error:
+      "All models failed. " +
+      tried.map((t) => `${t.model}: ${t.error}`).join(" · "),
+  };
 }
 
 /** Pull full portfolio snapshot from WealthClaude MCP — holdings with current

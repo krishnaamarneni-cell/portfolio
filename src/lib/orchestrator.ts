@@ -10,7 +10,6 @@ import {
   type AgentRegistryEntry,
 } from "@/lib/task-thread";
 import { runAgent, resolveAgentModel } from "@/lib/agents";
-import { buildProfileContext } from "@/lib/memory";
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -148,20 +147,41 @@ export async function orchestrate(
     req.systemPromptOverride ??
     buildSystemPrompt(agent, memoryContext);
 
-  // 6. Run the agent
+  // 6. Start run log
   const t0 = Date.now();
+  let runId: string | undefined;
+  try {
+    const run = await startRun({
+      agent_slug: slug,
+      task_id: task.id,
+      goal: req.goal,
+      model,
+    });
+    runId = run.id;
+  } catch {
+    // DB not migrated yet — continue without logging
+  }
+
+  // 7. Run the agent
   const result = await runAgent({
     apiKey,
     model,
     systemPrompt,
     userPrompt: req.goal,
     maxTokens: req.maxTokens ?? (agent?.max_tokens || 4096),
-    slug,
-    taskId: task.id,
-    goal: req.goal,
   });
 
-  // 7. Update task status
+  // 8. Finish run log
+  if (runId) {
+    finishRun(runId, {
+      status: result.ok ? "success" : "failed",
+      output: result.content?.slice(0, 10_000),
+      error: result.error,
+      latency_ms: Date.now() - t0,
+    }).catch(() => {});
+  }
+
+  // 9. Update task status
   await updateTask(task.id, {
     status: result.ok ? "done" : "failed",
   });
@@ -169,7 +189,7 @@ export async function orchestrate(
   return {
     ok: result.ok,
     taskId: task.id,
-    runId: result.runId,
+    runId,
     agentSlug: slug,
     modelUsed: result.modelUsed,
     content: result.content,
