@@ -76,6 +76,64 @@ export async function updateSettings(
   return data as AdminSettings;
 }
 
+/* ─────────────── Market data (free APIs) ─────────────── */
+
+type IndexQuote = { price: number; change: number };
+
+type MarketSnapshot = {
+  sp500: IndexQuote | null;
+  dow: IndexQuote | null;
+  nasdaq: IndexQuote | null;
+  sensex: IndexQuote | null;
+  nifty: IndexQuote | null;
+  btc: IndexQuote | null;
+  eth: IndexQuote | null;
+  fearGreed: { value: number; label: string } | null;
+};
+
+async function fetchQuote(symbol: string): Promise<IndexQuote | null> {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const meta = json?.chart?.result?.[0]?.meta;
+    if (!meta) return null;
+    const price = meta.regularMarketPrice ?? 0;
+    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
+    const change = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
+    return { price, change };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchMarketData(): Promise<MarketSnapshot> {
+  const [sp500, dow, nasdaq, sensex, nifty, crypto, fg] = await Promise.all([
+    fetchQuote("^GSPC"),
+    fetchQuote("^DJI"),
+    fetchQuote("^IXIC"),
+    fetchQuote("^BSESN"),
+    fetchQuote("^NSEI"),
+    fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true", { signal: AbortSignal.timeout(8000) })
+      .then((r) => r.json())
+      .catch(() => null),
+    fetch("https://api.alternative.me/fng/?limit=1", { signal: AbortSignal.timeout(8000) })
+      .then((r) => r.json())
+      .catch(() => null),
+  ]);
+
+  return {
+    sp500, dow, nasdaq, sensex, nifty,
+    btc: crypto?.bitcoin ? { price: crypto.bitcoin.usd, change: crypto.bitcoin.usd_24h_change ?? 0 } : null,
+    eth: crypto?.ethereum ? { price: crypto.ethereum.usd, change: crypto.ethereum.usd_24h_change ?? 0 } : null,
+    fearGreed: fg?.data?.[0] ? { value: Number(fg.data[0].value), label: fg.data[0].value_classification } : null,
+  };
+}
+
 /* ─────────────── Build the briefing content ─────────────── */
 
 export type BriefingPayload = {
@@ -85,6 +143,7 @@ export type BriefingPayload = {
   lifeMarkdown: string;
   newsMarkdown: string;
   wealthMarkdown: string;
+  market: MarketSnapshot;
   stats: {
     noteCount: number;
     overdue: number;
@@ -94,7 +153,7 @@ export type BriefingPayload = {
 
 const GROQ_MODEL_FOR_BRIEFING = "llama-3.3-70b-versatile";
 
-/** Run Life + News + Wealth + Jobs agents and assemble one HTML email. */
+/** Run Life + News + Wealth agents + fetch market data, then assemble one HTML email. */
 export async function buildBriefing(): Promise<BriefingPayload> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error("GROQ_API_KEY not set");
@@ -103,8 +162,7 @@ export async function buildBriefing(): Promise<BriefingPayload> {
   const notes = await listNotes().catch<PersonalNote[]>(() => []);
   const stats = computeStats(notes, now);
 
-  // Run all agents in parallel for speed.
-  const [lifeMarkdown, newsMarkdown, wealthMarkdown] =
+  const [lifeMarkdown, newsMarkdown, wealthMarkdown, market] =
     await Promise.all([
       runLifeAgent(apiKey, notes, now),
       runNewsAgent(apiKey).catch(
@@ -115,9 +173,11 @@ export async function buildBriefing(): Promise<BriefingPayload> {
         (err) =>
           `## Net Worth\n\n${err instanceof Error ? err.message : String(err)}`
       ),
+      fetchMarketData(),
     ]);
 
-  const subject = `Morning Briefing — ${now.toLocaleDateString("en-US", {
+  const isGreenDay = (market.sp500?.change ?? 0) >= 0;
+  const subject = `${isGreenDay ? "🟢" : "🔴"} Morning Briefing — ${now.toLocaleDateString("en-US", {
     weekday: "long",
     month: "short",
     day: "numeric",
@@ -128,11 +188,12 @@ export async function buildBriefing(): Promise<BriefingPayload> {
     lifeMarkdown,
     newsMarkdown,
     wealthMarkdown,
+    market,
     stats,
     now,
   });
   const text = [subject, stripMarkdown(wealthMarkdown), stripMarkdown(newsMarkdown), stripMarkdown(lifeMarkdown)].join("\n\n");
-  return { subject, html, text, lifeMarkdown, newsMarkdown, wealthMarkdown, stats };
+  return { subject, html, text, lifeMarkdown, newsMarkdown, wealthMarkdown, market, stats };
 }
 
 function computeStats(notes: PersonalNote[], now: Date) {
@@ -247,34 +308,33 @@ async function runNewsAgent(apiKey: string): Promise<string> {
     ? formatItems(layoffItems, 6)
     : formatItems(filterByQuery(jobMarketItems, "jobs hiring employment labor economy workforce", 6), 6);
 
-  const system = `Phone-screen news briefing for Krishna. Pick the most important stories from each section. One line per item with [Source](url). Only use URLs from the data below.
+  const system = `You write a concise daily news briefing for Krishna — an investor and tech professional tracking US and Indian markets, geopolitics, AI, and the job market. Write like Morning Brew: punchy, clear, no fluff.
 
-## Geopolitics (US & India)
-Top 3 items about US-India relations, US policy, India policy, global tensions. Lead with bold keyword.
-**Trade deal** — US-India semiconductor pact signed. [Source](url)
+## What's Moving Markets
+Top 3 stories driving US and Indian stock markets today. Each item: one bold headline, 1-2 sentence summary with the key number or fact. Weave the source link into the text naturally — e.g. "[Samsung's AI chip sales plunged](url) as demand shifted to Nvidia."
+
+## Geopolitics
+Top 3 geopolitical stories affecting India, US, or global markets. Bold headline + 1-2 sentence summary with inline links.
 
 ## Tech & AI
-Top 3 items: new AI models, product launches, big tech moves. Lead with bold keyword.
-**GPT-5** — OpenAI ships reasoning model. [Source](url)
+Top 3 AI/tech stories: launches, funding, regulation, breakthroughs. Bold headline + 1-2 sentence summary with inline links.
 
 ## India Headlines
-Top 3 Indian news headlines. Lead with bold keyword.
-**Sensex** — Markets rally on RBI rate cut. [Source](url)
-
-## Portfolio News
-Top 3 items about Krishna's holdings: ${symbols.slice(0, 8).join(", ") || "S&P 500"}. Lead with ticker.
-**AAPL** — Record iPhone sales in India. [Source](url)
+Top 3 Indian domestic news stories (politics, economy, business). Bold headline + 1-2 sentence summary with inline links.
 
 ## Job Market & Layoffs
-Top 3 items: layoffs, hiring freezes, SAP/tech job market shifts. Lead with bold keyword.
-**Meta** — 10k layoffs in Reality Labs division. [Source](url)
+Top 3 items: layoffs, hiring freezes, workforce trends in tech/SAP/AI. Bold headline + 1-2 sentence summary with inline links.
+
+## Portfolio Watch
+Top 3 stories about Krishna's holdings: ${symbols.slice(0, 8).join(", ") || "S&P 500"}. Bold the ticker. 1-2 sentence summary with inline links.
 
 RULES:
-- Exactly 3 items per section, one line each
-- Bold the lead keyword
-- Always include [Source](actual_url) — never invent URLs
+- Exactly 3 items per section, bulleted
+- HIDE links in words — never show raw URLs. Use [clickable text](url) format
+- Only use URLs from the feed data below — never invent URLs
+- Lead each item with **bold keyword or ticker**
 - If a section has no relevant news, write "No major updates today."
-- No filler, no explanation paragraphs`;
+- No filler paragraphs, no section intros, no sign-offs`;
 
   const userPrompt = `Geopolitics feed items:
 ${geopoliticsBlock || "(no items)"}
@@ -382,69 +442,190 @@ async function safeSearchBlock(queries: string[]): Promise<string> {
   );
 }
 
-/* ─────────────── HTML rendering ─────────────── */
+/* ─────────────── HTML rendering (dark theme) ─────────────── */
 
 function renderHtml(opts: {
   subject: string;
   lifeMarkdown: string;
   newsMarkdown: string;
   wealthMarkdown: string;
+  market: MarketSnapshot;
   stats: { noteCount: number; overdue: number; urgent: number };
   now: Date;
 }): string {
+  const m = opts.market;
   const wealthHtml = markdownToHtml(opts.wealthMarkdown);
   const newsHtml = markdownToHtml(opts.newsMarkdown);
   const lifeHtml = markdownToHtml(opts.lifeMarkdown);
-  const dateLine = opts.now.toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1f2937">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7f9;padding:24px 12px">
-  <tr><td align="center">
-    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06)">
-      <tr><td style="background:linear-gradient(135deg,#ff6b00,#ff8c38);padding:24px 28px;color:#0a0a0a">
-        <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:0.7">${dateLine}</div>
-        <div style="font-size:22px;font-weight:800;margin-top:4px">Morning Briefing</div>
+  const dayOfWeek = opts.now.toLocaleDateString("en-US", { weekday: "long" });
+  const formattedDate = opts.now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const isGreenDay = (m.sp500?.change ?? 0) >= 0;
+
+  const fmtPrice = (p: number, prefix = "$") => {
+    if (p >= 10000) return `${prefix}${Math.round(p).toLocaleString("en-US")}`;
+    if (p >= 100) return `${prefix}${p.toFixed(0)}`;
+    return `${prefix}${p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+  const fmtChg = (c: number) => `${c >= 0 ? "↑" : "↓"} ${c >= 0 ? "+" : ""}${c.toFixed(2)}%`;
+  const chgColor = (c: number) => c >= 0 ? "#10b981" : "#ef4444";
+
+  const indexCard = (label: string, q: IndexQuote | null, prefix = "$") => {
+    if (!q) return `<td width="33%" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;text-align:center">
+      <p style="margin:0 0 4px;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${label}</p>
+      <p style="margin:0;color:#475569;font-size:14px">N/A</p></td>`;
+    return `<td width="33%" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;text-align:center">
+      <p style="margin:0 0 4px;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.5px">${label}</p>
+      <p style="margin:0 0 4px;color:#f8fafc;font-size:20px;font-weight:700">${fmtPrice(q.price, prefix)}</p>
+      <p style="margin:0;color:${chgColor(q.change)};font-size:13px;font-weight:600">${fmtChg(q.change)}</p></td>`;
+  };
+
+  const cryptoCard = (label: string, q: IndexQuote | null, accent: string) => {
+    if (!q) return "";
+    return `<td width="48%" style="background:${accent}14;border:1px solid ${accent}33;border-radius:12px;padding:16px;text-align:center">
+      <p style="margin:0 0 4px;color:${accent};font-size:11px;font-weight:700;text-transform:uppercase">${label}</p>
+      <p style="margin:0 0 4px;color:#f8fafc;font-size:22px;font-weight:700">${fmtPrice(q.price)}</p>
+      <p style="margin:0;color:${chgColor(q.change)};font-size:13px;font-weight:600">${fmtChg(q.change)}</p></td>`;
+  };
+
+  const fearGreedSection = !m.fearGreed ? "" : `
+    <tr><td style="padding:0 24px 12px"><h2 style="margin:0;color:#e2e8f0;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">🎭 Market Sentiment</h2></td></tr>
+    <tr><td style="padding:0 24px 24px"><table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px"><tr><td style="padding:20px">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td width="30%" style="text-align:center;vertical-align:middle">
+          <p style="margin:0;color:#f8fafc;font-size:48px;font-weight:800;line-height:1">${m.fearGreed.value}</p>
+          <p style="margin:4px 0 0;color:${m.fearGreed.value > 50 ? "#10b981" : "#ef4444"};font-size:12px;font-weight:700;text-transform:uppercase">${m.fearGreed.label}</p>
+        </td>
+        <td width="70%" style="padding-left:20px;vertical-align:middle">
+          <div style="background:linear-gradient(90deg,#ef4444 0%,#f59e0b 25%,#eab308 50%,#22c55e 75%,#10b981 100%);height:8px;border-radius:4px;margin-bottom:12px"></div>
+          <p style="margin:0;color:#94a3b8;font-size:13px;line-height:1.5">${getFearGreedComment(m.fearGreed.value)}</p>
+        </td>
+      </tr></table>
+    </td></tr></table></td></tr>`;
+
+  const statBadge = (label: string, value: number, color: string) =>
+    `<td align="center" style="padding:6px 8px"><div style="font-size:22px;font-weight:800;color:${color}">${value}</div><div style="font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#64748b;margin-top:2px">${label}</div></td>`;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a">
+  <tr><td align="center" style="padding:20px">
+    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
+
+      <!-- HEADER -->
+      <tr><td style="padding:24px 24px 16px">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td>
+            <h1 style="margin:0;color:#10b981;font-size:24px;font-weight:bold">☀️ Morning Briefing</h1>
+            <p style="margin:4px 0 0;color:#64748b;font-size:13px">${dayOfWeek}, ${formattedDate}</p>
+          </td>
+          <td align="right">
+            <span style="display:inline-block;padding:6px 12px;background:${isGreenDay ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"};color:${isGreenDay ? "#10b981" : "#ef4444"};border-radius:20px;font-size:12px;font-weight:600">${isGreenDay ? "🟢 Green Day" : "🔴 Red Day"}</span>
+          </td>
+        </tr></table>
       </td></tr>
-      <tr><td style="padding:20px 28px;border-bottom:1px solid #f1f2f5">
-        ${statCells(opts.stats)}
+
+      <!-- GREETING -->
+      <tr><td style="padding:0 24px 24px">
+        <p style="margin:0 0 12px;color:#e2e8f0;font-size:17px;line-height:1.5">Good morning, Krishna! ☕</p>
+        <p style="margin:0;color:#94a3b8;font-size:15px;line-height:1.6">${getMarketMood(m)}</p>
       </td></tr>
-      <tr><td style="padding:24px 28px;font-size:15px;line-height:1.6;border-bottom:1px solid #f1f2f5">
-        ${sectionHeader("Net Worth & Portfolio", "#059669")}
-        ${wealthHtml}
+
+      <!-- STATS ROW -->
+      <tr><td style="padding:0 24px 24px">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px">
+          <tr><td style="padding:12px"><table width="100%"><tr>
+            ${statBadge("Notes", opts.stats.noteCount, "#f8fafc")}
+            ${statBadge("Overdue", opts.stats.overdue, opts.stats.overdue > 0 ? "#ef4444" : "#64748b")}
+            ${statBadge("Urgent", opts.stats.urgent, opts.stats.urgent > 0 ? "#f59e0b" : "#64748b")}
+          </tr></table></td></tr>
+        </table>
       </td></tr>
-      <tr><td style="padding:24px 28px;font-size:15px;line-height:1.6;border-bottom:1px solid #f1f2f5">
-        ${sectionHeader("News — Geopolitics, Tech, India, Markets, Layoffs", "#2563eb")}
-        ${newsHtml}
+
+      <!-- US MARKET SNAPSHOT -->
+      <tr><td style="padding:0 24px 12px"><h2 style="margin:0;color:#e2e8f0;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">📊 US Markets</h2></td></tr>
+      <tr><td style="padding:0 24px 8px">
+        <table width="100%" cellpadding="0" cellspacing="8" style="border-collapse:separate">
+          <tr>${indexCard("S&P 500", m.sp500)}${indexCard("Dow Jones", m.dow)}${indexCard("Nasdaq", m.nasdaq)}</tr>
+        </table>
       </td></tr>
-      <tr><td style="padding:24px 28px;font-size:15px;line-height:1.6">
-        ${sectionHeader("Life", "#7c3aed")}
-        ${lifeHtml}
+
+      <!-- INDIA MARKET SNAPSHOT -->
+      ${m.sensex || m.nifty ? `
+      <tr><td style="padding:16px 24px 12px"><h2 style="margin:0;color:#e2e8f0;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">🇮🇳 India Markets</h2></td></tr>
+      <tr><td style="padding:0 24px 8px">
+        <table width="100%" cellpadding="0" cellspacing="8" style="border-collapse:separate">
+          <tr>${indexCard("Sensex", m.sensex, "₹")}${indexCard("Nifty 50", m.nifty, "₹")}<td width="33%"></td></tr>
+        </table>
+      </td></tr>` : ""}
+
+      <!-- CRYPTO -->
+      ${m.btc || m.eth ? `
+      <tr><td style="padding:16px 24px 12px"><h2 style="margin:0;color:#e2e8f0;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">₿ Crypto</h2></td></tr>
+      <tr><td style="padding:0 24px 24px">
+        <table width="100%" cellpadding="0" cellspacing="8" style="border-collapse:separate">
+          <tr>${cryptoCard("Bitcoin", m.btc, "#f7931a")}<td width="4%"></td>${cryptoCard("Ethereum", m.eth, "#627eea")}</tr>
+        </table>
+      </td></tr>` : ""}
+
+      <!-- FEAR & GREED -->
+      ${fearGreedSection}
+
+      <!-- NEWS -->
+      <tr><td style="padding:0 24px 12px"><h2 style="margin:0;color:#e2e8f0;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">📰 News</h2></td></tr>
+      <tr><td style="padding:0 24px 24px">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px">
+          <tr><td style="padding:20px 24px;font-size:14px;line-height:1.7;color:#e2e8f0">${newsHtml}</td></tr>
+        </table>
       </td></tr>
-      <tr><td style="padding:18px 28px;background:#fafbfc;font-size:12px;color:#6b7280">
-        Lucy Morning Briefing · <a href="https://krishnaamarneni.com/admin?tab=personal" style="color:#ff6b00">Open Life Cockpit</a>
+
+      <!-- PORTFOLIO -->
+      <tr><td style="padding:0 24px 12px"><h2 style="margin:0;color:#e2e8f0;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">💰 Portfolio & Net Worth</h2></td></tr>
+      <tr><td style="padding:0 24px 24px">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px">
+          <tr><td style="padding:20px 24px;font-size:14px;line-height:1.7;color:#e2e8f0">${wealthHtml}</td></tr>
+        </table>
       </td></tr>
+
+      <!-- LIFE -->
+      <tr><td style="padding:0 24px 12px"><h2 style="margin:0;color:#e2e8f0;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600">🧭 Life</h2></td></tr>
+      <tr><td style="padding:0 24px 24px">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px">
+          <tr><td style="padding:20px 24px;font-size:14px;line-height:1.7;color:#e2e8f0">${lifeHtml}</td></tr>
+        </table>
+      </td></tr>
+
+      <!-- FOOTER -->
+      <tr><td style="padding:24px;text-align:center;border-top:1px solid rgba(255,255,255,0.06)">
+        <p style="margin:0 0 8px;color:#64748b;font-size:12px">Lucy Morning Briefing</p>
+        <p style="margin:0;color:#64748b;font-size:11px">
+          <a href="https://krishnaamarneni.com/admin?tab=personal" style="color:#10b981;text-decoration:none">Open Life Cockpit</a>
+        </p>
+      </td></tr>
+
     </table>
   </td></tr>
 </table>
 </body></html>`;
 }
 
-function sectionHeader(title: string, color: string): string {
-  return `<div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${color};margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid ${color}20">${title}</div>`;
+function getMarketMood(m: MarketSnapshot): string {
+  const sp = m.sp500?.change ?? 0;
+  if (sp > 1.5) return "Markets are surging. A strong day across the board.";
+  if (sp > 0.3) return "A steady green day. Markets are holding up well.";
+  if (sp > -0.3) return "Markets are flat — a quiet day so far.";
+  if (sp > -1.5) return "A slight pullback today. Nothing to panic about.";
+  return "Markets are under pressure. Stay calm and focused.";
 }
 
-function statCells(s: { noteCount: number; overdue: number; urgent: number }): string {
-  const cell = (label: string, value: number, color: string) =>
-    `<td align="center" style="padding:6px 8px"><div style="font-size:22px;font-weight:800;color:${color}">${value}</div><div style="font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#9ca3af;margin-top:2px">${label}</div></td>`;
-  return `<table role="presentation" width="100%"><tr>${cell("Notes", s.noteCount, "#374151")}${cell("Overdue", s.overdue, s.overdue > 0 ? "#dc2626" : "#9ca3af")}${cell("Urgent <=14d", s.urgent, s.urgent > 0 ? "#ea580c" : "#9ca3af")}</tr></table>`;
+function getFearGreedComment(value: number): string {
+  if (value <= 20) return "Extreme fear often signals buying opportunities.";
+  if (value <= 40) return "Fear is elevated — markets are cautious.";
+  if (value <= 60) return "Neutral sentiment — no strong directional bias.";
+  if (value <= 80) return "Greed is building — proceed with caution.";
+  return "Extreme greed — historically a time to be careful.";
 }
 
-/** Very small Markdown to HTML — headings, bullets, **bold**, [link](url). */
+/** Markdown to HTML — headings, bullets, **bold**, [link](url). Styled for dark theme. */
 function markdownToHtml(md: string): string {
   const lines = md.split("\n");
   let html = "";
@@ -462,18 +643,18 @@ function markdownToHtml(md: string): string {
         html += '<ul style="padding-left:20px;margin:6px 0">';
         inList = true;
       }
-      html += `<li style="margin:6px 0">${inline(line.replace(/^\s*[-*]\s+/, ""))}</li>`;
+      html += `<li style="margin:8px 0;color:#cbd5e1">${inline(line.replace(/^\s*[-*]\s+/, ""))}</li>`;
       continue;
     }
     flushList();
     if (/^##\s+/.test(line)) {
-      html += `<h2 style="font-size:16px;font-weight:700;color:#111827;margin:20px 0 8px;border-top:1px solid #f1f2f5;padding-top:16px">${inline(line.replace(/^##\s+/, ""))}</h2>`;
+      html += `<h2 style="font-size:13px;font-weight:700;color:#10b981;margin:20px 0 8px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);text-transform:uppercase;letter-spacing:1px">${inline(line.replace(/^##\s+/, ""))}</h2>`;
     } else if (/^###\s+/.test(line)) {
-      html += `<h3 style="font-size:14px;font-weight:600;color:#111827;margin:12px 0 6px">${inline(line.replace(/^###\s+/, ""))}</h3>`;
+      html += `<h3 style="font-size:14px;font-weight:600;color:#e2e8f0;margin:12px 0 6px">${inline(line.replace(/^###\s+/, ""))}</h3>`;
     } else if (line.trim() === "") {
       // skip blanks
     } else {
-      html += `<p style="margin:8px 0">${inline(line)}</p>`;
+      html += `<p style="margin:8px 0;color:#cbd5e1">${inline(line)}</p>`;
     }
   }
   flushList();
@@ -485,10 +666,10 @@ function inline(s: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#111827">$1</strong>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#f8fafc">$1</strong>')
     .replace(
       /\[([^\]]+)\]\(([^)]+)\)/g,
-      '<a href="$2" style="color:#ff6b00;text-decoration:none">$1</a>'
+      '<a href="$2" style="color:#10b981;text-decoration:none">$1</a>'
     );
 }
 
