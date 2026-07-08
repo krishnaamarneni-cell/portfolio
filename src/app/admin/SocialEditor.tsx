@@ -95,8 +95,10 @@ function persistDrafts(list: Draft[]) {
 }
 
 const inputClass =
-  "w-full px-4 py-2.5 rounded-xl bg-[#1a1a1a] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-sm text-white placeholder:text-[#555] transition-colors";
+  "w-full px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.08] focus:border-emerald-500/50 focus:outline-none text-sm text-white placeholder:text-[#555] transition-colors";
 const textareaClass = inputClass + " resize-y leading-relaxed";
+const cardClass =
+  "rounded-xl border border-white/[0.06] bg-[#151515] p-4 space-y-3";
 
 /** Filter Buffer profiles for one of our 3 platforms. */
 function profilesFor(all: BufferProfile[], key: PlatformKey): BufferProfile[] {
@@ -180,6 +182,8 @@ export default function SocialEditor({
    * selected provider. */
   const userEditedPromptRef = useRef(false);
 
+  const [tone, setTone] = useState("default");
+
   const [profiles, setProfiles] = useState<BufferProfile[]>([]);
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -252,7 +256,7 @@ export default function SocialEditor({
       const res = await fetch("/api/admin/compose-post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, hint, model: writeModel }),
+        body: JSON.stringify({ topic, hint, model: writeModel, tone: tone !== "default" ? tone : undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -484,123 +488,78 @@ export default function SocialEditor({
   }
 
   return (
-    <section className="space-y-6">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-xl font-bold">Social</h2>
-          <p className="text-xs text-[#666] mt-1">
-            Drop a topic, generate platform-native posts with Groq, attach an image,
-            then push to LinkedIn / X / Instagram through Buffer.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {loadedDraftId && (
-            <span className="text-[10px] font-mono text-[#888] bg-white/[0.04] border border-white/[0.08] px-2 py-1 rounded-full">
-              editing draft
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={saveDraft}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.12] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00]"
-            title="Save current state to come back later"
-          >
-            <FiSave size={12} />
-            {loadedDraftId ? "Update draft" : "Save draft"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setDraftsOpen((o) => !o)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00]"
-          >
-            <FiFolder size={12} />
-            Drafts {drafts.length > 0 ? `(${drafts.length})` : ""}
-          </button>
-          {(loadedDraftId || topic || composition.linkedin) && (
-            <button
-              type="button"
-              onClick={newBlank}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-[#888] hover:text-white"
-            >
-              New
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Drafts panel */}
-      {draftsOpen && (
-        <div className="rounded-2xl border border-white/[0.08] bg-[#161616] p-4 space-y-2">
-          {drafts.length === 0 ? (
-            <p className="text-xs text-[#666]">
-              No saved drafts. Hit <strong className="text-white/80">Save draft</strong> to keep your current work.
+    <section className="space-y-5">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+            <FiSend size={16} className="text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold">Social Media Editor</h2>
+            <p className="text-[11px] text-[#666]">
+              Draft per-platform posts with AI, add an image, and post or schedule via Buffer.
             </p>
-          ) : (
-            <ul className="divide-y divide-white/[0.05]">
-              {drafts.map((d) => (
-                <li
-                  key={d.id}
-                  className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
-                >
-                  <button
-                    type="button"
-                    onClick={() => loadDraft(d)}
-                    className="flex-1 text-left min-w-0"
-                  >
-                    <div className="text-sm text-white truncate">
-                      {shortPreview(d.topic) || shortPreview(d.composition.linkedin) || "(untitled)"}
-                    </div>
-                    <div className="text-[10px] font-mono text-[#666] mt-0.5">
-                      {timeAgo(d.savedAt)}
-                      {d.imageUrl ? " · 🖼" : ""}
-                      {d.composition.linkedin ? " · LI" : ""}
-                      {d.composition.x ? " · X" : ""}
-                      {d.composition.instagram ? " · IG" : ""}
-                      {loadedDraftId === d.id ? " · editing" : ""}
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteDraft(d.id)}
-                    className="shrink-0 p-1.5 rounded-md text-[#666] hover:text-red-400 hover:bg-red-500/10"
-                    title="Delete draft"
-                  >
-                    <FiTrash2 size={12} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {/* Topic + compose */}
-      <div className="rounded-2xl border border-[#ff6b00]/20 bg-gradient-to-br from-[#ff6b00]/[0.05] to-transparent p-5 space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <label className="block text-xs font-mono tracking-[0.15em] uppercase text-[#ff8c38]">
-            Topic
-          </label>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
-              Model
-            </span>
-            <select
-              value={writeModel}
-              onChange={(e) => setWriteModel(e.target.value)}
-              className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs text-[#ccc] focus:outline-none max-w-[260px]"
-              title={
-                writingOptions.find((m) => m.id === writeModel)?.blurb ?? ""
-              }
-            >
-              {writingOptions.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label} · ${m.inputPerM}/${m.outputPerM}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
-        {/* Video-to-post: paste a YouTube/Instagram URL */}
+        <button
+          type="button"
+          onClick={saveDraft}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs hover:border-emerald-500/40 hover:text-emerald-400"
+        >
+          <FiSave size={12} />
+          {loadedDraftId ? "Update draft" : "Save draft"}
+        </button>
+      </div>
+
+      {/* ── Topic + Tone + Compose ── */}
+      <div className={cardClass}>
+        <div className="flex gap-3 items-end">
+          <div className="flex-1">
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+              Topic
+            </label>
+            <input
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              className={inputClass}
+              placeholder="e.g. why medication reviews matter for seniors"
+            />
+          </div>
+          <div className="w-44 shrink-0">
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+              Tone
+            </label>
+            <select
+              value={tone}
+              onChange={(e) => setTone(e.target.value)}
+              className={inputClass}
+            >
+              <option value="default">Default</option>
+              <option value="warm">Warm &amp; friendly</option>
+              <option value="professional">Professional</option>
+              <option value="casual">Casual</option>
+              <option value="bold">Bold &amp; punchy</option>
+              <option value="storytelling">Storytelling</option>
+              <option value="educational">Educational</option>
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={compose}
+            disabled={composing}
+            className="shrink-0 inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60"
+          >
+            <FiZap size={14} />
+            {composing ? "Drafting…" : "AI compose"}
+          </button>
+        </div>
+        <input
+          value={hint}
+          onChange={(e) => setHint(e.target.value)}
+          className={inputClass + " text-xs"}
+          placeholder="Optional hint: 'punchier', 'frame as a lesson', 'mention Coca-Cola project'"
+        />
         <VideoToPost onGenerated={(data: { summary?: string; linkedin?: string; twitter?: string; instagram?: string; imageUrl?: string }) => {
           setTopic(data.summary || "");
           setComposition((prev) => ({
@@ -611,190 +570,82 @@ export default function SocialEditor({
           }));
           if (data.imageUrl) setImageUrl(data.imageUrl);
         }} />
-
-        <textarea
-          rows={3}
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          className={textareaClass}
-          placeholder="e.g. Why most SAP consultants miss the AI moment — and how to catch it"
-        />
-        <input
-          value={hint}
-          onChange={(e) => setHint(e.target.value)}
-          className={inputClass}
-          placeholder="Optional voice hint (e.g. 'punchier', 'frame as a lesson', 'tell a quick story')"
-        />
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-[10px] text-[#666] font-mono">
-            {writingOptions.find((m) => m.id === writeModel)?.blurb}
-          </p>
-          <button
-            type="button"
-            onClick={compose}
-            disabled={composing}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black font-bold text-sm shadow-[0_4px_20px_rgba(255,107,0,0.4)] hover:scale-[1.02] disabled:opacity-60"
-          >
-            <FiZap size={14} />
-            {composing ? "Drafting…" : "Generate posts"}
-          </button>
-        </div>
       </div>
 
-      {/* Image generator */}
-      <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5 space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <label className="text-xs font-mono tracking-[0.15em] uppercase text-[#888]">
-            Image
-          </label>
-          <div className="flex items-center gap-2">
+      {/* ── Image ── */}
+      <div className={cardClass}>
+        <div className="flex gap-3 items-start">
+          <div className="w-20 h-20 rounded-lg border border-dashed border-white/[0.12] bg-white/[0.02] flex items-center justify-center shrink-0 overflow-hidden">
+            {imageUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
+            ) : (
+              <FiImage size={20} className="text-[#555]" />
+            )}
+          </div>
+          <div className="flex-1 space-y-2">
+            <input
+              value={imageProvider === "unsplash" ? imagePrompt : (composition.image_query || imagePrompt)}
+              onChange={(e) => { userEditedPromptRef.current = true; setImagePrompt(e.target.value); }}
+              className={inputClass + " text-xs"}
+              placeholder="image search words (Unsplash)"
+            />
+            <input
+              value={imageProvider !== "unsplash" ? imagePrompt : (composition.image_prompt || "")}
+              onChange={(e) => { userEditedPromptRef.current = true; setImagePrompt(e.target.value); }}
+              className={inputClass + " text-xs"}
+              placeholder="AI image prompt (fal.ai)"
+            />
+          </div>
+          <div className="flex flex-col gap-2 shrink-0">
             <select
               value={imageProvider}
               onChange={(e) => {
                 const next = e.target.value as "auto" | "fal" | "unsplash";
                 setImageProvider(next);
-                // Reset the "user edited" flag so the prompt auto-swaps to
-                // whichever style fits the new provider, unless the user is
-                // mid-typing something they want to keep.
-                if (!imagePrompt.trim()) {
-                  userEditedPromptRef.current = false;
-                }
+                if (!imagePrompt.trim()) userEditedPromptRef.current = false;
               }}
-              className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs text-[#ccc] focus:outline-none"
+              className="px-2 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-[#ccc] focus:outline-none"
             >
-              <option value="auto">Auto (fal.ai → Unsplash)</option>
-              <option value="fal">fal.ai (Flux)</option>
-              <option value="unsplash">Unsplash search</option>
+              <option value="auto">Auto</option>
+              <option value="fal">fal.ai</option>
+              <option value="unsplash">Unsplash</option>
             </select>
-            {(composition.image_prompt || composition.image_query) && (
-              <button
-                type="button"
-                onClick={() => {
-                  userEditedPromptRef.current = false;
-                  setImagePrompt(promptForProvider(imageProvider, composition));
-                }}
-                className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs text-[#888] hover:text-[#ff6b00]"
-                title="Re-fill prompt from generated content"
-              >
-                <FiRefreshCw size={11} className="inline mr-1" />
-                Reset prompt
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => generateImage("landscape")}
+              disabled={generating}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs hover:border-emerald-500/40 hover:text-emerald-400 disabled:opacity-50"
+            >
+              <FiImage size={12} />
+              {generating ? "…" : "Image"}
+            </button>
           </div>
         </div>
-
-        {/* Use a textarea instead of a single-line input so long Flux prompts
-            actually fit on screen. */}
-        <div className="flex gap-2">
-          <textarea
-            rows={imageProvider === "unsplash" ? 1 : 3}
-            value={imagePrompt}
-            onChange={(e) => {
-              userEditedPromptRef.current = true;
-              setImagePrompt(e.target.value);
-            }}
-            className={textareaClass}
-            placeholder={
-              imageProvider === "unsplash"
-                ? composition.image_query
-                  ? `Suggested: ${composition.image_query}`
-                  : "Stock-photo search words (e.g. 'highway sunset')"
-                : composition.image_prompt
-                ? "Auto-filled from your post — edit freely"
-                : "Describe the scene, mood, lighting, style — Flux likes detail"
-            }
-          />
-          <button
-            type="button"
-            onClick={() => generateImage("landscape")}
-            disabled={generating}
-            className="shrink-0 self-start inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-60"
-          >
-            <FiImage size={14} />
-            {generating ? "…" : "Generate"}
-          </button>
-        </div>
-
-        {imageUrl ? (
-          <div className="relative rounded-xl overflow-hidden border border-white/[0.06] bg-black">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageUrl}
-              alt="Generated"
-              className="w-full max-h-72 object-contain bg-black"
+        {imageUrl && (
+          <div className="flex items-center gap-2">
+            <input
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              className={inputClass + " text-xs font-mono flex-1"}
+              placeholder="Image URL"
             />
             {imageCredit && (
-              <p className="absolute bottom-2 left-2 text-[10px] text-white/80 bg-black/50 px-2 py-0.5 rounded font-mono">
-                {imageCredit}
-              </p>
+              <span className="text-[10px] text-[#666] font-mono shrink-0">{imageCredit}</span>
             )}
             <button
               type="button"
-              onClick={() => {
-                setImageUrl("");
-                setImageCredit(null);
-              }}
-              className="absolute top-2 right-2 px-2 py-1 rounded-md bg-black/60 text-white text-[10px] hover:bg-black/80"
+              onClick={() => { setImageUrl(""); setImageCredit(null); }}
+              className="px-2 py-1 rounded text-[10px] text-red-400 hover:bg-red-400/10"
             >
               Clear
             </button>
           </div>
-        ) : null}
-
-        <input
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          className={inputClass + " text-xs font-mono"}
-          placeholder="Or paste an image URL"
-        />
-
-        {/* Reference images — when filled, fal.ai routes to Flux Redux so
-            the output mimics the example's style/composition. */}
-        <details className="text-[11px] text-[#888]">
-          <summary className="cursor-pointer text-[#aaa] hover:text-white">
-            🎨 Add reference images (up to 3) — make output look like these
-          </summary>
-          <div className="mt-2 space-y-2">
-            <textarea
-              value={referenceUrlsText}
-              onChange={(e) => setReferenceUrlsText(e.target.value)}
-              rows={2}
-              className={inputClass + " text-xs font-mono"}
-              placeholder="Paste 1-3 image URLs, one per line — competitor posts, mood boards, anything"
-            />
-            <p className="text-[10px] text-[#666] leading-relaxed">
-              When present + provider is fal.ai, we route to <strong>Flux Redux</strong>{" "}
-              which uses these as style/composition guides. Unsplash ignores
-              references (just searches by prompt).
-            </p>
-            {parseReferenceUrls(referenceUrlsText).length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                {parseReferenceUrls(referenceUrlsText).map((u, i) => (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    key={i}
-                    src={u}
-                    alt={`Reference ${i + 1}`}
-                    className="h-16 w-16 object-cover rounded-md border border-white/[0.08]"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </details>
+        )}
       </div>
 
-      {/* Campaign mode — multi-day content + research + auto-schedule */}
-      <CampaignCard
-        profiles={profiles}
-        onSuccess={onSuccess}
-        onError={onError}
-        referenceUrlsText={referenceUrlsText}
-        setReferenceUrlsText={setReferenceUrlsText}
-      />
-
-      {/* Platform cards */}
-      <div className="space-y-4">
+      {/* ── Platform cards — side by side ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {PLATFORMS.map((p) => {
           const text = composition[p.key];
           return (
@@ -824,79 +675,27 @@ export default function SocialEditor({
         })}
       </div>
 
-      {/* Batch footer */}
+      {/* ── Post all bar ── */}
       {!profilesError && profiles.length > 0 && (
-        <div className="rounded-2xl border border-[#ff6b00]/25 bg-gradient-to-br from-[#ff6b00]/[0.05] to-transparent p-5 space-y-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <FiLayers size={14} className="text-[#ff8c38]" />
-            <h3 className="text-sm font-bold tracking-wide uppercase text-[#ff8c38]">
-              Post to all platforms at once
-            </h3>
-            <span className="text-[10px] text-[#666] ml-auto font-mono">
-              ready: {readyPlatforms.length}/3
-              {readyPlatforms.length > 0
-                ? ` (${readyPlatforms.join(", ")})`
-                : ""}
-            </span>
-          </div>
-          <p className="text-[11px] text-[#777] leading-relaxed">
-            Runs once per platform with that platform's text + the shared image,
-            using whichever Buffer profiles you've selected on each card.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <div className="flex-1 flex items-center gap-2">
-              <FiCalendar size={13} className="text-[#888] shrink-0" />
-              <input
-                type="datetime-local"
-                value={batchScheduleAt}
-                onChange={(e) => setBatchScheduleAt(e.target.value)}
-                className={inputClass + " text-xs"}
-              />
-              <button
-                type="button"
-                onClick={() => setBatchScheduleAt(defaultScheduleAt())}
-                className="shrink-0 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10px] text-[#888] hover:text-white"
-                title="Set to ~10 minutes from now"
-              >
-                +10m
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 justify-end">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-[#151515] px-4 py-3">
+          <span className="text-sm text-[#999]">
+            Post everything at once:
+          </span>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => batchPost("queue")}
               disabled={batchBusy || readyPlatforms.length === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs hover:border-emerald-500/40 disabled:opacity-50"
             >
               <FiClock size={12} />
               Queue all
             </button>
             <button
               type="button"
-              onClick={() => {
-                const iso = toIso(batchScheduleAt);
-                if (!iso) {
-                  onError(
-                    "Pick a future date/time to schedule all platforms"
-                  );
-                  return;
-                }
-                batchPost(iso);
-              }}
-              disabled={batchBusy || readyPlatforms.length === 0 || !batchScheduleAt}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.06] border border-white/[0.15] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-50"
-            >
-              <FiCalendar size={12} />
-              Schedule all
-            </button>
-            <button
-              type="button"
               onClick={() => batchPost("now")}
               disabled={batchBusy || readyPlatforms.length === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black text-xs font-bold shadow-[0_4px_15px_rgba(255,107,0,0.35)] hover:scale-[1.03] disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 disabled:opacity-50"
             >
               <FiSend size={12} />
               {batchBusy ? "Posting…" : "Post all now"}
@@ -905,17 +704,33 @@ export default function SocialEditor({
         </div>
       )}
 
-      {/* Queue panel */}
-      <QueuePanel onSuccess={onSuccess} onError={onError} />
+      {/* ── Queue + Drafts side by side ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <QueuePanel onSuccess={onSuccess} onError={onError} />
+        <DraftsPanel
+          drafts={drafts}
+          loadedDraftId={loadedDraftId}
+          onLoad={loadDraft}
+          onDelete={deleteDraft}
+          onNew={(loadedDraftId || topic || composition.linkedin) ? newBlank : undefined}
+        />
+      </div>
 
-      {/* Footer help */}
+      {/* ── Campaign mode ── */}
+      <CampaignCard
+        profiles={profiles}
+        onSuccess={onSuccess}
+        onError={onError}
+        referenceUrlsText={referenceUrlsText}
+        setReferenceUrlsText={setReferenceUrlsText}
+      />
+
+      {/* ── Footer help ── */}
       {profilesError && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-300/90">
           <strong className="font-semibold">Buffer not connected.</strong>{" "}
-          Add a <code>buffer</code> connector (id <code>buffer</code>) with your{" "}
-          Buffer access token under <strong>Admin → Connectors</strong>, then
-          reload this page. You can still copy generated text to clipboard
-          without Buffer.
+          Add a <code>buffer</code> connector with your Buffer access token under{" "}
+          <strong>Admin → Connectors</strong>, then reload.
         </div>
       )}
     </section>
@@ -1038,152 +853,120 @@ function PlatformCard({
     );
   }
 
+  const activeProfile = profiles.find((p) => selectedIds[p.id]) ?? profiles[0] ?? null;
+
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-[#1a1a1a] p-5">
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-            style={{ backgroundColor: platform.color + "22", color: platform.color === "#ffffff" ? "#fff" : platform.color }}
-          >
-            <Icon size={16} />
-          </div>
-          <h3 className="font-bold text-white">{platform.label}</h3>
+    <div className={cardClass}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span style={{ color: platform.color === "#ffffff" ? "#ccc" : platform.color }}>
+            <Icon size={14} />
+          </span>
+          <h3 className="font-semibold text-sm">{platform.label}</h3>
         </div>
         <span
-          className={`text-xs font-mono ${
-            overLimit ? "text-red-400" : used > platform.limit * 0.9 ? "text-amber-400" : "text-[#666]"
+          className={`text-[11px] font-mono ${
+            overLimit ? "text-red-400" : used > platform.limit * 0.9 ? "text-amber-400" : "text-[#555]"
           }`}
         >
-          {used} / {platform.limit}
+          {used}/{platform.limit}
         </span>
       </div>
+
+      {/* Channel dropdown */}
+      {!profilesError && (
+        <select
+          value={activeProfile?.id ?? ""}
+          onChange={(e) => {
+            for (const p of profiles) {
+              if (p.id === e.target.value) {
+                if (!selectedIds[p.id]) onToggleProfile(p.id);
+              }
+            }
+          }}
+          className={inputClass + " text-xs"}
+        >
+          {profiles.length === 0 ? (
+            <option value="">No channel connected</option>
+          ) : (
+            profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.formatted_username}
+              </option>
+            ))
+          )}
+        </select>
+      )}
+
+      {/* Textarea */}
       <textarea
-        rows={platform.key === "x" ? 4 : 7}
+        rows={6}
         value={text}
         onChange={(e) => onChange(e.target.value)}
-        className={textareaClass}
-        placeholder={`Generated ${platform.label} post will appear here…`}
+        className={textareaClass + " text-xs"}
+        placeholder={`${platform.label} post...`}
       />
 
-      {/* AI rewrite toolbar */}
+      {/* AI rewrite buttons */}
       {text.trim() && (
         <PostRewriteBar text={text} platform={platform.label} onChange={onChange} />
       )}
 
-      {/* Buffer profile picker */}
-      {!profilesError && (
-        <div className="mt-3">
-          {profiles.length === 0 ? (
-            <p className="text-[10px] text-[#555]">
-              No {platform.label} profile found in your Buffer account.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {profiles.map((p) => {
-                const on = !!selectedIds[p.id];
-                return (
-                  <button
-                    type="button"
-                    key={p.id}
-                    onClick={() => onToggleProfile(p.id)}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs transition-colors ${
-                      on
-                        ? "bg-[#ff6b00]/15 border-[#ff6b00]/40 text-[#ff8c38]"
-                        : "bg-white/[0.04] border-white/[0.08] text-[#999] hover:border-[#ff6b00]/30"
-                    }`}
-                  >
-                    {on ? <FiCheck size={11} /> : null}
-                    {p.formatted_username}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Per-platform schedule picker */}
-      {!profilesError && profiles.length > 0 && (
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <FiCalendar size={12} className="text-[#666] shrink-0" />
-          <input
-            type="datetime-local"
-            value={scheduleAt}
-            onChange={(e) => setScheduleAt(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-xs text-white"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const d = new Date(Date.now() + 10 * 60 * 1000);
-              const pad = (n: number) => String(n).padStart(2, "0");
-              setScheduleAt(
-                `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-              );
-            }}
-            className="shrink-0 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10px] text-[#888] hover:text-white"
-            title="Set to ~10 minutes from now"
-          >
-            +10m
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const iso = toIso(scheduleAt);
-              if (!iso) {
-                onError(`Pick a future date/time to schedule ${platform.label}`);
-                return;
-              }
-              postNow(iso);
-            }}
-            disabled={posting || overLimit || !scheduleAt}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.15] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-50"
-          >
-            <FiCalendar size={11} />
-            Schedule
-          </button>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-2 mt-4 flex-wrap">
+      {/* Post now + queue */}
+      <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={copy}
-          disabled={!text}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-50"
+          onClick={() => {
+            if (profiles.length > 0) postNow("now");
+            else onError(`No ${platform.label} channel in Buffer`);
+          }}
+          disabled={posting || overLimit || !text}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 disabled:opacity-50"
         >
-          {copied ? <FiCheck size={11} /> : <FiCopy size={11} />}
-          {copied ? "Copied" : "Copy"}
+          <FiSend size={11} />
+          {posting ? "Posting..." : "Post now"}
         </button>
         {profiles.length > 0 && (
           <button
             type="button"
             onClick={() => postNow("queue")}
             disabled={posting}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs hover:border-[#ff6b00]/40 hover:text-[#ff6b00] disabled:opacity-60"
+            className="p-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[#888] hover:text-emerald-400 hover:border-emerald-500/40 disabled:opacity-50"
+            title="Queue"
           >
-            <FiClock size={11} />
-            Queue
+            <FiClock size={14} />
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => {
-            if (profiles.length > 0) {
-              postNow("now");
-            } else {
-              onError(`No ${platform.label} channel found in Buffer. Go to buffer.com → Channels → click "Connect a Channel" → select ${platform.label} → authorize, then reload this page.`);
-            }
-          }}
-          disabled={posting || overLimit || !text}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#ff6b00] to-[#ff8c38] text-black text-xs font-semibold shadow-[0_4px_15px_rgba(255,107,0,0.35)] hover:scale-[1.03] disabled:opacity-60"
-        >
-          <FiSend size={11} />
-          {posting ? "Posting..." : "Post now"}
-        </button>
       </div>
+
+      {/* Schedule row */}
+      {!profilesError && profiles.length > 0 && (
+        <div className="flex items-center gap-2">
+          <input
+            type="datetime-local"
+            value={scheduleAt}
+            onChange={(e) => setScheduleAt(e.target.value)}
+            className={inputClass + " text-xs flex-1"}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const iso = toIso(scheduleAt);
+              if (!iso) {
+                onError(`Pick a future time for ${platform.label}`);
+                return;
+              }
+              postNow(iso);
+            }}
+            disabled={posting || overLimit || !scheduleAt}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs hover:border-emerald-500/40 disabled:opacity-50"
+          >
+            <FiCalendar size={11} />
+            Schedule
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1639,48 +1422,26 @@ function PostRewriteBar({ text, platform, onChange }: {
   }
 
   return (
-    <div className="space-y-1.5 mt-2">
-      <div className="flex items-center gap-1 flex-wrap">
-        <span className="text-[9px] font-mono uppercase tracking-widest text-violet-400 mr-0.5">
-          AI
-        </span>
-        {[
-          { key: "elaborate", label: "+More" },
-          { key: "shorter", label: "-Shorter" },
-          { key: "hookline", label: "Hook" },
-          { key: "storytelling", label: "Story" },
-          { key: "controversial", label: "Hot take" },
-          { key: "datadriven", label: "Data" },
-          { key: "professional", label: "Pro" },
-          { key: "casual", label: "Casual" },
-          { key: "grammar", label: "Grammar" },
-        ].map((btn) => (
-          <button
-            key={btn.key}
-            type="button"
-            disabled={busy}
-            onClick={() => rewrite(btn.key)}
-            className="px-2 py-1 rounded-md bg-violet-500/10 border border-violet-500/20 text-[8px] font-bold text-violet-300 hover:bg-violet-500/20 disabled:opacity-40"
-          >
-            {btn.label}
-          </button>
-        ))}
-      </div>
-      <div className="flex gap-1">
-        <input
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          placeholder="Custom: 'add a question at end' or 'mention Coca-Cola project'"
-          className="flex-1 px-2 py-1 rounded-md bg-[#0a0a0a] border border-white/[0.06] text-[9px] text-white placeholder:text-[#555] focus:outline-none focus:border-violet-500/40"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && custom.trim()) {
-              rewrite(custom);
-              setCustom("");
-            }
-          }}
-        />
-        {busy && <span className="text-[9px] text-violet-400/60 animate-pulse">rewriting...</span>}
-      </div>
+    <div className="flex items-center gap-1 flex-wrap">
+      {[
+        { key: "shorter", label: "Shorter" },
+        { key: "hookline", label: "Hook line" },
+        { key: "storytelling", label: "Story" },
+        { key: "controversial", label: "Hot take" },
+        { key: "cta", label: "Add CTA" },
+        { key: "casual", label: "Warmer" },
+      ].map((btn) => (
+        <button
+          key={btn.key}
+          type="button"
+          disabled={busy}
+          onClick={() => rewrite(btn.key)}
+          className="px-2 py-0.5 rounded text-[10px] text-[#888] hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.1] disabled:opacity-40 transition-colors"
+        >
+          {btn.label}
+        </button>
+      ))}
+      {busy && <span className="text-[9px] text-emerald-400/60 animate-pulse ml-1">rewriting...</span>}
     </div>
   );
 }
@@ -1770,139 +1531,139 @@ function QueuePanel({
     failed: "text-red-400 bg-red-400/10 border-red-400/20",
   };
 
+  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, []);
+
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-[#161616]">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between p-4 text-left"
-      >
+    <div className={cardClass}>
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <FiClock size={14} className="text-[#ff8c38]" />
-          <h3 className="text-sm font-bold tracking-wide uppercase text-[#ff8c38]">
-            Post Queue
-          </h3>
-          {pending.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20 text-[10px] font-bold text-amber-400">
-              {pending.length} pending
-            </span>
-          )}
+          <FiClock size={14} className="text-emerald-400" />
+          <h3 className="font-semibold text-sm">Queue ({pending.length} pending)</h3>
         </div>
-        <span className="text-[#666] text-xs">{open ? "▾" : "▸"}</span>
-      </button>
-
-      {open && (
-        <div className="px-4 pb-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] text-[#666] font-mono">
-              Cron fires every 5 min · {rows.length} total · {pending.length} pending · {sent.length} sent · {failed.length} failed
-            </p>
-            <button
-              type="button"
-              onClick={load}
-              disabled={loading}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10px] text-[#888] hover:text-white disabled:opacity-50"
-            >
-              <FiRefreshCw size={10} className={loading ? "animate-spin" : ""} />
-              Refresh
-            </button>
-          </div>
-
-          {rows.length === 0 ? (
-            <p className="text-xs text-[#555] py-4 text-center">
-              Queue is empty. Use "Queue" on a platform card to add posts.
-            </p>
-          ) : (
-            <ul className="divide-y divide-white/[0.05] max-h-[400px] overflow-y-auto">
-              {rows.map((row) => (
-                <li key={row.id} className="py-2.5 first:pt-0 last:pb-0">
-                  <div className="flex items-start gap-2">
-                    <span className="shrink-0 text-[10px] font-bold font-mono mt-0.5 w-5 text-center">
-                      {platformIcon[row.platform] || row.platform}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-white/90 line-clamp-2 leading-relaxed">
-                        {row.text.slice(0, 140)}
-                        {row.text.length > 140 ? "…" : ""}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span
-                          className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
-                            statusColors[row.status] || ""
-                          }`}
-                        >
-                          {row.status}
-                        </span>
-                        {row.channel_name && (
-                          <span className="text-[10px] text-[#666] font-mono">
-                            @{row.channel_name}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-[#555] font-mono">
-                          due {new Date(row.due_at).toLocaleString()}
-                        </span>
-                        {row.sent_at && (
-                          <span className="text-[10px] text-emerald-400/70 font-mono">
-                            sent {new Date(row.sent_at).toLocaleString()}
-                          </span>
-                        )}
-                        {row.error && (
-                          <span className="text-[10px] text-red-400 font-mono truncate max-w-[200px]">
-                            {row.error}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {row.status === "pending" && (
-                      <div className="flex gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => act("post-now", row.id)}
-                          disabled={acting === row.id}
-                          className="px-2 py-1 rounded-md bg-[#ff6b00]/10 border border-[#ff6b00]/20 text-[9px] font-bold text-[#ff8c38] hover:bg-[#ff6b00]/20 disabled:opacity-40"
-                          title="Post immediately via Buffer"
-                        >
-                          <FiSend size={10} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => act("delete", row.id)}
-                          disabled={acting === row.id}
-                          className="px-2 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-[9px] font-bold text-red-400 hover:bg-red-500/20 disabled:opacity-40"
-                          title="Remove from queue"
-                        >
-                          <FiTrash2 size={10} />
-                        </button>
-                      </div>
-                    )}
-                    {row.status === "failed" && (
-                      <div className="flex gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => act("post-now", row.id)}
-                          disabled={acting === row.id}
-                          className="px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-[9px] font-bold text-amber-400 hover:bg-amber-500/20 disabled:opacity-40"
-                          title="Retry posting"
-                        >
-                          <FiRefreshCw size={10} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => act("delete", row.id)}
-                          disabled={acting === row.id}
-                          className="px-2 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-[9px] font-bold text-red-400 hover:bg-red-500/20 disabled:opacity-40"
-                          title="Remove from queue"
-                        >
-                          <FiTrash2 size={10} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="p-1.5 rounded text-[#666] hover:text-white disabled:opacity-50"
+          >
+            <FiRefreshCw size={12} className={loading ? "animate-spin" : ""} />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              fetch("/api/admin/social/queue", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "process-due" }),
+              }).then(() => { load(); onSuccess("Processed due posts"); });
+            }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] text-emerald-400 hover:bg-emerald-400/10"
+          >
+            <FiSend size={10} />
+            Process due
+          </button>
         </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="text-xs text-[#555] py-3 text-center">No queued posts.</p>
+      ) : (
+        <ul className="divide-y divide-white/[0.05] max-h-[240px] overflow-y-auto">
+          {rows.map((row) => (
+            <li key={row.id} className="py-2 first:pt-0 last:pb-0 flex items-start gap-2">
+              <span className="shrink-0 text-[10px] font-bold font-mono mt-0.5 w-5 text-center">
+                {platformIcon[row.platform] || row.platform}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-white/80 line-clamp-1">{row.text.slice(0, 80)}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`px-1 py-px rounded text-[8px] font-bold uppercase border ${statusColors[row.status]}`}>
+                    {row.status}
+                  </span>
+                  <span className="text-[9px] text-[#555] font-mono">
+                    {new Date(row.due_at).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              {(row.status === "pending" || row.status === "failed") && (
+                <div className="flex gap-1 shrink-0">
+                  <button type="button" onClick={() => act("post-now", row.id)} disabled={acting === row.id}
+                    className="p-1 rounded text-emerald-400 hover:bg-emerald-400/10 disabled:opacity-40" title="Post now">
+                    <FiSend size={10} />
+                  </button>
+                  <button type="button" onClick={() => act("delete", row.id)} disabled={acting === row.id}
+                    className="p-1 rounded text-red-400 hover:bg-red-400/10 disabled:opacity-40" title="Delete">
+                    <FiTrash2 size={10} />
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* ---- Drafts panel ---- */
+
+function DraftsPanel({
+  drafts,
+  loadedDraftId,
+  onLoad,
+  onDelete,
+  onNew,
+}: {
+  drafts: Draft[];
+  loadedDraftId: string | null;
+  onLoad: (d: Draft) => void;
+  onDelete: (id: string) => void;
+  onNew?: () => void;
+}) {
+  return (
+    <div className={cardClass}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FiFolder size={14} className="text-emerald-400" />
+          <h3 className="font-semibold text-sm">Drafts</h3>
+        </div>
+        {onNew && (
+          <button type="button" onClick={onNew} className="text-[10px] text-[#888] hover:text-white">
+            + New
+          </button>
+        )}
+      </div>
+      {drafts.length === 0 ? (
+        <p className="text-xs text-[#555] py-3 text-center">No saved drafts.</p>
+      ) : (
+        <ul className="divide-y divide-white/[0.05] max-h-[240px] overflow-y-auto">
+          {drafts.map((d) => (
+            <li key={d.id} className="py-2 first:pt-0 last:pb-0 flex items-center gap-2">
+              <button type="button" onClick={() => onLoad(d)} className="flex-1 text-left min-w-0">
+                <p className="text-[11px] text-white/80 truncate">
+                  {shortPreview(d.topic) || shortPreview(d.composition.linkedin) || "(untitled)"}
+                </p>
+                <span className="text-[9px] text-[#555] font-mono">
+                  {timeAgo(d.savedAt)}
+                  {d.composition.linkedin ? " · LI" : ""}
+                  {d.composition.x ? " · X" : ""}
+                  {d.composition.instagram ? " · IG" : ""}
+                  {loadedDraftId === d.id ? " · editing" : ""}
+                </span>
+              </button>
+              <button type="button" onClick={() => onDelete(d.id)}
+                className="p-1 rounded text-[#666] hover:text-red-400 hover:bg-red-400/10 shrink-0">
+                <FiTrash2 size={10} />
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
