@@ -217,10 +217,17 @@ export async function fetchPortfolioSnapshot(): Promise<{
     if (!url) continue;
     if (!looksLikeMcp(url)) continue;
     try {
-      await mcpInitialize(url, c.bearer_token).catch(() => undefined);
+      const initRes = await mcpInitialize(url, c.bearer_token).catch(() => undefined);
+      if (initRes?.error) {
+        console.warn(`[portfolio] MCP init failed for ${c.label}: ${initRes.error.message}`);
+        continue;
+      }
       const tools = await mcpListTools(url, c.bearer_token);
+      if (tools.length === 0) {
+        console.warn(`[portfolio] MCP tools/list returned 0 tools for ${c.label} — token may be invalid`);
+        continue;
+      }
 
-      // Get holdings (stocks, crypto, etc.)
       const holdingsTool = pickTool(tools, [
         "get_holdings",
         "holdings",
@@ -233,7 +240,6 @@ export async function fetchPortfolioSnapshot(): Promise<{
           )
         : null;
 
-      // Get assets & debts (real estate, bank accounts, etc.)
       const assetsTool = pickTool(tools, [
         "get_assets_and_debts",
         "assets_debts",
@@ -254,8 +260,12 @@ export async function fetchPortfolioSnapshot(): Promise<{
           source: c.label,
         };
       }
-    } catch {
-      // try next connector
+      console.warn(`[portfolio] MCP tools returned ok=false for ${c.label}`, {
+        holdings: holdings?.error,
+        assets: assetsDebts?.error,
+      });
+    } catch (err) {
+      console.warn(`[portfolio] MCP call failed for ${c.label}:`, err instanceof Error ? err.message : err);
     }
   }
   return { holdings: null, assetsDebts: null, source: null };

@@ -9,6 +9,7 @@ import {
 } from "@/lib/content";
 import type { Connector } from "@/lib/content-types";
 import { resolveConnectorCall } from "@/lib/connector-url";
+import { looksLikeMcp } from "@/lib/mcp";
 import { getAccount, getChannels } from "@/lib/buffer";
 
 export const dynamic = "force-dynamic";
@@ -77,6 +78,29 @@ async function callConnector(c: Connector): Promise<ConnectorSnapshot> {
   }
 
   try {
+    if (looksLikeMcp(url)) {
+      // MCP endpoints need a POST JSON-RPC call to truly verify the token.
+      // A plain GET bypasses auth and always returns 200.
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+        cache: "no-store",
+      });
+      if (!r.ok) {
+        const body = await r.text().catch(() => "");
+        let msg = `Auth failed (${r.status})`;
+        try { const j = JSON.parse(body); if (j.error?.message) msg = j.error.message; } catch {}
+        return { id: c.id, label: c.label, ok: false, status: r.status, error: msg };
+      }
+      const data = await r.json().catch(() => null);
+      if (data?.error) {
+        return { id: c.id, label: c.label, ok: false, error: data.error.message || "MCP error" };
+      }
+      const toolCount = data?.result?.tools?.length ?? 0;
+      return { id: c.id, label: c.label, ok: true, status: r.status, data: { toolCount } };
+    }
+
     const r = await fetch(url, {
       headers,
       cache: "no-store",
@@ -138,7 +162,9 @@ export async function POST(request: Request) {
         ok: snap.ok,
         error: snap.error,
         summary: snap.ok
-          ? `Got a ${typeof snap.data === "object" && snap.data ? "JSON object" : "response"} from ${snap.label}`
+          ? (snap.data as any)?.toolCount != null
+            ? `MCP connected — ${(snap.data as any).toolCount} tools available from ${snap.label}`
+            : `Got a ${typeof snap.data === "object" && snap.data ? "JSON object" : "response"} from ${snap.label}`
           : undefined,
       });
     }
