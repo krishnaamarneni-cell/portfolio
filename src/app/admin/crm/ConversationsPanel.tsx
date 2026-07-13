@@ -7,9 +7,17 @@ import {
   FiArrowLeft,
   FiSearch,
   FiChevronRight,
+  FiChevronDown,
   FiInbox,
   FiSend,
   FiBriefcase,
+  FiCornerUpLeft,
+  FiCornerUpRight,
+  FiUsers,
+  FiEdit3,
+  FiZap,
+  FiPaperclip,
+  FiX,
 } from "react-icons/fi";
 import { type CachedThread, type ThreadMessage, timeAgo } from "./types";
 
@@ -119,6 +127,8 @@ export default function ConversationsPanel({ onSuccess, onError }: Props) {
         messages={detail}
         loadingMessages={loadingDetail}
         onBack={() => { setSelectedThread(null); setDetail(null); }}
+        onSuccess={onSuccess}
+        onError={onError}
       />
     );
   }
@@ -281,17 +291,111 @@ function ThreadRow({ thread: t, onOpen }: { thread: ThreadListItem; onOpen: () =
   );
 }
 
+/* ── email helpers ── */
+function extractEmail(s: string): string {
+  const m = /<([^>]+)>/.exec(s || "");
+  return (m ? m[1] : s || "").trim();
+}
+function senderName(s: string): string {
+  const nm = (s || "").split("<")[0].trim().replace(/^"|"$/g, "");
+  return nm || extractEmail(s) || "Unknown";
+}
+const SELF_HINTS = ["krishnaamarneni", "avgk26", "krishna.amarneni"];
+function isSelf(email: string): boolean {
+  const l = email.toLowerCase();
+  return SELF_HINTS.some((h) => l.includes(h));
+}
+function pickReplyTo(m: ThreadMessage): string {
+  const f = extractEmail(m.from);
+  return isSelf(f) ? extractEmail(m.to) : f;
+}
+function replyAllRecipients(msgs: ThreadMessage[]): string {
+  const set = new Set<string>();
+  for (const m of msgs) {
+    for (const field of [m.from, m.to, m.cc]) {
+      if (!field) continue;
+      for (const part of field.split(",")) {
+        const e = extractEmail(part).toLowerCase();
+        if (e && e.includes("@") && !isSelf(e)) set.add(e);
+      }
+    }
+  }
+  return Array.from(set).join(", ");
+}
+function quoteMessage(m: ThreadMessage): string {
+  return `\n\n---------- Forwarded message ----------\nFrom: ${m.from}\nDate: ${m.date}\nSubject: ${m.subject}\n\n${m.bodyText || m.snippet || ""}`;
+}
+
+type ComposerMode = "reply" | "replyAll" | "forward" | "new";
+const MODE_LABEL: Record<ComposerMode, string> = {
+  reply: "Reply",
+  replyAll: "Reply all",
+  forward: "Forward",
+  new: "New email",
+};
+
 function ThreadDetail({
   thread,
   messages,
   loadingMessages,
   onBack,
+  onSuccess,
+  onError,
 }: {
   thread: ThreadListItem;
   messages: ThreadMessage[] | null;
   loadingMessages: boolean;
   onBack: () => void;
+  onSuccess: (m: string) => void;
+  onError: (m: string) => void;
 }) {
+  const msgs = useMemo(() => messages ?? [], [messages]);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [composer, setComposer] = useState<{ mode: ComposerMode; to: string; subject: string; body: string } | null>(null);
+
+  useEffect(() => {
+    // Gmail-style: collapse all but the latest message on open.
+    setExpanded(new Set(msgs.length ? [msgs.length - 1] : []));
+    setComposer(null);
+  }, [messages, msgs.length]);
+
+  const threadContext = useMemo(
+    () =>
+      msgs
+        .slice(-6)
+        .map((m) => `From: ${m.from}\nDate: ${m.date}\nSubject: ${m.subject}\n\n${m.bodyText || m.snippet || ""}`)
+        .join("\n\n----\n\n"),
+    [msgs]
+  );
+
+  function toggle(i: number) {
+    setExpanded((s) => {
+      const n = new Set(s);
+      if (n.has(i)) n.delete(i);
+      else n.add(i);
+      return n;
+    });
+  }
+
+  function openComposer(mode: ComposerMode) {
+    const last = msgs[msgs.length - 1];
+    const baseSubj = (thread.subject || "").replace(/^(re|fwd):\s*/i, "").trim();
+    let to = "";
+    let subject = "";
+    let body = "";
+    if (mode === "reply") {
+      to = last ? pickReplyTo(last) : "";
+      subject = baseSubj ? `Re: ${baseSubj}` : "";
+    } else if (mode === "replyAll") {
+      to = replyAllRecipients(msgs);
+      subject = baseSubj ? `Re: ${baseSubj}` : "";
+    } else if (mode === "forward") {
+      subject = baseSubj ? `Fwd: ${baseSubj}` : "";
+      body = last ? quoteMessage(last) : "";
+    }
+    setComposer({ mode, to, subject, body });
+  }
+
   return (
     <div className="space-y-4">
       <button
@@ -312,22 +416,12 @@ function ThreadDetail({
               {thread.intent} ({Math.round((thread.intent_confidence ?? 0) * 100)}%)
             </span>
           )}
-          <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-            thread.direction === "inbound"
-              ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-          }`}>
-            {thread.direction}
-          </span>
           {thread.company_name && (
             <span className="flex items-center gap-1 text-xs text-[var(--admin-text-muted)]">
               <FiBriefcase size={11} /> {thread.company_name}
             </span>
           )}
         </div>
-        <p className="text-xs text-[var(--admin-text-muted)] mt-2">
-          Participants: {thread.participants?.join(", ") ?? "unknown"}
-        </p>
       </div>
 
       {/* Messages */}
@@ -335,36 +429,265 @@ function ThreadDetail({
         <div className="flex items-center justify-center py-8 text-[var(--admin-text-muted)] text-sm gap-2">
           <FiRefreshCw size={14} className="animate-spin" /> Loading messages...
         </div>
-      ) : messages && messages.length > 0 ? (
-        <div className="space-y-3">
-          {messages.map((m, i) => (
-            <div key={i} className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                  {(m.from || "?")[0].toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--admin-text)] truncate">{m.from}</p>
-                  <div className="flex items-center gap-2 text-[10px] text-[var(--admin-text-muted)]">
-                    <span>{m.date ? new Date(m.date).toLocaleString() : ""}</span>
-                    {m.to && <span className="truncate">To: {m.to}</span>}
+      ) : msgs.length > 0 ? (
+        <div className="space-y-2">
+          {msgs.map((m, i) => {
+            const open = expanded.has(i);
+            return (
+              <div key={i} className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggle(i)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--admin-surface-hover)] transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                    {senderName(m.from)[0]?.toUpperCase() || "?"}
                   </div>
-                </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-[var(--admin-text)] truncate">{senderName(m.from)}</span>
+                      <span className="text-[10px] text-[var(--admin-text-muted)] shrink-0 ml-auto">
+                        {m.date ? new Date(m.date).toLocaleString() : ""}
+                      </span>
+                    </div>
+                    {open ? (
+                      <p className="text-[10px] text-[var(--admin-text-muted)] truncate">To: {m.to}</p>
+                    ) : (
+                      <p className="text-xs text-[var(--admin-text-muted)] truncate">
+                        {m.snippet || m.bodyText?.slice(0, 100) || ""}
+                      </p>
+                    )}
+                  </div>
+                  <FiChevronDown
+                    size={14}
+                    className={`text-[var(--admin-text-muted)] shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
+                  />
+                </button>
+                {open && (
+                  <div className="px-4 pb-4 pt-3 border-t border-[var(--admin-border)] text-sm text-[var(--admin-text-secondary)] whitespace-pre-wrap break-words leading-relaxed">
+                    {m.bodyText || m.snippet || "(empty)"}
+                  </div>
+                )}
               </div>
-              {m.subject && m.subject !== thread.subject && (
-                <p className="text-xs text-[var(--admin-text-muted)] mb-2 italic">Re: {m.subject}</p>
-              )}
-              <div className="text-sm text-[var(--admin-text-secondary)] whitespace-pre-wrap break-words leading-relaxed">
-                {m.bodyText || m.snippet || "(empty)"}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="text-center py-8 text-[var(--admin-text-muted)] text-sm">
           No message content cached. Sync this contact to pull messages.
         </div>
       )}
+
+      {/* Reply action bar */}
+      {!composer && (
+        <div className="flex flex-wrap gap-2">
+          <ActionBtn icon={<FiCornerUpLeft size={13} />} label="Reply" onClick={() => openComposer("reply")} primary disabled={msgs.length === 0} />
+          <ActionBtn icon={<FiUsers size={13} />} label="Reply all" onClick={() => openComposer("replyAll")} disabled={msgs.length === 0} />
+          <ActionBtn icon={<FiCornerUpRight size={13} />} label="Forward" onClick={() => openComposer("forward")} disabled={msgs.length === 0} />
+          <ActionBtn icon={<FiEdit3 size={13} />} label="New email" onClick={() => openComposer("new")} />
+        </div>
+      )}
+
+      {composer && (
+        <Composer
+          key={composer.mode}
+          mode={composer.mode}
+          initialTo={composer.to}
+          initialSubject={composer.subject}
+          initialBody={composer.body}
+          threadContext={threadContext}
+          onClose={() => setComposer(null)}
+          onSuccess={onSuccess}
+          onError={onError}
+        />
+      )}
+    </div>
+  );
+}
+
+function ActionBtn({
+  icon,
+  label,
+  onClick,
+  primary,
+  disabled,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  primary?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors disabled:opacity-40 ${
+        primary
+          ? "bg-[#ff6b00] text-white hover:bg-[#e55d00]"
+          : "bg-[var(--admin-surface)] border border-[var(--admin-border)] text-[var(--admin-text-secondary)] hover:border-[#ff6b00] hover:text-[#ff6b00]"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function Composer({
+  mode,
+  initialTo,
+  initialSubject,
+  initialBody,
+  threadContext,
+  onClose,
+  onSuccess,
+  onError,
+}: {
+  mode: ComposerMode;
+  initialTo: string;
+  initialSubject: string;
+  initialBody: string;
+  threadContext: string;
+  onClose: () => void;
+  onSuccess: (m: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [to, setTo] = useState(initialTo);
+  const [subject, setSubject] = useState(initialSubject);
+  const [body, setBody] = useState(initialBody);
+  const [hint, setHint] = useState("");
+  const [attach, setAttach] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [aiBody, setAiBody] = useState(false);
+  const [aiSubj, setAiSubj] = useState(false);
+
+  async function call(payload: Record<string, unknown>) {
+    const r = await fetch("/api/admin/crm/reply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return { ok: r.ok, json: await r.json().catch(() => ({})) };
+  }
+
+  async function writeBody() {
+    setAiBody(true);
+    try {
+      const { ok, json } = await call({ action: "ai-body", context: threadContext, instruction: hint || undefined });
+      if (ok && json.draft) setBody(json.draft);
+      else onError(json.error || "Couldn't draft a reply");
+    } catch {
+      onError("Network error");
+    }
+    setAiBody(false);
+  }
+
+  async function writeSubject() {
+    setAiSubj(true);
+    try {
+      const { ok, json } = await call({ action: "ai-subject", context: threadContext });
+      if (ok && json.subject) setSubject(json.subject);
+      else onError(json.error || "Couldn't suggest a subject");
+    } catch {
+      onError("Network error");
+    }
+    setAiSubj(false);
+  }
+
+  async function send() {
+    if (!to.trim()) return onError("Add a recipient");
+    if (!body.trim()) return onError("Write a message");
+    setSending(true);
+    try {
+      const { ok, json } = await call({ action: "send", to, subject, body, attachResume: attach });
+      if (ok && json.ok) {
+        onSuccess(`Sent via ${json.provider}`);
+        onClose();
+      } else onError(json.error || "Send failed");
+    } catch {
+      onError("Network error");
+    }
+    setSending(false);
+  }
+
+  const inputCls =
+    "w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] focus:border-[#ff6b00] focus:outline-none text-sm text-[var(--admin-text)] placeholder:text-[var(--admin-text-muted)]";
+
+  return (
+    <div className="bg-[var(--admin-surface)] rounded-xl border border-[#ff6b00]/30 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[#ff6b00]">{MODE_LABEL[mode]}</span>
+        <button type="button" onClick={onClose} className="text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]">
+          <FiX size={16} />
+        </button>
+      </div>
+
+      <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="To (comma-separated)" className={inputCls} />
+
+      <div className="flex gap-2">
+        <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" className={inputCls + " flex-1"} />
+        <button
+          type="button"
+          onClick={writeSubject}
+          disabled={aiSubj}
+          title="Write subject with AI"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-xs font-medium text-purple-400 hover:bg-purple-500/20 disabled:opacity-50 shrink-0"
+        >
+          <FiZap size={12} />
+          {aiSubj ? "…" : "AI subject"}
+        </button>
+      </div>
+
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={8}
+        placeholder="Write your message, or use ‘Write with AI’…"
+        className={inputCls + " resize-y leading-relaxed"}
+      />
+
+      {/* AI write toolbar */}
+      <div className="flex gap-2">
+        <input
+          value={hint}
+          onChange={(e) => setHint(e.target.value)}
+          placeholder="Optional AI hint: ‘decline politely’, ‘ask for a call Tuesday’…"
+          className={inputCls + " flex-1 text-xs"}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); writeBody(); } }}
+        />
+        <button
+          type="button"
+          onClick={writeBody}
+          disabled={aiBody}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-xs font-medium text-purple-400 hover:bg-purple-500/20 disabled:opacity-50 shrink-0"
+        >
+          <FiZap size={12} />
+          {aiBody ? "Writing…" : "Write with AI"}
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <label className="inline-flex items-center gap-1.5 text-xs text-[var(--admin-text-secondary)] cursor-pointer select-none">
+          <input type="checkbox" checked={attach} onChange={(e) => setAttach(e.target.checked)} className="accent-[#ff6b00]" />
+          <FiPaperclip size={12} /> Attach resume
+        </label>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={onClose} className="px-3 py-2 rounded-lg text-xs text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={send}
+            disabled={sending}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#ff6b00] text-white text-xs font-semibold hover:bg-[#e55d00] disabled:opacity-50"
+          >
+            <FiSend size={12} />
+            {sending ? "Sending…" : "Send"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
