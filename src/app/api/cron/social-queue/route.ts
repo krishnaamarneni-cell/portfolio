@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 import { fetchConnector } from "@/lib/content";
 import { createBufferPost } from "@/lib/buffer";
+import { processNextDripImage } from "@/lib/social-drip";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,41 +30,48 @@ export async function GET(request: Request) {
     .order("due_at", { ascending: true })
     .limit(20);
 
-  if (!due || due.length === 0)
-    return NextResponse.json({ processed: 0 });
-
-  const connector = await fetchConnector("buffer");
-  if (!connector?.bearer_token)
-    return NextResponse.json({ error: "Buffer not configured" }, { status: 503 });
-
-  const token = connector.bearer_token as string;
   let sent = 0;
   let failed = 0;
 
-  for (const item of due) {
-    const result = await createBufferPost({
-      token,
-      channelId: item.channel_id,
-      text: item.text,
-      mode: "shareNow",
-      imageUrl: item.image_url ?? undefined,
-    });
+  if (due && due.length > 0) {
+    const connector = await fetchConnector("buffer");
+    const token = connector?.bearer_token as string | undefined;
+    if (!token) {
+      return NextResponse.json({ error: "Buffer not configured" }, { status: 503 });
+    }
 
-    await db
-      .from("social_queue")
-      .update({
-        status: result.ok ? "sent" : "failed",
-        error: result.error ?? null,
-        sent_at: result.ok ? new Date().toISOString() : null,
-      })
-      .eq("id", item.id);
+    for (const item of due) {
+      const result = await createBufferPost({
+        token,
+        channelId: item.channel_id,
+        text: item.text,
+        mode: "shareNow",
+        imageUrl: item.image_url ?? undefined,
+      });
 
-    if (result.ok) sent++;
-    else failed++;
+      await db
+        .from("social_queue")
+        .update({
+          status: result.ok ? "sent" : "failed",
+          error: result.error ?? null,
+          sent_at: result.ok ? new Date().toISOString() : null,
+        })
+        .eq("id", item.id);
 
-    if (due.indexOf(item) < due.length - 1)
-      await new Promise((r) => setTimeout(r, 1000));
+      if (result.ok) sent++;
+      else failed++;
+
+      if (due.indexOf(item) < due.length - 1)
+        await new Promise((r) => setTimeout(r, 1000));
+    }
   }
 
-  return NextResponse.json({ processed: due.length, sent, failed });
+  // Daily auto-drip — post one queued image/day to every connected platform.
+  const drip = await processNextDripImage().catch((err) => ({
+    processed: false as const,
+    reason: "error" as const,
+    error: err instanceof Error ? err.message : "drip failed",
+  }));
+
+  return NextResponse.json({ processed: due?.length ?? 0, sent, failed, drip });
 }

@@ -1027,6 +1027,9 @@ export default function SocialEditor({
         </div>
       )}
 
+      {/* ── Auto-post drip ── */}
+      <DripPanel onSuccess={onSuccess} onError={onError} />
+
       {/* ── Queue + Drafts side by side ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <QueuePanel onSuccess={onSuccess} onError={onError} />
@@ -1683,6 +1686,289 @@ function CollapsibleCard({
         {right && <div className="shrink-0">{right}</div>}
       </div>
       {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
+    </div>
+  );
+}
+
+/* ---- Auto-post drip: upload a batch, post one/day to all platforms ---- */
+
+type DripImage = {
+  id: string;
+  image_url: string;
+  status: string;
+  error: string | null;
+  created_at: string;
+  posted_at: string | null;
+};
+
+function DripPanel({
+  onSuccess,
+  onError,
+}: {
+  onSuccess: (m: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [images, setImages] = useState<DripImage[]>([]);
+  const [enabled, setEnabled] = useState(false);
+  const [needsMigration, setNeedsMigration] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/admin/social/drip");
+      const j = await r.json();
+      setImages(Array.isArray(j.images) ? j.images : []);
+      setEnabled(!!j.enabled);
+      setNeedsMigration(!!j.needsMigration);
+    } catch {}
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    if (open) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const pending = images.filter((i) => i.status === "pending");
+
+  async function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setUploading(true);
+    const urls: string[] = [];
+    let failedUploads = 0;
+    for (const f of files) {
+      try {
+        const form = new FormData();
+        form.append("file", f);
+        form.append("kind", "social");
+        const r = await fetch("/api/admin/upload", { method: "POST", body: form });
+        const j = await r.json();
+        if (r.ok && j.url) urls.push(j.url);
+        else failedUploads++;
+      } catch {
+        failedUploads++;
+      }
+    }
+    if (urls.length) {
+      try {
+        const r = await fetch("/api/admin/social/drip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add", urls }),
+        });
+        const j = await r.json();
+        if (r.ok) {
+          onSuccess(
+            `Added ${urls.length} image${urls.length > 1 ? "s" : ""}${failedUploads ? ` (${failedUploads} failed)` : ""}`
+          );
+          load();
+        } else onError(j.error || "Could not add images");
+      } catch {
+        onError("Network error adding images");
+      }
+    } else {
+      onError("No images could be uploaded");
+    }
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function toggle() {
+    const next = !enabled;
+    setEnabled(next);
+    try {
+      const r = await fetch("/api/admin/social/drip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle", enabled: next }),
+      });
+      if (!r.ok) {
+        setEnabled(!next);
+        onError("Could not update the switch");
+        return;
+      }
+      onSuccess(next ? "Daily auto-posting is ON" : "Daily auto-posting paused");
+    } catch {
+      setEnabled(!next);
+      onError("Network error");
+    }
+  }
+
+  async function remove(id: string) {
+    setImages((imgs) => imgs.filter((i) => i.id !== id));
+    try {
+      await fetch("/api/admin/social/drip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "remove", id }),
+      });
+    } catch {}
+  }
+
+  async function postNow() {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/social/drip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "post-now" }),
+      });
+      const j = await r.json();
+      const res = j.result;
+      if (res?.processed && res?.ok) onSuccess("Posted the next image to all platforms");
+      else if (res?.reason === "empty") onError("No pending images to post");
+      else if (res?.reason === "no-buffer") onError("Buffer isn't configured");
+      else if (res?.reason === "no-channels") onError("No connected LinkedIn/X/Instagram channels");
+      else onError(res?.error || "Could not post — check the image list for errors");
+      load();
+    } catch {
+      onError("Network error");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)]">
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-2 min-w-0 text-left"
+        >
+          <FiChevronDown
+            size={14}
+            className={`shrink-0 text-[var(--admin-text-muted)] transition-transform duration-200 ${open ? "" : "-rotate-90"}`}
+          />
+          <FiClock size={13} className="text-emerald-600" />
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-secondary)]">
+            Auto-post · 1 image / day
+          </span>
+          {pending.length > 0 && (
+            <span className="text-[10px] text-[var(--admin-text-muted)]">({pending.length} queued)</span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={toggle}
+          title="Enable daily auto-posting"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+            enabled
+              ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600"
+              : "bg-[var(--admin-input-bg)] border-[var(--admin-border)] text-[var(--admin-text-muted)]"
+          }`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${enabled ? "bg-emerald-500" : "bg-[var(--admin-text-muted)]"}`} />
+          {enabled ? "On" : "Off"}
+        </button>
+      </div>
+      {open && (
+        <div className="px-4 pb-4 space-y-3">
+          {needsMigration ? (
+            <p className="text-[11px] text-amber-500 leading-relaxed">
+              Run <code className="font-mono px-1 rounded bg-[var(--admin-input-bg)]">supabase/social_drip.sql</code> in
+              Supabase once, then this feature activates.
+            </p>
+          ) : (
+            <>
+              <p className="text-[11px] text-[var(--admin-text-muted)] leading-relaxed">
+                Upload a batch of images. Once a day the cron posts the next one to{" "}
+                <span className="text-[var(--admin-text-secondary)]">all connected platforms</span>, writing a caption
+                from the image automatically. Flip the switch to <span className="text-emerald-600">On</span> to start.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20 disabled:opacity-50"
+                >
+                  <FiUploadCloud size={12} />
+                  {uploading ? "Uploading…" : "Upload images"}
+                </button>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  className="hidden"
+                  onChange={onFiles}
+                />
+                <button
+                  type="button"
+                  onClick={postNow}
+                  disabled={busy || pending.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-xs text-[var(--admin-text-secondary)] hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-40"
+                >
+                  <FiZap size={12} />
+                  {busy ? "Posting…" : "Post next now"}
+                </button>
+                <button
+                  type="button"
+                  onClick={load}
+                  disabled={loading}
+                  className="inline-flex items-center gap-1 text-[10px] text-[var(--admin-text-muted)] hover:text-emerald-600 ml-auto"
+                >
+                  <FiRefreshCw size={10} className={loading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+              </div>
+              {images.length === 0 ? (
+                <p className="text-[11px] text-[var(--admin-text-muted)] py-3 text-center">
+                  {loading ? "Loading…" : "No images yet. Upload 20–30 to drip out one per day."}
+                </p>
+              ) : (
+                <div className="grid grid-cols-5 sm:grid-cols-8 gap-2">
+                  {images.map((img) => (
+                    <div
+                      key={img.id}
+                      className="relative group aspect-square rounded-lg overflow-hidden border border-[var(--admin-border)]"
+                      title={img.error || img.status}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img.image_url} alt="" className="w-full h-full object-cover" />
+                      <span
+                        className={`absolute top-1 left-1 w-2 h-2 rounded-full ring-1 ring-black/40 ${
+                          img.status === "posted"
+                            ? "bg-emerald-500"
+                            : img.status === "failed"
+                              ? "bg-red-500"
+                              : "bg-amber-400"
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => remove(img.id)}
+                        className="absolute top-1 right-1 p-0.5 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-red-500/80"
+                        title="Remove"
+                      >
+                        <FiTrash2 size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-[10px] text-[var(--admin-text-muted)] flex flex-wrap gap-x-3 gap-y-1">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> pending
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> posted
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> failed
+                </span>
+                <span>· runs daily ~12:00 UTC</span>
+              </p>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
