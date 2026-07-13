@@ -16,6 +16,7 @@ import {
   FiFolder,
   FiTrash2,
   FiUploadCloud,
+  FiChevronDown,
 } from "react-icons/fi";
 import { FaXTwitter, FaLinkedinIn, FaInstagram } from "react-icons/fa6";
 import {
@@ -197,6 +198,12 @@ export default function SocialEditor({
   const [promptWithLogo, setPromptWithLogo] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Collapsible sections — the top two (Compose, Image) start minimized so the
+  // editor opens compact; Posts stays expanded.
+  const [openCompose, setOpenCompose] = useState(false);
+  const [openImage, setOpenImage] = useState(false);
+  const [openPosts, setOpenPosts] = useState(true);
 
   // Load the saved-image library once so the thumbnail strip is there on open.
   useEffect(() => {
@@ -417,7 +424,9 @@ export default function SocialEditor({
       // for new content, so the old custom prompt no longer applies.
       userEditedPromptRef.current = false;
       setImagePrompt(promptForProvider(imageProvider, newComp));
-      onSuccess("Posts drafted");
+      // Reveal the image tools + ready-to-paste prompt now that a draft exists.
+      setOpenImage(true);
+      onSuccess("Posts drafted — now generate or copy the image prompt");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Network error");
     }
@@ -652,8 +661,13 @@ export default function SocialEditor({
         </button>
       </div>
 
-      {/* ── Topic + Tone + Compose ── */}
-      <div className={cardClass}>
+      {/* ── Compose ── */}
+      <CollapsibleCard
+        title="Compose"
+        icon={<FiZap size={13} className="text-emerald-600" />}
+        open={openCompose}
+        onToggle={() => setOpenCompose((v) => !v)}
+      >
         <div className="flex gap-3 items-end">
           <div className="flex-1">
             <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1.5">
@@ -710,18 +724,15 @@ export default function SocialEditor({
           }));
           if (data.imageUrl) setImageUrl(data.imageUrl);
         }} />
-      </div>
+      </CollapsibleCard>
 
       {/* ── Image ── */}
-      <div className={cardClass}>
-        {/* Label + provider */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <FiImage size={13} className="text-emerald-600" />
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-secondary)]">
-              Image
-            </span>
-          </div>
+      <CollapsibleCard
+        title="Image"
+        icon={<FiImage size={13} className="text-emerald-600" />}
+        open={openImage}
+        onToggle={() => setOpenImage((v) => !v)}
+        right={
           <select
             value={imageProvider}
             onChange={(e) => {
@@ -735,8 +746,8 @@ export default function SocialEditor({
             <option value="fal">fal.ai</option>
             <option value="unsplash">Unsplash</option>
           </select>
-        </div>
-
+        }
+      >
         {/* Preview + prompt inputs */}
         <div className="flex gap-3 items-stretch">
           <div className="w-24 h-24 rounded-xl border border-dashed border-[var(--admin-border)] bg-[var(--admin-input-bg)] flex items-center justify-center shrink-0 overflow-hidden">
@@ -843,54 +854,59 @@ export default function SocialEditor({
         )}
 
         {/* Prompt for external image tools (ChatGPT / DALL·E) */}
-        {buildExternalPrompt(false) && (
-          <div className="border-t border-[var(--admin-border)] pt-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)]">
-                Prompt for ChatGPT / DALL·E
-              </span>
-              <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--admin-text-secondary)] cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={promptWithLogo}
-                  onChange={(e) => setPromptWithLogo(e.target.checked)}
-                  className="accent-emerald-500"
-                />
-                Include my logo
-              </label>
-            </div>
-            <textarea
-              readOnly
-              rows={promptWithLogo ? 4 : 2}
-              value={buildExternalPrompt(promptWithLogo)}
-              onFocus={(e) => e.currentTarget.select()}
-              className={textareaClass + " text-[11px]"}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={copyExternalPrompt}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20"
-              >
-                {promptCopied ? <FiCheck size={12} /> : <FiCopy size={12} />}
-                {promptCopied ? "Copied" : "Copy prompt"}
-              </button>
-              {promptWithLogo && (
-                <a
-                  href={LOGO_URL}
-                  download
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-xs text-[var(--admin-text-secondary)] hover:border-emerald-500 hover:text-emerald-600"
-                >
-                  <FiImage size={12} />
-                  Download logo to attach
-                </a>
-              )}
-              <span className="text-[10px] text-[var(--admin-text-muted)]">
-                Paste into ChatGPT or DALL·E{promptWithLogo ? ", then attach the logo" : ""}
-              </span>
-            </div>
+        <div className="border-t border-[var(--admin-border)] pt-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)]">
+              Prompt for ChatGPT / DALL·E
+            </span>
+            <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--admin-text-secondary)] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={promptWithLogo}
+                onChange={(e) => setPromptWithLogo(e.target.checked)}
+                className="accent-emerald-500"
+              />
+              Include my logo
+            </label>
           </div>
-        )}
+          <p className="text-[10px] text-[var(--admin-text-muted)] leading-relaxed">
+            Have a fal.ai key? Just hit <span className="text-emerald-600 font-medium">Generate</span>. No key? Copy
+            this prompt into ChatGPT or DALL·E, then <span className="text-[var(--admin-text-secondary)]">Upload</span> the
+            result here.
+          </p>
+          <textarea
+            readOnly
+            rows={promptWithLogo ? 4 : 2}
+            value={buildExternalPrompt(promptWithLogo)}
+            onFocus={(e) => e.currentTarget.select()}
+            placeholder="Compose a topic or type an AI image prompt above to get a ready-to-paste prompt."
+            className={textareaClass + " text-[11px]"}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={copyExternalPrompt}
+              disabled={!buildExternalPrompt(false)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20 disabled:opacity-40"
+            >
+              {promptCopied ? <FiCheck size={12} /> : <FiCopy size={12} />}
+              {promptCopied ? "Copied" : "Copy prompt"}
+            </button>
+            {promptWithLogo && (
+              <a
+                href={LOGO_URL}
+                download
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-xs text-[var(--admin-text-secondary)] hover:border-emerald-500 hover:text-emerald-600"
+              >
+                <FiImage size={12} />
+                Download logo to attach
+              </a>
+            )}
+            <span className="text-[10px] text-[var(--admin-text-muted)]">
+              {promptWithLogo ? "Attach the logo in ChatGPT with the prompt" : "With logo? Tick the box to attach it"}
+            </span>
+          </div>
+        </div>
 
         {/* Saved-image library — horizontal strip */}
         {savedOpen && (
@@ -942,10 +958,16 @@ export default function SocialEditor({
             )}
           </div>
         )}
-      </div>
+      </CollapsibleCard>
 
-      {/* ── Platform cards — side by side ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* ── Posts ── */}
+      <CollapsibleCard
+        title="Posts"
+        icon={<FiSend size={13} className="text-emerald-600" />}
+        open={openPosts}
+        onToggle={() => setOpenPosts((v) => !v)}
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {PLATFORMS.map((p) => {
           const text = composition[p.key];
           return (
@@ -973,7 +995,8 @@ export default function SocialEditor({
             />
           );
         })}
-      </div>
+        </div>
+      </CollapsibleCard>
 
       {/* ── Post all bar ── */}
       {!profilesError && profiles.length > 0 && (
@@ -1622,6 +1645,47 @@ function CampaignCard({
 }
 
 /* ---- Video to Post component ---- */
+
+/* ---- Collapsible section wrapper ---- */
+
+function CollapsibleCard({
+  title,
+  icon,
+  open,
+  onToggle,
+  right,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)]">
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex items-center gap-2 min-w-0 text-left"
+        >
+          <FiChevronDown
+            size={14}
+            className={`shrink-0 text-[var(--admin-text-muted)] transition-transform duration-200 ${open ? "" : "-rotate-90"}`}
+          />
+          {icon}
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-secondary)]">
+            {title}
+          </span>
+        </button>
+        {right && <div className="shrink-0">{right}</div>}
+      </div>
+      {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
+    </div>
+  );
+}
 
 function VideoToPost({ onGenerated }: {
   onGenerated: (data: { summary?: string; linkedin?: string; twitter?: string; instagram?: string; imageUrl?: string }) => void;
