@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 import { fetchConnector } from "@/lib/content";
 import { createBufferPost } from "@/lib/buffer";
-import { processNextDripImage } from "@/lib/social-drip";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -66,12 +65,5 @@ export async function GET(request: Request) {
     }
   }
 
-  // Daily auto-drip — post one queued image/day to every connected platform.
-  const drip = await processNextDripImage().catch((err) => ({
-    processed: false as const,
-    reason: "error" as const,
-    error: err instanceof Error ? err.message : "drip failed",
-  }));
-
-  return NextResponse.json({ processed: due?.length ?? 0, sent, failed, drip });
+  return NextResponse.json({ processed: due?.length ?? 0, sent, failed });
 }

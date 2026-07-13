@@ -1701,6 +1701,19 @@ type DripImage = {
   posted_at: string | null;
 };
 
+const DRIP_TIMEZONES = [
+  "Asia/Kolkata",
+  "UTC",
+  "America/New_York",
+  "America/Chicago",
+  "America/Los_Angeles",
+  "Europe/London",
+  "Europe/Berlin",
+  "Asia/Dubai",
+  "Asia/Singapore",
+  "Australia/Sydney",
+];
+
 function DripPanel({
   onSuccess,
   onError,
@@ -1715,6 +1728,10 @@ function DripPanel({
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [postTime, setPostTime] = useState("09:00");
+  const [timezone, setTimezone] = useState("Asia/Kolkata");
+  const [cronUrl, setCronUrl] = useState("");
+  const [copied, setCopied] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -1725,8 +1742,50 @@ function DripPanel({
       setImages(Array.isArray(j.images) ? j.images : []);
       setEnabled(!!j.enabled);
       setNeedsMigration(!!j.needsMigration);
+      if (j.post_time) setPostTime(j.post_time);
+      if (j.timezone) setTimezone(j.timezone);
+      if (j.cronUrl) setCronUrl(j.cronUrl);
     } catch {}
     setLoading(false);
+  }
+
+  async function saveSchedule(next: { post_time?: string; timezone?: string }) {
+    try {
+      const r = await fetch("/api/admin/social/drip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "schedule", ...next }),
+      });
+      if (r.ok) onSuccess("Schedule saved");
+      else onError("Could not save schedule");
+    } catch {
+      onError("Network error saving schedule");
+    }
+  }
+
+  async function copyCronUrl() {
+    if (!cronUrl) return;
+    try {
+      await navigator.clipboard.writeText(cronUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      onError("Couldn't copy");
+    }
+  }
+
+  function tzLabel(tz: string): string {
+    try {
+      const t = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }).format(new Date());
+      return `${tz.replace(/_/g, " ")} · now ${t}`;
+    } catch {
+      return tz;
+    }
   }
 
   useEffect(() => {
@@ -1877,10 +1936,75 @@ function DripPanel({
           ) : (
             <>
               <p className="text-[11px] text-[var(--admin-text-muted)] leading-relaxed">
-                Upload a batch of images. Once a day the cron posts the next one to{" "}
-                <span className="text-[var(--admin-text-secondary)]">all connected platforms</span>, writing a caption
-                from the image automatically. Flip the switch to <span className="text-emerald-600">On</span> to start.
+                Upload a batch of images. Each day at your chosen time the next one is posted to{" "}
+                <span className="text-[var(--admin-text-secondary)]">all connected platforms</span>, with a caption
+                written from the image automatically. Flip the switch to <span className="text-emerald-600">On</span>{" "}
+                and add the cron URL below to cron-job.org.
               </p>
+
+              {/* Schedule + cron URL */}
+              <div className="rounded-lg border border-[var(--admin-border)] bg-[var(--admin-input-bg)] p-3 space-y-2.5">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div>
+                    <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1">
+                      Post at
+                    </label>
+                    <input
+                      type="time"
+                      value={postTime}
+                      onChange={(e) => setPostTime(e.target.value)}
+                      onBlur={() => saveSchedule({ post_time: postTime })}
+                      className="px-2.5 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs text-[var(--admin-text)] focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[180px]">
+                    <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1">
+                      Timezone
+                    </label>
+                    <select
+                      value={timezone}
+                      onChange={(e) => {
+                        setTimezone(e.target.value);
+                        saveSchedule({ timezone: e.target.value });
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs text-[var(--admin-text)] focus:outline-none focus:border-emerald-500"
+                    >
+                      {(DRIP_TIMEZONES.includes(timezone) ? DRIP_TIMEZONES : [timezone, ...DRIP_TIMEZONES]).map((tz) => (
+                        <option key={tz} value={tz}>
+                          {tzLabel(tz)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1">
+                    Cron URL — add to cron-job.org, run every 15 min
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={cronUrl}
+                      onFocus={(e) => e.currentTarget.select()}
+                      placeholder="Loading…"
+                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-[10px] font-mono text-[var(--admin-text-secondary)] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={copyCronUrl}
+                      disabled={!cronUrl}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20 disabled:opacity-40"
+                    >
+                      {copied ? <FiCheck size={12} /> : <FiCopy size={12} />}
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-[var(--admin-text-muted)]">
+                    It fires every 15 min but only posts around your chosen time, once a day — every other run is empty.
+                  </p>
+                </div>
+              </div>
+
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
