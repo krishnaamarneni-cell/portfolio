@@ -15,6 +15,7 @@ import {
   FiSave,
   FiFolder,
   FiTrash2,
+  FiUploadCloud,
 } from "react-icons/fi";
 import { FaXTwitter, FaLinkedinIn, FaInstagram } from "react-icons/fa6";
 import {
@@ -181,6 +182,43 @@ export default function SocialEditor({
    * if false, we keep the input synced to whichever auto-prompt fits the
    * selected provider. */
   const userEditedPromptRef = useRef(false);
+
+  // Upload + saved images
+  const [uploading, setUploading] = useState(false);
+  const [savedImages, setSavedImages] = useState<{ name: string; url: string; created_at: string }[]>([]);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedLoading, setSavedLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("kind", "social");
+      const r = await fetch("/api/admin/upload", { method: "POST", body: form });
+      const j = await r.json();
+      if (!r.ok) { onError(j.error || "Upload failed"); setUploading(false); return; }
+      setImageUrl(j.url);
+      onSuccess("Image uploaded");
+      // Refresh saved list if open
+      if (savedOpen) fetchSavedImages();
+    } catch { onError("Upload network error"); }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function fetchSavedImages() {
+    setSavedLoading(true);
+    try {
+      const r = await fetch("/api/admin/social/images");
+      const j = await r.json();
+      if (Array.isArray(j.images)) setSavedImages(j.images);
+    } catch {}
+    setSavedLoading(false);
+  }
 
   const [tone, setTone] = useState("default");
 
@@ -618,7 +656,38 @@ export default function SocialEditor({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-50"
             >
               <FiImage size={12} />
-              {generating ? "…" : "Image"}
+              {generating ? "…" : "Generate"}
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-50"
+            >
+              <FiUploadCloud size={12} />
+              {uploading ? "…" : "Upload"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={handleUpload}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setSavedOpen((v) => !v);
+                if (!savedOpen && savedImages.length === 0) fetchSavedImages();
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-colors ${
+                savedOpen
+                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600"
+                  : "bg-[var(--admin-surface)] border-[var(--admin-border)] hover:border-emerald-500 hover:text-emerald-600"
+              }`}
+            >
+              <FiFolder size={12} />
+              Saved{savedImages.length > 0 ? ` (${savedImages.length})` : ""}
             </button>
           </div>
         </div>
@@ -640,6 +709,49 @@ export default function SocialEditor({
             >
               Clear
             </button>
+          </div>
+        )}
+        {savedOpen && (
+          <div className="border-t border-[var(--admin-border)] pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-secondary)]">
+                Saved Images
+              </span>
+              <button
+                type="button"
+                onClick={fetchSavedImages}
+                disabled={savedLoading}
+                className="text-[10px] text-[var(--admin-text-muted)] hover:text-emerald-600"
+              >
+                {savedLoading ? "Loading…" : "Refresh"}
+              </button>
+            </div>
+            {savedImages.length === 0 ? (
+              <p className="text-[11px] text-[var(--admin-text-muted)] py-4 text-center">
+                {savedLoading ? "Loading saved images…" : "No saved images yet. Upload one to get started."}
+              </p>
+            ) : (
+              <div className="grid grid-cols-5 sm:grid-cols-8 gap-2 max-h-48 overflow-y-auto">
+                {savedImages.map((img) => (
+                  <button
+                    key={img.name}
+                    type="button"
+                    onClick={() => {
+                      setImageUrl(img.url);
+                      setImageCredit(null);
+                      setSavedOpen(false);
+                      onSuccess("Image selected");
+                    }}
+                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-colors hover:border-emerald-500 ${
+                      imageUrl === img.url ? "border-emerald-500" : "border-[var(--admin-border)]"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   const ext = extFromMime(file.type) || ".png";
   const base = safeFileName(file.name.replace(/\.[^.]+$/, "") || "image");
   const stamp = Date.now().toString(36);
-  const subdir = kind === "logo" ? "logos" : kind === "preview" ? "previews" : "uploads";
+  const subdir = kind === "logo" ? "logos" : kind === "preview" ? "previews" : kind === "social" ? "social" : "uploads";
   const storagePath = `${subdir}/${base}-${stamp}${ext}`;
 
   const buffer = Buffer.from(await file.arrayBuffer());
