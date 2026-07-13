@@ -16,6 +16,8 @@ import {
   FiChevronUp,
   FiMessageSquare,
   FiSend,
+  FiEye,
+  FiBookmark,
 } from "react-icons/fi";
 import { AGENT_MODELS, DEFAULT_AGENT_MODEL } from "@/lib/agents";
 
@@ -100,6 +102,14 @@ export default function AgentsTab({
   const [screenState, setScreenState] = useState<AgentState | null>(null);
   const [screenBusy, setScreenBusy] = useState(false);
   const [screenError, setScreenError] = useState<string | null>(null);
+
+  // Social Observer — learns your content style, suggests post ideas
+  const [obsMarkdown, setObsMarkdown] = useState<string>("");
+  const [obsIdeas, setObsIdeas] = useState<{ topic: string; note: string }[]>([]);
+  const [obsRunAt, setObsRunAt] = useState<number | null>(null);
+  const [obsBusy, setObsBusy] = useState(false);
+  const [obsError, setObsError] = useState<string | null>(null);
+  const [savedIdeas, setSavedIdeas] = useState<Set<number>>(new Set());
   const [riskLevel, setRiskLevel] = useState(5);
   const [sectorFocus, setSectorFocus] = useState("");
   const [budget, setBudget] = useState("");
@@ -372,6 +382,50 @@ export default function AgentsTab({
       onError(msg);
     }
     setInboxBusy(false);
+  }
+
+  async function runObserver() {
+    setObsBusy(true);
+    setObsError(null);
+    try {
+      const r = await fetch("/api/admin/agents/observer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setObsError(data.error || "Observer failed");
+        onError(data.error || "Observer failed");
+      } else {
+        setObsMarkdown(data.markdown || "");
+        setObsIdeas(Array.isArray(data.ideas) ? data.ideas : []);
+        setObsRunAt(Date.now());
+        setSavedIdeas(new Set());
+        onSuccess("Social Observer done");
+      }
+    } catch (err) {
+      const m = err instanceof Error ? err.message : "Network error";
+      setObsError(m);
+      onError(m);
+    }
+    setObsBusy(false);
+  }
+
+  async function saveIdea(idx: number, topic: string, note: string, source = "observer") {
+    try {
+      const r = await fetch("/api/admin/social/ideas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "add", topic, note, source }),
+      });
+      if (r.ok) {
+        setSavedIdeas((s) => new Set([...s, idx]));
+        onSuccess("Saved to Social → Ideas");
+      } else onError("Could not save idea");
+    } catch {
+      onError("Network error");
+    }
   }
 
   /* ── Reusable collapsible agent card wrapper ── */
@@ -1131,6 +1185,78 @@ export default function AgentsTab({
         ) : null}
       </AgentCard>
 
+      {/* ── Social Observer ── */}
+      <AgentCard
+        id="observer"
+        title="Social Observer"
+        subtitle="Remembers what you post, learns your voice, and suggests post ideas in your style — save the good ones to Social → Ideas."
+        icon={FiEye}
+        iconBg="bg-emerald-500/15"
+        iconColor="text-emerald-300"
+        accentColor="border-l-emerald-500"
+        busy={obsBusy}
+        hasResults={!!obsRunAt}
+        lastRunAt={obsRunAt ?? undefined}
+        runLabel="Observe"
+        busyLabel="Reading your posts..."
+        reRunLabel="Re-run"
+        buttonGradient="bg-gradient-to-r from-emerald-500 to-teal-500"
+        buttonTextColor="text-white"
+        buttonShadow="shadow-[0_4px_15px_rgba(16,185,129,0.35)]"
+        onRun={runObserver}
+      >
+        {obsError && (
+          <ErrorBox
+            msg={obsError}
+            hint="Connect Buffer for real post history; it still works without it, using your profile."
+          />
+        )}
+        {obsRunAt && !obsBusy ? (
+          <div className="space-y-4">
+            <div className="rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-5">
+              <Markdown text={obsMarkdown} />
+            </div>
+            {obsIdeas.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">
+                  Suggested post ideas — save the good ones
+                </h4>
+                {obsIdeas.map((idea, i) => {
+                  const saved = savedIdeas.has(i);
+                  return (
+                    <div
+                      key={i}
+                      className="rounded-xl border border-white/[0.06] bg-[#0f0f0f] p-3 flex items-start gap-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-white">{idea.topic}</p>
+                        {idea.note && <p className="text-[11px] text-[#888] mt-0.5">{idea.note}</p>}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={saved}
+                        onClick={() => saveIdea(i, idea.topic, idea.note, "observer")}
+                        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold border ${
+                          saved
+                            ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                            : "bg-white/[0.04] border-white/[0.08] text-[#ccc] hover:border-emerald-500/40 hover:text-emerald-300"
+                        }`}
+                      >
+                        <FiBookmark size={10} />
+                        {saved ? "Saved" : "Save idea"}
+                      </button>
+                    </div>
+                  );
+                })}
+                <p className="text-[10px] text-[#555]">Saved ideas show up in Social → Ideas, ready to draft.</p>
+              </div>
+            )}
+          </div>
+        ) : !obsRunAt && !obsBusy && !obsError ? (
+          <EmptyHint icon={FiEye} text="No run yet — hit Observe to learn your content style." />
+        ) : null}
+      </AgentCard>
+
       {/* Footer help */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-[11px] text-[#888] leading-relaxed flex items-start gap-2">
         <FiCpu size={12} className="mt-0.5 shrink-0" />
@@ -1148,6 +1274,8 @@ export default function AgentsTab({
       {/* ── Unified agent chat ── */}
       <UnifiedAgentChat
         model={model}
+        onSuccess={onSuccess}
+        onError={onError}
         reports={{
           news: newsState?.markdown,
           inbox: inboxState?.markdown,
@@ -1173,9 +1301,13 @@ const CHAT_AGENTS: { key: string; label: string; report: string }[] = [
 function UnifiedAgentChat({
   model,
   reports,
+  onSuccess,
+  onError,
 }: {
   model: string;
   reports: Record<string, string | undefined>;
+  onSuccess: (m: string) => void;
+  onError: (m: string) => void;
 }) {
   const [agent, setAgent] = useState("all");
   const [messages, setMessages] = useState<
@@ -1233,11 +1365,43 @@ function UnifiedAgentChat({
     setBusy(false);
   }
 
+  async function saveLastAsIdea() {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUser) return;
+    try {
+      const r = await fetch("/api/admin/social/ideas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add",
+          topic: lastUser.content.slice(0, 300),
+          note: `via ${lastUser.who} chat`,
+          source: "chat",
+        }),
+      });
+      if (r.ok) onSuccess("Saved to Social → Ideas");
+      else onError("Could not save idea");
+    } catch {
+      onError("Network error");
+    }
+  }
+
+  const hasUserMsg = messages.some((m) => m.role === "user");
+
   return (
     <div className="rounded-2xl bg-[#0a0a0a] border border-white/[0.06] p-4 space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         <FiMessageSquare size={13} className="text-emerald-300" />
         <span className="text-[10px] font-mono uppercase tracking-widest text-[#888]">Chat with your agents</span>
+        {hasUserMsg && (
+          <button
+            type="button"
+            onClick={saveLastAsIdea}
+            className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[10px] text-[#999] hover:border-emerald-500/40 hover:text-emerald-300"
+          >
+            <FiBookmark size={10} /> Save as post idea
+          </button>
+        )}
       </div>
 
       {/* Agent picker */}

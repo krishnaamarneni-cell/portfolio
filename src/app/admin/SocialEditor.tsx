@@ -150,9 +150,13 @@ function timeAgo(ms: number) {
 export default function SocialEditor({
   onSuccess,
   onError,
+  seedTopic,
+  seedNonce,
 }: {
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
+  seedTopic?: string;
+  seedNonce?: number;
 }) {
   const [topic, setTopic] = useState("");
   const [hint, setHint] = useState("");
@@ -204,6 +208,16 @@ export default function SocialEditor({
   const [openCompose, setOpenCompose] = useState(false);
   const [openImage, setOpenImage] = useState(false);
   const [openPosts, setOpenPosts] = useState(true);
+
+  // Seed the topic from an Idea ("Draft in Composer"). seedNonce bumps each
+  // time so re-drafting the same topic still fires.
+  useEffect(() => {
+    if (seedTopic && seedTopic.trim()) {
+      setTopic(seedTopic);
+      setOpenCompose(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedNonce]);
 
   // Load the saved-image library once so the thumbnail strip is there on open.
   useEffect(() => {
