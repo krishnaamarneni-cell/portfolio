@@ -95,10 +95,10 @@ function persistDrafts(list: Draft[]) {
 }
 
 const inputClass =
-  "w-full px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.08] focus:border-emerald-500/50 focus:outline-none text-sm text-white placeholder:text-[#555] transition-colors";
+  "w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] focus:border-emerald-500 focus:outline-none text-sm text-[var(--admin-text)] placeholder:text-[var(--admin-text-muted)] transition-colors";
 const textareaClass = inputClass + " resize-y leading-relaxed";
 const cardClass =
-  "rounded-xl border border-white/[0.06] bg-[#151515] p-4 space-y-3";
+  "rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] p-4 space-y-3";
 
 /** Filter Buffer profiles for one of our 3 platforms. */
 function profilesFor(all: BufferProfile[], key: PlatformKey): BufferProfile[] {
@@ -493,11 +493,11 @@ export default function SocialEditor({
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-            <FiSend size={16} className="text-emerald-400" />
+            <FiSend size={16} className="text-emerald-600" />
           </div>
           <div>
-            <h2 className="text-lg font-bold">Social Media Editor</h2>
-            <p className="text-[11px] text-[#666]">
+            <h2 className="text-lg font-bold text-[var(--admin-text)]">Social Media Editor</h2>
+            <p className="text-[11px] text-[var(--admin-text-muted)]">
               Draft per-platform posts with AI, add an image, and post or schedule via Buffer.
             </p>
           </div>
@@ -505,7 +505,7 @@ export default function SocialEditor({
         <button
           type="button"
           onClick={saveDraft}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs hover:border-emerald-500/40 hover:text-emerald-400"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs text-[var(--admin-text-secondary)] hover:border-emerald-500 hover:text-emerald-600"
         >
           <FiSave size={12} />
           {loadedDraftId ? "Update draft" : "Save draft"}
@@ -516,7 +516,7 @@ export default function SocialEditor({
       <div className={cardClass}>
         <div className="flex gap-3 items-end">
           <div className="flex-1">
-            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1.5">
               Topic
             </label>
             <input
@@ -527,7 +527,7 @@ export default function SocialEditor({
             />
           </div>
           <div className="w-44 shrink-0">
-            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1.5">
               Tone
             </label>
             <select
@@ -575,12 +575,12 @@ export default function SocialEditor({
       {/* ── Image ── */}
       <div className={cardClass}>
         <div className="flex gap-3 items-start">
-          <div className="w-20 h-20 rounded-lg border border-dashed border-white/[0.12] bg-white/[0.02] flex items-center justify-center shrink-0 overflow-hidden">
+          <div className="w-20 h-20 rounded-lg border border-dashed border-[var(--admin-border)] bg-[var(--admin-input-bg)] flex items-center justify-center shrink-0 overflow-hidden">
             {imageUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
             ) : (
-              <FiImage size={20} className="text-[#555]" />
+              <FiImage size={20} className="text-[var(--admin-text-muted)]" />
             )}
           </div>
           <div className="flex-1 space-y-2">
@@ -605,7 +605,7 @@ export default function SocialEditor({
                 setImageProvider(next);
                 if (!imagePrompt.trim()) userEditedPromptRef.current = false;
               }}
-              className="px-2 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-[#ccc] focus:outline-none"
+              className="px-2 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs text-[var(--admin-text-secondary)] focus:outline-none"
             >
               <option value="auto">Auto</option>
               <option value="fal">fal.ai</option>
@@ -615,7 +615,7 @@ export default function SocialEditor({
               type="button"
               onClick={() => generateImage("landscape")}
               disabled={generating}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs hover:border-emerald-500/40 hover:text-emerald-400 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-50"
             >
               <FiImage size={12} />
               {generating ? "…" : "Image"}
@@ -631,7 +631,7 @@ export default function SocialEditor({
               placeholder="Image URL"
             />
             {imageCredit && (
-              <span className="text-[10px] text-[#666] font-mono shrink-0">{imageCredit}</span>
+              <span className="text-[10px] text-[var(--admin-text-muted)] font-mono shrink-0">{imageCredit}</span>
             )}
             <button
               type="button"
@@ -677,8 +677,8 @@ export default function SocialEditor({
 
       {/* ── Post all bar ── */}
       {!profilesError && profiles.length > 0 && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-[#151515] px-4 py-3">
-          <span className="text-sm text-[#999]">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] px-4 py-3">
+          <span className="text-sm text-[var(--admin-text-secondary)]">
             Post everything at once:
           </span>
           <div className="flex items-center gap-2">
@@ -686,7 +686,7 @@ export default function SocialEditor({
               type="button"
               onClick={() => batchPost("queue")}
               disabled={batchBusy || readyPlatforms.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs hover:border-emerald-500/40 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs hover:border-emerald-500/40 disabled:opacity-50"
             >
               <FiClock size={12} />
               Queue all
@@ -727,7 +727,7 @@ export default function SocialEditor({
 
       {/* ── Footer help ── */}
       {profilesError && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-300/90">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-50 px-4 py-3 text-xs text-amber-700">
           <strong className="font-semibold">Buffer not connected.</strong>{" "}
           Add a <code>buffer</code> connector with your Buffer access token under{" "}
           <strong>Admin → Connectors</strong>, then reload.
@@ -867,7 +867,7 @@ function PlatformCard({
         </div>
         <span
           className={`text-[11px] font-mono ${
-            overLimit ? "text-red-400" : used > platform.limit * 0.9 ? "text-amber-400" : "text-[#555]"
+            overLimit ? "text-red-400" : used > platform.limit * 0.9 ? "text-amber-400" : "text-[var(--admin-text-muted)]"
           }`}
         >
           {used}/{platform.limit}
@@ -932,7 +932,7 @@ function PlatformCard({
             type="button"
             onClick={() => postNow("queue")}
             disabled={posting}
-            className="p-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[#888] hover:text-emerald-400 hover:border-emerald-500/40 disabled:opacity-50"
+            className="p-2 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-[var(--admin-text-secondary)] hover:text-emerald-600 hover:border-emerald-500/40 disabled:opacity-50"
             title="Queue"
           >
             <FiClock size={14} />
@@ -960,7 +960,7 @@ function PlatformCard({
               postNow(iso);
             }}
             disabled={posting || overLimit || !scheduleAt}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs hover:border-emerald-500/40 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs hover:border-emerald-500/40 disabled:opacity-50"
           >
             <FiCalendar size={11} />
             Schedule
@@ -1113,22 +1113,22 @@ function CampaignCard({
           <FiLayers size={16} />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-white">Campaign mode</h3>
-          <p className="text-[11px] text-[#888] mt-1">
+          <h3 className="font-bold text-[var(--admin-text)]">Campaign mode</h3>
+          <p className="text-[11px] text-[var(--admin-text-secondary)] mt-1">
             One topic → N distinct posts across N days. Researches the topic,
             uses your reference images, generates posts + images, schedules
             them all on Buffer in one go.
           </p>
         </div>
-        <span className="text-[10px] uppercase tracking-widest text-[#888] px-2 py-1">
+        <span className="text-[10px] uppercase tracking-widest text-[var(--admin-text-secondary)] px-2 py-1">
           {expanded ? "Hide" : "Open"}
         </span>
       </button>
 
       {expanded && (
-        <div className="space-y-4 pt-2 border-t border-white/[0.06]">
+        <div className="space-y-4 pt-2 border-t border-[var(--admin-border)]">
           <div>
-            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1.5">
               Campaign topic
             </label>
             <textarea
@@ -1142,7 +1142,7 @@ function CampaignCard({
 
           <div className="grid sm:grid-cols-[140px_1fr] gap-3">
             <div>
-              <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+              <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1.5">
                 Posts
               </label>
               <select
@@ -1158,7 +1158,7 @@ function CampaignCard({
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+              <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1.5">
                 Schedule for…
               </label>
               <div className="space-y-1.5">
@@ -1180,7 +1180,7 @@ function CampaignCard({
           </div>
 
           <div>
-            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1.5">
               Platforms
             </label>
             <div className="flex flex-wrap gap-2">
@@ -1191,7 +1191,7 @@ function CampaignCard({
                     type="button"
                     key={p}
                     onClick={() => setPlatforms((s) => ({ ...s, [p]: !s[p] }))}
-                    className={`px-3 py-1.5 rounded-full text-xs border ${on ? "bg-purple-500/15 border-purple-500/40 text-purple-200" : "bg-white/[0.04] border-white/[0.08] text-[#999]"}`}
+                    className={`px-3 py-1.5 rounded-full text-xs border ${on ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700" : "bg-[var(--admin-input-bg)] border-[var(--admin-border)] text-[var(--admin-text-secondary)]"}`}
                   >
                     {p}
                   </button>
@@ -1201,12 +1201,12 @@ function CampaignCard({
           </div>
 
           <div>
-            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1.5">
               Buffer profiles to schedule on (across platforms)
             </label>
             <div className="flex flex-wrap gap-2">
               {profiles.length === 0 ? (
-                <p className="text-[11px] text-[#666]">
+                <p className="text-[11px] text-[var(--admin-text-muted)]">
                   No Buffer profiles loaded. Connect Buffer + refresh.
                 </p>
               ) : (
@@ -1219,7 +1219,7 @@ function CampaignCard({
                       onClick={() =>
                         setSelectedProfiles((s) => ({ ...s, [p.id]: !s[p.id] }))
                       }
-                      className={`px-3 py-1.5 rounded-full text-xs border ${on ? "bg-purple-500/15 border-purple-500/40 text-purple-200" : "bg-white/[0.04] border-white/[0.08] text-[#999]"}`}
+                      className={`px-3 py-1.5 rounded-full text-xs border ${on ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700" : "bg-[var(--admin-input-bg)] border-[var(--admin-border)] text-[var(--admin-text-secondary)]"}`}
                     >
                       {p.formatted_username} ({p.service})
                     </button>
@@ -1230,7 +1230,7 @@ function CampaignCard({
           </div>
 
           <div>
-            <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
+            <label className="block text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)] mb-1.5">
               Reference posts (paste competitor posts so the writer emulates voice — separate with blank line)
             </label>
             <textarea
@@ -1250,7 +1250,7 @@ function CampaignCard({
               onChange={(e) => setAutoSchedule(e.target.checked)}
               className="w-4 h-4 accent-purple-500"
             />
-            <label htmlFor="auto-schedule" className="text-xs text-[#bbb]">
+            <label htmlFor="auto-schedule" className="text-xs text-[var(--admin-text-secondary)]">
               Auto-schedule on Buffer when generation finishes (otherwise just
               shows drafts)
             </label>
@@ -1261,7 +1261,7 @@ function CampaignCard({
               type="button"
               onClick={run}
               disabled={busy}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-bold shadow-[0_4px_20px_rgba(168,85,247,0.4)] hover:scale-[1.02] disabled:opacity-60"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-500 hover:scale-[1.02] disabled:opacity-60"
             >
               <FiZap size={14} />
               {busy ? "Running campaign…" : autoSchedule ? "Generate + schedule" : "Generate drafts"}
@@ -1269,18 +1269,18 @@ function CampaignCard({
           </div>
 
           {results && (
-            <div className="space-y-3 pt-3 border-t border-white/[0.06]">
+            <div className="space-y-3 pt-3 border-t border-[var(--admin-border)]">
               {results.map((r, i) => (
                 <div
                   key={i}
-                  className="rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-4 space-y-2"
+                  className="rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] p-4 space-y-2"
                 >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-[10px] font-mono uppercase tracking-widest text-purple-300">
                       Post {i + 1} · {new Date(r.post.date).toLocaleString()}
                     </span>
                     {r.schedulings.length > 0 && (
-                      <span className="text-[10px] font-mono text-[#666]">
+                      <span className="text-[10px] font-mono text-[var(--admin-text-muted)]">
                         {r.schedulings.filter((s) => s.ok).length}/{r.schedulings.length} scheduled
                       </span>
                     )}
@@ -1290,12 +1290,12 @@ function CampaignCard({
                     <img
                       src={r.imageUrl}
                       alt={`Campaign post ${i + 1}`}
-                      className="max-h-40 rounded-md border border-white/[0.06]"
+                      className="max-h-40 rounded-md border border-[var(--admin-border)]"
                     />
                   )}
                   {(Object.keys(r.post.perPlatform) as PlatformKey[]).map((p) => (
-                    <div key={p} className="text-[12px] text-[#ddd]">
-                      <span className="text-[10px] font-mono uppercase tracking-widest text-[#888]">
+                    <div key={p} className="text-[12px] text-[var(--admin-text)]">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-secondary)]">
                         {p}
                       </span>
                       <p className="whitespace-pre-wrap mt-1 leading-relaxed">
@@ -1363,10 +1363,10 @@ function VideoToPost({ onGenerated }: {
   }
 
   return (
-    <div className="rounded-xl bg-[#0f0f0f] border border-white/[0.06] p-3 space-y-2">
+    <div className="rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] p-3 space-y-2">
       <div className="flex items-center gap-2">
-        <FiExternalLink size={12} className="text-[#ff8c38] shrink-0" />
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[#888]">
+        <FiExternalLink size={12} className="text-emerald-600 shrink-0" />
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-secondary)]">
           Video to Post
         </span>
       </div>
@@ -1375,21 +1375,21 @@ function VideoToPost({ onGenerated }: {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Paste YouTube or Instagram URL..."
-          className="flex-1 px-3 py-2 rounded-lg bg-[#1a1a1a] border border-white/[0.08] text-xs text-white placeholder:text-[#555] focus:outline-none focus:border-[#ff6b00]/60"
+          className="flex-1 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-xs text-[var(--admin-text)] placeholder:text-[var(--admin-text-muted)] focus:outline-none focus:border-emerald-500"
           onKeyDown={(e) => { if (e.key === "Enter") process(); }}
         />
         <button
           type="button"
           onClick={process}
           disabled={loading || !url.trim()}
-          className="px-4 py-2 rounded-lg bg-[#ff6b00]/15 border border-[#ff6b00]/30 text-[10px] font-bold text-[#ff8c38] hover:bg-[#ff6b00]/25 disabled:opacity-40"
+          className="px-4 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-600 hover:bg-emerald-500/25 disabled:opacity-40"
         >
           {loading ? "Reading..." : "Generate Posts"}
         </button>
       </div>
       {error && <p className="text-[10px] text-red-400">{error}</p>}
       {result && (
-        <p className="text-[10px] text-emerald-400">
+        <p className="text-[10px] text-emerald-600">
           Generated from {result.source}: "{result.title}" by {result.channel}. Posts filled below.
         </p>
       )}
@@ -1436,12 +1436,12 @@ function PostRewriteBar({ text, platform, onChange }: {
           type="button"
           disabled={busy}
           onClick={() => rewrite(btn.key)}
-          className="px-2 py-0.5 rounded text-[10px] text-[#888] hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.1] disabled:opacity-40 transition-colors"
+          className="px-2 py-0.5 rounded text-[10px] text-[var(--admin-text-secondary)] hover:text-emerald-600 hover:bg-emerald-500/10 border border-transparent hover:border-emerald-500/30 disabled:opacity-40 transition-colors"
         >
           {btn.label}
         </button>
       ))}
-      {busy && <span className="text-[9px] text-emerald-400/60 animate-pulse ml-1">rewriting...</span>}
+      {busy && <span className="text-[9px] text-emerald-600/60 animate-pulse ml-1">rewriting...</span>}
     </div>
   );
 }
@@ -1527,7 +1527,7 @@ function QueuePanel({
 
   const statusColors: Record<string, string> = {
     pending: "text-amber-400 bg-amber-400/10 border-amber-400/20",
-    sent: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
+    sent: "text-emerald-600 bg-emerald-400/10 border-emerald-400/20",
     failed: "text-red-400 bg-red-400/10 border-red-400/20",
   };
 
@@ -1542,7 +1542,7 @@ function QueuePanel({
     <div className={cardClass}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <FiClock size={14} className="text-emerald-400" />
+          <FiClock size={14} className="text-emerald-600" />
           <h3 className="font-semibold text-sm">Queue ({pending.length} pending)</h3>
         </div>
         <div className="flex items-center gap-1">
@@ -1550,7 +1550,7 @@ function QueuePanel({
             type="button"
             onClick={load}
             disabled={loading}
-            className="p-1.5 rounded text-[#666] hover:text-white disabled:opacity-50"
+            className="p-1.5 rounded text-[var(--admin-text-muted)] hover:text-[var(--admin-text)] disabled:opacity-50"
           >
             <FiRefreshCw size={12} className={loading ? "animate-spin" : ""} />
           </button>
@@ -1563,7 +1563,7 @@ function QueuePanel({
                 body: JSON.stringify({ action: "process-due" }),
               }).then(() => { load(); onSuccess("Processed due posts"); });
             }}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] text-emerald-400 hover:bg-emerald-400/10"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] text-emerald-600 hover:bg-emerald-400/10"
           >
             <FiSend size={10} />
             Process due
@@ -1572,7 +1572,7 @@ function QueuePanel({
       </div>
 
       {rows.length === 0 ? (
-        <p className="text-xs text-[#555] py-3 text-center">No queued posts.</p>
+        <p className="text-xs text-[var(--admin-text-muted)] py-3 text-center">No queued posts.</p>
       ) : (
         <ul className="divide-y divide-white/[0.05] max-h-[240px] overflow-y-auto">
           {rows.map((row) => (
@@ -1581,12 +1581,12 @@ function QueuePanel({
                 {platformIcon[row.platform] || row.platform}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] text-white/80 line-clamp-1">{row.text.slice(0, 80)}</p>
+                <p className="text-[11px] text-[var(--admin-text)] line-clamp-1">{row.text.slice(0, 80)}</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className={`px-1 py-px rounded text-[8px] font-bold uppercase border ${statusColors[row.status]}`}>
                     {row.status}
                   </span>
-                  <span className="text-[9px] text-[#555] font-mono">
+                  <span className="text-[9px] text-[var(--admin-text-muted)] font-mono">
                     {new Date(row.due_at).toLocaleString()}
                   </span>
                 </div>
@@ -1594,7 +1594,7 @@ function QueuePanel({
               {(row.status === "pending" || row.status === "failed") && (
                 <div className="flex gap-1 shrink-0">
                   <button type="button" onClick={() => act("post-now", row.id)} disabled={acting === row.id}
-                    className="p-1 rounded text-emerald-400 hover:bg-emerald-400/10 disabled:opacity-40" title="Post now">
+                    className="p-1 rounded text-emerald-600 hover:bg-emerald-400/10 disabled:opacity-40" title="Post now">
                     <FiSend size={10} />
                   </button>
                   <button type="button" onClick={() => act("delete", row.id)} disabled={acting === row.id}
@@ -1630,26 +1630,26 @@ function DraftsPanel({
     <div className={cardClass}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <FiFolder size={14} className="text-emerald-400" />
+          <FiFolder size={14} className="text-emerald-600" />
           <h3 className="font-semibold text-sm">Drafts</h3>
         </div>
         {onNew && (
-          <button type="button" onClick={onNew} className="text-[10px] text-[#888] hover:text-white">
+          <button type="button" onClick={onNew} className="text-[10px] text-[var(--admin-text-secondary)] hover:text-[var(--admin-text)]">
             + New
           </button>
         )}
       </div>
       {drafts.length === 0 ? (
-        <p className="text-xs text-[#555] py-3 text-center">No saved drafts.</p>
+        <p className="text-xs text-[var(--admin-text-muted)] py-3 text-center">No saved drafts.</p>
       ) : (
         <ul className="divide-y divide-white/[0.05] max-h-[240px] overflow-y-auto">
           {drafts.map((d) => (
             <li key={d.id} className="py-2 first:pt-0 last:pb-0 flex items-center gap-2">
               <button type="button" onClick={() => onLoad(d)} className="flex-1 text-left min-w-0">
-                <p className="text-[11px] text-white/80 truncate">
+                <p className="text-[11px] text-[var(--admin-text)] truncate">
                   {shortPreview(d.topic) || shortPreview(d.composition.linkedin) || "(untitled)"}
                 </p>
-                <span className="text-[9px] text-[#555] font-mono">
+                <span className="text-[9px] text-[var(--admin-text-muted)] font-mono">
                   {timeAgo(d.savedAt)}
                   {d.composition.linkedin ? " · LI" : ""}
                   {d.composition.x ? " · X" : ""}
@@ -1658,7 +1658,7 @@ function DraftsPanel({
                 </span>
               </button>
               <button type="button" onClick={() => onDelete(d.id)}
-                className="p-1 rounded text-[#666] hover:text-red-400 hover:bg-red-400/10 shrink-0">
+                className="p-1 rounded text-[var(--admin-text-muted)] hover:text-red-400 hover:bg-red-400/10 shrink-0">
                 <FiTrash2 size={10} />
               </button>
             </li>
