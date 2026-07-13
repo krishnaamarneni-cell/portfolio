@@ -1539,6 +1539,9 @@ function ContextChips({
   if (typeof context.provider === "string") {
     chips.push(`search: ${context.provider}`);
   }
+  if (typeof context.ideasSaved === "number" && context.ideasSaved > 0) {
+    chips.push(`💡 ${context.ideasSaved} → Ideas`);
+  }
   if (typeof context.emailCount === "number") {
     chips.push(`${context.emailCount} emails`);
   }

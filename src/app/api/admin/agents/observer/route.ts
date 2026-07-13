@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { fetchConnector } from "@/lib/content";
 import { getAllSentPosts, type BufferSentPost } from "@/lib/buffer";
 import { runAgent, resolveAgentModel } from "@/lib/agents";
+import { saveContentProfile } from "@/lib/content-curator";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -95,6 +96,10 @@ Return STRICT JSON, no markdown fences:
 
   const summary = (parsed?.summary ?? "").trim();
   const markdown = summary || (raw && !parsed ? raw : "Ran, but couldn't parse a summary — try again.");
+
+  // Persist the content memory so other agents (News scout, etc.) can judge
+  // their findings against Krishna's style and auto-save fitting ideas.
+  if (summary) await saveContentProfile(summary);
 
   return NextResponse.json({
     markdown,

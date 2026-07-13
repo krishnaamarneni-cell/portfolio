@@ -14,6 +14,7 @@ import {
   type SearchResult,
 } from "@/lib/search";
 import { buildFactsContext } from "@/lib/facts";
+import { curateToIdeas } from "@/lib/content-curator";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -158,6 +159,23 @@ Each item = 2-3 sentences of real insight. Use [Source](url) markdown links — 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
+
+  // Talk to the Social Observer: judge today's news against Krishna's content
+  // profile and auto-save the items that fit as post ideas. Best-effort — never
+  // let curation break the news response.
+  let ideasSaved = 0;
+  try {
+    const curated = await curateToIdeas({
+      apiKey,
+      source: "news",
+      findings: result.content ?? "",
+      model,
+    });
+    ideasSaved = curated.saved;
+  } catch {
+    // ignore — curation is a bonus
+  }
+
   return NextResponse.json({
     markdown: result.content,
     context: {
@@ -167,6 +185,7 @@ Each item = 2-3 sentences of real insight. Use [Source](url) markdown links — 
       model: result.modelUsed ?? model,
       modelRequested: model,
       provider: whichSearchProvider(),
+      ideasSaved,
     },
   });
 }
