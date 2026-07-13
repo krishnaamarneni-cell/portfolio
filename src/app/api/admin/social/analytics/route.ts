@@ -68,6 +68,11 @@ function engagementOf(m: BufferSentPost["metrics"]): number {
   );
 }
 
+/** Reach = impressions, falling back to reach count. */
+function impressionsOf(m: BufferSentPost["metrics"]): number {
+  return (m.impressions ?? 0) || (m.reach ?? 0);
+}
+
 async function loadPosts() {
   const connector = await fetchConnector("buffer");
   if (!connector?.bearer_token) {
@@ -102,7 +107,11 @@ export async function GET() {
     const agg = aggregateMetrics(posts);
     const engagement = posts.reduce((n, p) => n + engagementOf(p.metrics), 0);
     const top = [...posts]
-      .sort((a, b) => engagementOf(b.metrics) - engagementOf(a.metrics))
+      .sort(
+        (a, b) =>
+          impressionsOf(b.metrics) - impressionsOf(a.metrics) ||
+          engagementOf(b.metrics) - engagementOf(a.metrics)
+      )
       .slice(0, 8)
       .map((p) => ({
         id: p.id,
@@ -175,34 +184,43 @@ export async function POST(request: Request) {
     const posts = groups[svc];
     if (posts.length === 0) return `### ${svc.toUpperCase()}\n(no posts)`;
     const cs = contentStats(posts);
+    // Rank by REACH (impressions) — the user wants to know what reaches most people.
     const lines = [...posts]
-      .sort((a, b) => engagementOf(b.metrics) - engagementOf(a.metrics))
-      .slice(0, 20)
+      .sort((a, b) => impressionsOf(b.metrics) - impressionsOf(a.metrics))
+      .slice(0, 25)
       .map((p) => {
-        const text = (p.text || "").replace(/\s+/g, " ").slice(0, 220);
+        const text = (p.text || "").replace(/\s+/g, " ").slice(0, 240);
         if (!metricsAvailable) return `- ${text}`;
+        const imp = impressionsOf(p.metrics);
         const eng = engagementOf(p.metrics);
-        const imp = p.metrics.impressions ?? p.metrics.reach ?? 0;
-        return `- [eng ${eng}, imp ${imp}] ${text}`;
+        return `- [impressions ${imp}, engagement ${eng}] ${text}`;
       });
     return `### ${svc.toUpperCase()} — ${posts.length} posts · ~${cs.postsPerWeek}/wk · avg ${cs.avgChars} chars · ${cs.avgHashtags} hashtags/post · ${cs.pctWithLink}% links · ${cs.pctWithEmoji}% emoji\n${lines.join("\n")}`;
   }).join("\n\n");
 
-  const metricsNote = metricsAvailable
-    ? `Each post line shows [eng N, imp N] — correlate engagement with content type to say what's working.`
-    : `IMPORTANT: Engagement and impression numbers are NOT available from Buffer for this account, so treat them as UNKNOWN — every post effectively shows 0. Do NOT say posts got "0 engagement", that they "underperformed", or that the content is "misaligned" — that would be a false conclusion from missing data. Instead, analyse the content TYPES and, using social-media best practices plus his own patterns, recommend which topics/formats he should post MORE of to grow reach. Clearly frame any performance claim as a hypothesis to confirm once analytics are connected.`;
+  const system = metricsAvailable
+    ? `You are a social media growth strategist reviewing Krishna Amarneni's posting history across LinkedIn, X, and Instagram. Each post is labelled with its REACH ([impressions N, engagement N]). Your job is to figure out WHAT KIND OF CONTENT REACHES THE MOST PEOPLE and tell him what to post more of.
 
-  const system = `You are a social media strategist reviewing Krishna Amarneni's posting history across LinkedIn, X, and Instagram. Analyse WHAT KIND of content he posts. Be specific and honest — this is for him, not an audience.
+For EACH platform that has posts:
+- Name the themes/topics he posts about.
+- Identify which content types/themes got the HIGHEST impressions vs the lowest — cite the actual impression numbers as evidence.
+- Describe the pattern of the high-reach posts (hook style, topic, length, format, hashtags/links/emoji) — what do the winners have in common?
 
-${metricsNote}
+Then, most important:
+## 🚀 Post more of this
+Rank the specific content types he should post MORE of to grow reach. For each, name the content type, why (cite his own high-impression posts as proof), and which platform it works best on. Be concrete — "personal money-lesson stories with a bold one-line hook" beats "engaging content".
 
-For EACH platform that has posts, cover:
-- Themes/topics he actually posts about (name them)
-- Tone & format patterns (hooks, length, hashtags, links, emoji)
-- ${metricsAvailable ? "What's working vs not (correlate engagement with content type)" : "Which of these content types he should double down on to reach more people, and why"}
-Then a short "## Overall" section: how his 3 platforms differ, whether he's cross-posting the same thing, cadence, and 3 concrete, prioritised recommendations to grow reach.
+## Overall
+How the 3 platforms differ, whether he's just cross-posting, ideal cadence, and the single highest-leverage change to increase reach.
 
-Rules: Use markdown (## headings, ** bold, - bullets). No fluff. If a platform has no posts, say "No posts yet." Base every claim on the data given.`;
+Rules: Use markdown (## headings, ** bold, - bullets). Ground EVERY claim in the impression numbers given — no generic advice. If a platform has no posts, say "No posts yet."`
+    : `You are a social media strategist reviewing Krishna Amarneni's posting history across LinkedIn, X, and Instagram. Analyse WHAT KIND of content he posts.
+
+IMPORTANT: Impression/engagement numbers are NOT available for this account — treat performance as UNKNOWN. Do NOT claim posts got "0 engagement", "underperformed", or are "misaligned". Instead analyse content TYPES and, using best practices + his patterns, recommend which topics/formats to post MORE of to grow reach, framed as hypotheses to confirm once analytics connect.
+
+For EACH platform with posts: name the themes, the tone/format patterns, and which content types he should double down on. Then a "## 🚀 Post more of this" section and a "## Overall" section with cadence + 3 prioritised actions.
+
+Rules: markdown (## headings, ** bold, - bullets). No fluff. If a platform has no posts, say "No posts yet."`;
 
   const userPrompt = `Here is the posting data (top posts by engagement per platform):\n\n${digest}`;
 

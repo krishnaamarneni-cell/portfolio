@@ -178,7 +178,8 @@ export default function SocialAnalytics({
             {data.platforms.map((p) => {
               const meta = PLAT[p.service];
               const Icon = meta.icon;
-              const avgEng = p.postCount ? Math.round(p.engagement / p.postCount) : 0;
+              const totalImp = p.metrics.impressions ?? p.metrics.reach ?? 0;
+              const avgReach = p.postCount ? Math.round(totalImp / p.postCount) : 0;
               return (
                 <div
                   key={p.service}
@@ -192,9 +193,9 @@ export default function SocialAnalytics({
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
-                    <Stat label="Impress." value={fmt(p.metrics.impressions ?? p.metrics.reach)} icon={<FiEye size={11} />} />
+                    <Stat label="Impress." value={fmt(totalImp)} icon={<FiEye size={11} />} />
                     <Stat label="Engage" value={fmt(p.engagement)} icon={<FiHeart size={11} />} />
-                    <Stat label="Avg/post" value={fmt(avgEng)} />
+                    <Stat label="Reach/post" value={fmt(avgReach)} />
                   </div>
                   {/* engagement bar vs the top platform */}
                   <div className="h-1.5 rounded-full bg-[var(--admin-input-bg)] overflow-hidden">
@@ -275,7 +276,7 @@ export default function SocialAnalytics({
                 className="rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)] p-4 space-y-3"
               >
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-secondary)]">
-                  Top {PLAT[p.service].label} posts by engagement
+                  Top {PLAT[p.service].label} posts by reach
                 </span>
                 <div className="space-y-2">
                   {p.posts.map((post) => (
@@ -318,8 +319,9 @@ export default function SocialAnalytics({
             ))}
 
           <p className="text-[10px] text-[var(--admin-text-muted)] leading-relaxed">
-            Metrics come straight from Buffer and depend on your Buffer plan and what each network exposes — some
-            counts may show as “—”. Posts are pulled live from your connected Buffer account.
+            Impressions and engagement are <strong>cumulative lifetime totals per post</strong> (not per day or week),
+            summed across all posts. They come straight from Buffer and depend on your plan and what each network
+            exposes — some counts may show as “—”. Pulled live from your connected Buffer account.
           </p>
         </>
       )}
