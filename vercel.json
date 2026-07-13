@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/social-queue",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }
