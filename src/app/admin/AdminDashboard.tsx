@@ -42,7 +42,7 @@ import SiteContentEditor from "./SiteContentEditor";
 import ThoughtsEditor from "./ThoughtsEditor";
 import ConnectorsEditor from "./ConnectorsEditor";
 import AdminChat from "./AdminChat";
-import SocialEditor from "./SocialEditor";
+import SocialPage from "./SocialPage";
 import AgentsTab from "./AgentsTab";
 import CRMWorkspace from "./crm/CRMWorkspace";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -363,7 +363,7 @@ export default function AdminDashboard({
           ) : tab === "thoughts" ? (
             <ThoughtsEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "social" ? (
-            <SocialEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+            <SocialPage onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "contacts" ? (
             <CRMWorkspace onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "agents" ? (
