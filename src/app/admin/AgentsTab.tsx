@@ -537,8 +537,6 @@ export default function AgentsTab({
         ) : !newsState && !newsBusy && !newsError ? (
           <EmptyHint icon={FiTrendingUp} text="No run yet — hit Run." />
         ) : null}
-
-        <AgentChat agentKey="news" title="News scout" report={newsState?.markdown} model={model} accent="text-emerald-300" />
       </AgentCard>
 
       {/* ── Email Intelligence ── */}
@@ -899,8 +897,6 @@ export default function AgentsTab({
             })}
           </div>
         )}
-
-        <AgentChat agentKey="inbox" title="Email Intelligence" report={inboxState?.markdown} model={model} accent="text-sky-300" />
       </AgentCard>
 
       {/* ── Jobs scout ── */}
@@ -1003,8 +999,6 @@ export default function AgentsTab({
         ) : !jobsState && !jobsBusy && !jobsError ? (
           <EmptyHint icon={FiBriefcase} text="No run yet — set companies and hit Run." />
         ) : null}
-
-        <AgentChat agentKey="jobs" title="Jobs scout" report={jobsState?.markdown} model={model} accent="text-indigo-300" />
       </AgentCard>
 
       {/* ── Atlas Opportunities ── */}
@@ -1042,8 +1036,6 @@ export default function AgentsTab({
         ) : !oppState && !oppBusy && !oppError ? (
           <EmptyHint icon={FiTarget} text="No scan yet — hit Scan." />
         ) : null}
-
-        <AgentChat agentKey="opportunities" title="Atlas" report={oppState?.markdown} model={model} accent="text-fuchsia-300" />
       </AgentCard>
 
       {/* ── Stock Screener ── */}
@@ -1137,8 +1129,6 @@ export default function AgentsTab({
         ) : !screenState && !screenBusy && !screenError ? (
           <EmptyHint icon={FiBarChart2} text="Set your risk level and hit Scan market." />
         ) : null}
-
-        <AgentChat agentKey="screener" title="Stock Screener" report={screenState?.markdown} model={model} accent="text-amber-300" />
       </AgentCard>
 
       {/* Footer help */}
@@ -1154,26 +1144,42 @@ export default function AgentsTab({
           are cached in this browser.
         </p>
       </div>
+
+      {/* ── Unified agent chat ── */}
+      <UnifiedAgentChat
+        model={model}
+        reports={{
+          news: newsState?.markdown,
+          inbox: inboxState?.markdown,
+          jobs: jobsState?.markdown,
+          opportunities: oppState?.markdown,
+          screener: screenState?.markdown,
+        }}
+      />
     </section>
   );
 }
 
-/* ── Conversational chat with one agent, grounded in its latest report ── */
-function AgentChat({
-  agentKey,
-  title,
-  report,
+/* ── Unified chat: pick one agent or talk to all at once ── */
+const CHAT_AGENTS: { key: string; label: string; report: string }[] = [
+  { key: "all", label: "All agents", report: "" },
+  { key: "news", label: "News", report: "News scout" },
+  { key: "inbox", label: "Email", report: "Email Intelligence" },
+  { key: "jobs", label: "Jobs", report: "Jobs scout" },
+  { key: "opportunities", label: "Atlas", report: "Atlas — Opportunities" },
+  { key: "screener", label: "Screener", report: "Stock Screener" },
+];
+
+function UnifiedAgentChat({
   model,
-  accent,
+  reports,
 }: {
-  agentKey: string;
-  title: string;
-  report?: string;
   model: string;
-  accent: string;
+  reports: Record<string, string | undefined>;
 }) {
+  const [agent, setAgent] = useState("all");
   const [messages, setMessages] = useState<
-    { role: "user" | "assistant"; content: string }[]
+    { role: "user" | "assistant"; content: string; who: string }[]
   >([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1183,11 +1189,26 @@ function AgentChat({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, busy]);
 
+  /** For "all", stitch every agent's latest report together (labelled); for a
+   *  single agent, just that report. */
+  function reportFor(key: string): string {
+    if (key !== "all") return (reports[key] || "").slice(0, 8000);
+    const parts: string[] = [];
+    for (const a of CHAT_AGENTS) {
+      if (a.key === "all") continue;
+      const r = reports[a.key];
+      if (r && r.trim()) parts.push(`## ${a.report} report\n${r.slice(0, 2200)}`);
+    }
+    return parts.join("\n\n").slice(0, 9000);
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
-    const next = [...messages, { role: "user" as const, content: text }];
-    setMessages(next);
+    const label = CHAT_AGENTS.find((a) => a.key === agent)?.label ?? agent;
+    const history = messages.map((m) => ({ role: m.role, content: m.content }));
+    const next = [...history, { role: "user" as const, content: text }];
+    setMessages((m) => [...m, { role: "user", content: text, who: label }]);
     setInput("");
     setBusy(true);
     try {
@@ -1195,48 +1216,67 @@ function AgentChat({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          agentKey,
+          agentKey: agent,
           messages: next,
-          report: report || undefined,
+          report: reportFor(agent) || undefined,
           model,
         }),
       });
       const j = await r.json().catch(() => ({}));
       setMessages((m) => [
         ...m,
-        {
-          role: "assistant",
-          content: j.reply || `⚠️ ${j.error || "No response"}`,
-        },
+        { role: "assistant", content: j.reply || `⚠️ ${j.error || "No response"}`, who: label },
       ]);
     } catch {
-      setMessages((m) => [...m, { role: "assistant", content: "⚠️ Network error" }]);
+      setMessages((m) => [...m, { role: "assistant", content: "⚠️ Network error", who: label }]);
     }
     setBusy(false);
   }
 
   return (
-    <div className="rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-3 space-y-2.5">
-      <div className="flex items-center gap-2">
-        <FiMessageSquare size={12} className={accent} />
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
-          Ask {title}
-        </span>
+    <div className="rounded-2xl bg-[#0a0a0a] border border-white/[0.06] p-4 space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <FiMessageSquare size={13} className="text-emerald-300" />
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[#888]">Chat with your agents</span>
       </div>
-      {messages.length > 0 && (
-        <div ref={scrollRef} className="max-h-72 overflow-y-auto space-y-2 pr-1">
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={m.role === "user" ? "flex justify-end" : "flex justify-start"}
+
+      {/* Agent picker */}
+      <div className="flex flex-wrap gap-1.5">
+        {CHAT_AGENTS.map((a) => {
+          const on = agent === a.key;
+          return (
+            <button
+              key={a.key}
+              type="button"
+              onClick={() => setAgent(a.key)}
+              className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                on
+                  ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                  : "bg-white/[0.04] border-white/[0.08] text-[#999] hover:border-emerald-500/30"
+              }`}
             >
+              {a.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {messages.length > 0 && (
+        <div ref={scrollRef} className="max-h-96 overflow-y-auto space-y-2 pr-1">
+          {messages.map((m, i) => (
+            <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
               <div
-                className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
+                className={`max-w-[88%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
                   m.role === "user"
                     ? "bg-white/[0.08] text-white"
                     : "bg-white/[0.03] border border-white/[0.05] text-[#ddd]"
                 }`}
               >
+                {m.role === "assistant" && (
+                  <div className="text-[9px] font-mono uppercase tracking-widest text-emerald-400/70 mb-1">
+                    {m.who}
+                  </div>
+                )}
                 {m.role === "assistant" ? (
                   <Markdown text={m.content} />
                 ) : (
@@ -1248,12 +1288,13 @@ function AgentChat({
           {busy && (
             <div className="flex justify-start">
               <div className="rounded-xl px-3 py-2 text-[11px] text-[#666] bg-white/[0.03] border border-white/[0.05] animate-pulse">
-                thinking…
+                {CHAT_AGENTS.find((a) => a.key === agent)?.label} thinking…
               </div>
             </div>
           )}
         </div>
       )}
+
       <div className="flex gap-2">
         <input
           value={input}
@@ -1264,18 +1305,26 @@ function AgentChat({
               send();
             }
           }}
-          placeholder={report ? "Ask a follow-up about the results…" : "Ask this agent anything…"}
-          className="flex-1 px-3 py-2 rounded-xl bg-[#1a1a1a] border border-white/[0.08] focus:border-white/20 focus:outline-none text-xs text-white placeholder:text-[#555]"
+          placeholder={
+            agent === "all"
+              ? "Ask all your agents — e.g. 'what should I focus on this week?'"
+              : `Ask ${CHAT_AGENTS.find((a) => a.key === agent)?.label}…`
+          }
+          className="flex-1 px-3 py-2.5 rounded-xl bg-[#1a1a1a] border border-white/[0.08] focus:border-emerald-500/40 focus:outline-none text-xs text-white placeholder:text-[#555]"
         />
         <button
           type="button"
           onClick={send}
           disabled={busy || !input.trim()}
-          className="inline-flex items-center justify-center px-3.5 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] text-white hover:bg-white/[0.1] disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 disabled:opacity-40"
         >
           <FiSend size={12} />
+          Send
         </button>
       </div>
+      <p className="text-[10px] text-[#555]">
+        Grounded in each agent&apos;s latest report. Run a scan first for sharper, data-backed answers.
+      </p>
     </div>
   );
 }
