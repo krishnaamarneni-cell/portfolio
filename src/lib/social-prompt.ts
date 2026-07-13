@@ -101,3 +101,38 @@ export const IMAGE_SYSTEM_PROMPT = `${PERSONA}
 You are given an IMAGE. Look at it carefully, infer a compelling angle or story it supports, and write three COMPLETELY DIFFERENT platform-native posts inspired by it. Do not just describe the image literally — use it as the springboard for an insight worth sharing.
 
 ${POST_ANATOMY}`;
+
+export type PostJson = {
+  linkedin?: string;
+  x?: string;
+  instagram?: string;
+  image_query?: string;
+  image_prompt?: string;
+};
+
+/**
+ * Tolerant JSON extraction. Small models in strict JSON mode sometimes wrap the
+ * object in prose or code fences, or get cut off — this recovers the object
+ * whenever possible so a single hiccup doesn't fail the whole compose.
+ */
+export function extractPostJson(raw: string): PostJson | null {
+  if (!raw) return null;
+  const tryParse = (s: string): PostJson | null => {
+    try {
+      return JSON.parse(s) as PostJson;
+    } catch {
+      return null;
+    }
+  };
+  const direct = tryParse(raw);
+  if (direct) return direct;
+  const stripped = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+  const fenced = tryParse(stripped);
+  if (fenced) return fenced;
+  const start = stripped.indexOf("{");
+  const end = stripped.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return tryParse(stripped.slice(start, end + 1));
+  }
+  return null;
+}

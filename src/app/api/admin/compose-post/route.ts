@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { resolveModel } from "@/lib/groq-models";
-import { COMPOSE_SYSTEM_PROMPT } from "@/lib/social-prompt";
+import { COMPOSE_SYSTEM_PROMPT, extractPostJson } from "@/lib/social-prompt";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,29 +56,37 @@ export async function POST(request: Request) {
   try {
     const { default: Groq } = await import("groq-sdk");
     const groq = new Groq({ apiKey });
-    const completion = await groq.chat.completions.create({
-      model: resolveModel("writing", body.model),
-      temperature: 0.55,
-      max_tokens: 2200,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userMsg },
-      ],
-    });
-    const raw = completion.choices[0]?.message?.content ?? "";
-    let parsed: {
-      linkedin?: string;
-      x?: string;
-      instagram?: string;
-      image_query?: string;
-      image_prompt?: string;
-    };
+    const model = resolveModel("writing", body.model);
+
+    const run = (json: boolean) =>
+      groq.chat.completions.create({
+        model,
+        temperature: 0.5,
+        // Generous budget so three full posts + image fields never get cut off
+        // mid-JSON (which Groq rejects with json_validate_failed).
+        max_tokens: 4096,
+        ...(json ? { response_format: { type: "json_object" as const } } : {}),
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userMsg },
+        ],
+      });
+
+    // Strict JSON mode is cleaner, but small models occasionally overrun it and
+    // Groq hard-fails the request. Fall back to a plain call + tolerant parse.
+    let raw = "";
     try {
-      parsed = JSON.parse(raw);
+      const completion = await run(true);
+      raw = completion.choices[0]?.message?.content ?? "";
     } catch {
+      const completion = await run(false);
+      raw = completion.choices[0]?.message?.content ?? "";
+    }
+
+    const parsed = extractPostJson(raw);
+    if (!parsed) {
       return NextResponse.json(
-        { error: "Model returned non-JSON. Try again." },
+        { error: "The model couldn't produce a clean draft. Try again or pick a stronger model." },
         { status: 502 }
       );
     }

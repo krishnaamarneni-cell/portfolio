@@ -76,6 +76,10 @@ const EMPTY: Composition = {
 
 const DRAFTS_KEY = "krishna_admin_social_drafts_v1";
 
+/** Transparent brand mark, served from /public — used for the "with logo"
+ *  external-image workflow (download and attach in ChatGPT). */
+const LOGO_URL = "/Krishna.amarneni_ai-removebg-preview.png";
+
 function loadDrafts(): Draft[] {
   if (typeof window === "undefined") return [];
   try {
@@ -190,6 +194,8 @@ export default function SocialEditor({
   const [savedLoading, setSavedLoading] = useState(false);
   const [postingFromImage, setPostingFromImage] = useState(false);
   const [savingImage, setSavingImage] = useState(false);
+  const [promptWithLogo, setPromptWithLogo] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load the saved-image library once so the thumbnail strip is there on open.
@@ -289,6 +295,31 @@ export default function SocialEditor({
       fetchSavedImages();
     } catch { onError("Network error saving image"); }
     setSavingImage(false);
+  }
+
+  /** Build a copy-ready image prompt for ChatGPT / DALL·E / Midjourney, with an
+   *  optional instruction to composite Krishna's logo into the artwork. */
+  function buildExternalPrompt(withLogo: boolean): string {
+    const base = (
+      imagePrompt.trim() ||
+      composition.image_prompt ||
+      composition.image_query ||
+      topic
+    ).trim();
+    if (!base) return "";
+    if (!withLogo) return base;
+    return `${base}\n\nThen take the attached logo image (the "Krishna Amarneni" brand mark) and place it small in the bottom-right corner. Preserve its transparent background so it sits cleanly over the artwork, keep it sharp and legible, and do not stretch or distort it.`;
+  }
+
+  async function copyExternalPrompt() {
+    const text = buildExternalPrompt(promptWithLogo);
+    if (!text) { onError("Compose a topic or write an image prompt first"); return; }
+    try {
+      await navigator.clipboard.writeText(text);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 1600);
+      onSuccess(promptWithLogo ? "Prompt copied — attach the logo in ChatGPT" : "Prompt copied");
+    } catch { onError("Couldn't copy to clipboard"); }
   }
 
   const [tone, setTone] = useState("default");
@@ -818,6 +849,56 @@ export default function SocialEditor({
             {imageCredit && (
               <span className="text-[10px] text-[var(--admin-text-muted)] font-mono shrink-0">{imageCredit}</span>
             )}
+          </div>
+        )}
+
+        {/* Prompt for external image tools (ChatGPT / DALL·E) */}
+        {buildExternalPrompt(false) && (
+          <div className="border-t border-[var(--admin-border)] pt-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)]">
+                Prompt for ChatGPT / DALL·E
+              </span>
+              <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--admin-text-secondary)] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={promptWithLogo}
+                  onChange={(e) => setPromptWithLogo(e.target.checked)}
+                  className="accent-emerald-500"
+                />
+                Include my logo
+              </label>
+            </div>
+            <textarea
+              readOnly
+              rows={promptWithLogo ? 4 : 2}
+              value={buildExternalPrompt(promptWithLogo)}
+              onFocus={(e) => e.currentTarget.select()}
+              className={textareaClass + " text-[11px]"}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={copyExternalPrompt}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20"
+              >
+                {promptCopied ? <FiCheck size={12} /> : <FiCopy size={12} />}
+                {promptCopied ? "Copied" : "Copy prompt"}
+              </button>
+              {promptWithLogo && (
+                <a
+                  href={LOGO_URL}
+                  download
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-xs text-[var(--admin-text-secondary)] hover:border-emerald-500 hover:text-emerald-600"
+                >
+                  <FiImage size={12} />
+                  Download logo to attach
+                </a>
+              )}
+              <span className="text-[10px] text-[var(--admin-text-muted)]">
+                Paste into ChatGPT or DALL·E{promptWithLogo ? ", then attach the logo" : ""}
+              </span>
+            </div>
           </div>
         )}
 

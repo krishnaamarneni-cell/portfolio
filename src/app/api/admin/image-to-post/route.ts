@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { IMAGE_SYSTEM_PROMPT } from "@/lib/social-prompt";
+import { IMAGE_SYSTEM_PROMPT, extractPostJson } from "@/lib/social-prompt";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,36 +52,39 @@ export async function POST(request: Request) {
   try {
     const { default: Groq } = await import("groq-sdk");
     const groq = new Groq({ apiKey });
-    const completion = await groq.chat.completions.create({
-      model: VISION_MODEL,
-      temperature: 0.6,
-      max_tokens: 2200,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: IMAGE_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: userText },
-            { type: "image_url", image_url: { url: imageUrl } },
-          ] as unknown as string,
-        },
-      ],
-    });
 
-    const raw = completion.choices[0]?.message?.content ?? "";
-    let parsed: {
-      linkedin?: string;
-      x?: string;
-      instagram?: string;
-      image_query?: string;
-      image_prompt?: string;
-    };
+    const messages = [
+      { role: "system" as const, content: IMAGE_SYSTEM_PROMPT },
+      {
+        role: "user" as const,
+        content: [
+          { type: "text", text: userText },
+          { type: "image_url", image_url: { url: imageUrl } },
+        ] as unknown as string,
+      },
+    ];
+    const run = (json: boolean) =>
+      groq.chat.completions.create({
+        model: VISION_MODEL,
+        temperature: 0.6,
+        max_tokens: 4096,
+        ...(json ? { response_format: { type: "json_object" as const } } : {}),
+        messages,
+      });
+
+    let raw = "";
     try {
-      parsed = JSON.parse(raw);
+      const completion = await run(true);
+      raw = completion.choices[0]?.message?.content ?? "";
     } catch {
+      const completion = await run(false);
+      raw = completion.choices[0]?.message?.content ?? "";
+    }
+
+    const parsed = extractPostJson(raw);
+    if (!parsed) {
       return NextResponse.json(
-        { error: "Model returned non-JSON. Try again." },
+        { error: "Couldn't turn that image into posts. Try again or use a different image." },
         { status: 502 }
       );
     }
