@@ -274,19 +274,85 @@ function buildPostSelection(info: SchemaInfo, metricsBody: string): string {
   return parts.join(" ");
 }
 
-/** Lower-case + sum the canonical metrics out of whatever shape Buffer returned. */
-function normalizeMetrics(raw: Record<string, unknown> | null | undefined): BufferPostMetrics {
-  if (!raw || typeof raw !== "object") return {};
+function coerceNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
+  return null;
+}
+
+/**
+ * Sum the canonical metrics out of whatever shape Buffer returned. Buffer's
+ * `metrics` can come back as an object of scalars, a nested object, OR a list
+ * of {key/name/metric, value/count/total} — handle all so impressions/likes
+ * don't silently read as zero.
+ */
+function normalizeMetrics(raw: unknown): BufferPostMetrics {
   const out: BufferPostMetrics = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (k === "__typename") continue;
-    if (typeof v !== "number" || !Number.isFinite(v)) continue;
-    const canonical = METRIC_ALIASES[k];
-    if (canonical) {
-      out[canonical] = (out[canonical] ?? 0) + v;
+  const add = (name: unknown, val: unknown) => {
+    if (typeof name !== "string") return;
+    const num = coerceNumber(val);
+    if (num == null) return;
+    const canonical = METRIC_ALIASES[name] ?? METRIC_ALIASES[name.toLowerCase()];
+    if (canonical) out[canonical] = (out[canonical] ?? 0) + num;
+  };
+  const merge = (m: BufferPostMetrics) => {
+    for (const [k, v] of Object.entries(m)) {
+      if (typeof v === "number") {
+        out[k as keyof BufferPostMetrics] = (out[k as keyof BufferPostMetrics] ?? 0) + v;
+      }
     }
+  };
+  if (!raw || typeof raw !== "object") return out;
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      const name = o.key ?? o.name ?? o.metric ?? o.label ?? o.type ?? o.title;
+      const val = o.value ?? o.count ?? o.total ?? o.amount ?? o.number ?? o.val;
+      add(name, val);
+    }
+    return out;
+  }
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (k === "__typename") continue;
+    if (v && typeof v === "object") {
+      merge(normalizeMetrics(v)); // nested one level (e.g. { totals: {...} })
+      continue;
+    }
+    add(k, v);
   }
   return out;
+}
+
+/**
+ * Diagnostic: run the same sent-posts query but return the RAW node shapes so
+ * we can see exactly what analytics Buffer exposes for this account.
+ */
+export async function debugSentPostsRaw(token: string): Promise<unknown> {
+  const account = await getAccount(token);
+  const orgId = account?.organizations?.[0]?.id;
+  if (!orgId) return { error: "No Buffer organization on this token" };
+  const schema = await discoverSchema(token);
+  if ("error" in schema) return { schemaError: schema.error };
+  const metricsBody = buildMetricsSelection(schema);
+  const postBody = buildPostSelection(schema, metricsBody);
+  const QUERY = `query($orgId: OrganizationId!) {
+    posts(input: { organizationId: $orgId }) { edges { node { ${postBody} } } }
+  }`;
+  const j = await bufferGraphQL<{ posts?: { edges?: Array<{ node?: unknown }> } }>(token, QUERY, { orgId });
+  const edges = j.data?.posts?.edges ?? [];
+  return {
+    schema: {
+      postFields: Array.from(schema.postFields),
+      hasMetricsField: schema.postFields.has("metrics"),
+      hasAnalyticsField: schema.postFields.has("analytics"),
+      metricScalarFields: schema.metricScalarFields,
+      metricVariants: schema.metricVariants,
+    },
+    selection: postBody,
+    graphqlErrors: j.errors ?? null,
+    sampleNodes: edges.slice(0, 3).map((e) => e.node),
+  };
 }
 
 /**

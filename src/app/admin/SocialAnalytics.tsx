@@ -51,6 +51,7 @@ type Platform = {
 type Analytics = {
   ok: true;
   totalPosts: number;
+  metricsAvailable: boolean;
   platforms: Platform[];
   overall: { metrics: Metrics; engagement: number };
 };
@@ -158,6 +159,16 @@ export default function SocialAnalytics({
 
       {loading && !data && (
         <p className="text-[12px] text-[var(--admin-text-muted)] py-6 text-center">Loading your posting history…</p>
+      )}
+
+      {data && !data.metricsAvailable && data.totalPosts > 0 && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-600 leading-relaxed">
+          <strong className="font-semibold">Impression &amp; engagement numbers aren&apos;t available from Buffer for this account</strong>{" "}
+          — so the tiles below show &ldquo;—&rdquo;/0, which means <em>unknown</em>, not zero. Buffer only returns per-post
+          analytics on its paid <strong>Analyze</strong> plan (or once each network&apos;s native insights are connected).
+          The <strong>content breakdown</strong> (cadence, length, hashtags, links, emoji) and the AI content review are
+          fully accurate — they come from your posts themselves.
+        </div>
       )}
 
       {data && (

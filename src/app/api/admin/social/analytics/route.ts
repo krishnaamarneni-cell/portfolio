@@ -124,13 +124,20 @@ export async function GET() {
   });
 
   const totalPosts = loaded.posts.length;
+  const overallEngagement = loaded.posts.reduce((n, p) => n + engagementOf(p.metrics), 0);
+  const overallImpressions = platforms.reduce(
+    (n, p) => n + (p.metrics.impressions ?? 0) + (p.metrics.reach ?? 0),
+    0
+  );
+  const metricsAvailable = overallEngagement > 0 || overallImpressions > 0;
   return NextResponse.json({
     ok: true,
     totalPosts,
+    metricsAvailable,
     platforms,
     overall: {
       metrics: aggregateMetrics(loaded.posts),
-      engagement: loaded.posts.reduce((n, p) => n + engagementOf(p.metrics), 0),
+      engagement: overallEngagement,
     },
   });
 }
@@ -157,6 +164,13 @@ export async function POST(request: Request) {
   }
   const groups = groupByService(loaded.posts);
 
+  const overallEngagement = loaded.posts.reduce((n, p) => n + engagementOf(p.metrics), 0);
+  const overallImpressions = SERVICES.reduce(
+    (n, svc) => n + groups[svc].reduce((m, p) => m + (p.metrics.impressions ?? 0) + (p.metrics.reach ?? 0), 0),
+    0
+  );
+  const metricsAvailable = overallEngagement > 0 || overallImpressions > 0;
+
   const digest = SERVICES.map((svc) => {
     const posts = groups[svc];
     if (posts.length === 0) return `### ${svc.toUpperCase()}\n(no posts)`;
@@ -165,23 +179,30 @@ export async function POST(request: Request) {
       .sort((a, b) => engagementOf(b.metrics) - engagementOf(a.metrics))
       .slice(0, 20)
       .map((p) => {
+        const text = (p.text || "").replace(/\s+/g, " ").slice(0, 220);
+        if (!metricsAvailable) return `- ${text}`;
         const eng = engagementOf(p.metrics);
         const imp = p.metrics.impressions ?? p.metrics.reach ?? 0;
-        const text = (p.text || "").replace(/\s+/g, " ").slice(0, 220);
         return `- [eng ${eng}, imp ${imp}] ${text}`;
       });
     return `### ${svc.toUpperCase()} — ${posts.length} posts · ~${cs.postsPerWeek}/wk · avg ${cs.avgChars} chars · ${cs.avgHashtags} hashtags/post · ${cs.pctWithLink}% links · ${cs.pctWithEmoji}% emoji\n${lines.join("\n")}`;
   }).join("\n\n");
 
-  const system = `You are a social media strategist reviewing Krishna Amarneni's posting history across LinkedIn, X, and Instagram. Analyse WHAT KIND of content he posts and how it performs. Be specific and honest — this is for him, not an audience.
+  const metricsNote = metricsAvailable
+    ? `Each post line shows [eng N, imp N] — correlate engagement with content type to say what's working.`
+    : `IMPORTANT: Engagement and impression numbers are NOT available from Buffer for this account, so treat them as UNKNOWN — every post effectively shows 0. Do NOT say posts got "0 engagement", that they "underperformed", or that the content is "misaligned" — that would be a false conclusion from missing data. Instead, analyse the content TYPES and, using social-media best practices plus his own patterns, recommend which topics/formats he should post MORE of to grow reach. Clearly frame any performance claim as a hypothesis to confirm once analytics are connected.`;
+
+  const system = `You are a social media strategist reviewing Krishna Amarneni's posting history across LinkedIn, X, and Instagram. Analyse WHAT KIND of content he posts. Be specific and honest — this is for him, not an audience.
+
+${metricsNote}
 
 For EACH platform that has posts, cover:
 - Themes/topics he actually posts about (name them)
 - Tone & format patterns (hooks, length, hashtags, links, emoji)
-- What's working vs not (correlate engagement with content type)
-Then a short "## Overall" section: how his 3 platforms differ, whether he's cross-posting the same thing, cadence, and 3 concrete, prioritised recommendations.
+- ${metricsAvailable ? "What's working vs not (correlate engagement with content type)" : "Which of these content types he should double down on to reach more people, and why"}
+Then a short "## Overall" section: how his 3 platforms differ, whether he's cross-posting the same thing, cadence, and 3 concrete, prioritised recommendations to grow reach.
 
-Rules: Use markdown (## headings, ** bold, - bullets). No fluff, no restating the raw numbers back. If a platform has no posts, say "No posts yet." Base every claim on the data given.`;
+Rules: Use markdown (## headings, ** bold, - bullets). No fluff. If a platform has no posts, say "No posts yet." Base every claim on the data given.`;
 
   const userPrompt = `Here is the posting data (top posts by engagement per platform):\n\n${digest}`;
 
