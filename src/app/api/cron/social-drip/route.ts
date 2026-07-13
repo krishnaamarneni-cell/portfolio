@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { getDripSettings, processNextDripImage } from "@/lib/social-drip";
+import { flushDueSocialQueue } from "@/lib/social-queue";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,6 +36,12 @@ export async function GET(request: Request) {
   }
 
   after(async () => {
+    // Scheduled per-platform posts (time-sensitive) first, then the daily drip.
+    try {
+      await flushDueSocialQueue();
+    } catch {
+      // Per-row status is recorded on social_queue; nothing to return.
+    }
     try {
       await processNextDripImage();
     } catch {

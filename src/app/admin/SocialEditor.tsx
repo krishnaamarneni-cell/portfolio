@@ -2000,7 +2000,8 @@ function DripPanel({
                     </button>
                   </div>
                   <p className="mt-1 text-[10px] text-[var(--admin-text-muted)]">
-                    It fires every 15 min but only posts around your chosen time, once a day — every other run is empty.
+                    Fires every 15 min. It sends any per-platform posts you Scheduled when they come due, and drips one
+                    image around your chosen time (once a day). Idle runs do nothing.
                   </p>
                 </div>
               </div>
