@@ -837,19 +837,9 @@ export default function SocialEditor({
           )}
         </div>
 
-        {/* Current image URL */}
-        {imageUrl && (
-          <div className="flex items-center gap-2">
-            <input
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              className={inputClass + " text-[11px] font-mono flex-1"}
-              placeholder="Image URL"
-            />
-            {imageCredit && (
-              <span className="text-[10px] text-[var(--admin-text-muted)] font-mono shrink-0">{imageCredit}</span>
-            )}
-          </div>
+        {/* Raw image URL is intentionally hidden — only show attribution. */}
+        {imageUrl && imageCredit && (
+          <p className="text-[10px] text-[var(--admin-text-muted)] font-mono">{imageCredit}</p>
         )}
 
         {/* Prompt for external image tools (ChatGPT / DALL·E) */}
