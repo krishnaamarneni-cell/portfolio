@@ -186,9 +186,17 @@ export default function SocialEditor({
   // Upload + saved images
   const [uploading, setUploading] = useState(false);
   const [savedImages, setSavedImages] = useState<{ name: string; url: string; created_at: string }[]>([]);
-  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedOpen, setSavedOpen] = useState(true);
   const [savedLoading, setSavedLoading] = useState(false);
+  const [postingFromImage, setPostingFromImage] = useState(false);
+  const [savingImage, setSavingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load the saved-image library once so the thumbnail strip is there on open.
+  useEffect(() => {
+    fetchSavedImages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -202,9 +210,9 @@ export default function SocialEditor({
       const j = await r.json();
       if (!r.ok) { onError(j.error || "Upload failed"); setUploading(false); return; }
       setImageUrl(j.url);
+      setImageCredit(null);
       onSuccess("Image uploaded");
-      // Refresh saved list if open
-      if (savedOpen) fetchSavedImages();
+      fetchSavedImages();
     } catch { onError("Upload network error"); }
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -218,6 +226,69 @@ export default function SocialEditor({
       if (Array.isArray(j.images)) setSavedImages(j.images);
     } catch {}
     setSavedLoading(false);
+  }
+
+  /** Turn the current image into per-platform posts via a vision model. */
+  async function imageToPost() {
+    if (!imageUrl.trim()) {
+      onError("Add an image first — generate, upload, or pick a saved one");
+      return;
+    }
+    setPostingFromImage(true);
+    try {
+      const res = await fetch("/api/admin/image-to-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl,
+          hint: hint || undefined,
+          tone: tone !== "default" ? tone : undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        onError(data.error || "Could not read the image");
+        setPostingFromImage(false);
+        return;
+      }
+      setComposition({
+        linkedin: data.linkedin ?? "",
+        x: data.x ?? "",
+        instagram: data.instagram ?? "",
+        image_query: data.image_query ?? "",
+        image_prompt: data.image_prompt ?? "",
+      });
+      if (data.image_query && !topic.trim()) setTopic(data.image_query);
+      onSuccess("Posts written from your image");
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Network error");
+    }
+    setPostingFromImage(false);
+  }
+
+  /** Persist the current (generated / external) image into the saved library. */
+  async function saveToLibrary() {
+    if (!imageUrl.trim()) return;
+    // Already a saved-library image? No need to re-save.
+    if (savedImages.some((img) => img.url === imageUrl)) {
+      onSuccess("Already in your library");
+      setSavedOpen(true);
+      return;
+    }
+    setSavingImage(true);
+    try {
+      const r = await fetch("/api/admin/social/images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: imageUrl }),
+      });
+      const j = await r.json();
+      if (!r.ok) { onError(j.error || "Could not save image"); setSavingImage(false); return; }
+      onSuccess("Saved to your library");
+      setSavedOpen(true);
+      fetchSavedImages();
+    } catch { onError("Network error saving image"); }
+    setSavingImage(false);
   }
 
   const [tone, setTone] = useState("default");
@@ -530,12 +601,12 @@ export default function SocialEditor({
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-            <FiSend size={16} className="text-emerald-600" />
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500/25 to-emerald-500/5 ring-1 ring-emerald-500/20 flex items-center justify-center shrink-0">
+            <FiSend size={18} className="text-emerald-500" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-[var(--admin-text)]">Social Media Editor</h2>
-            <p className="text-[11px] text-[var(--admin-text-muted)]">
+            <h2 className="text-xl font-bold tracking-tight text-[var(--admin-text)]">Social Media Editor</h2>
+            <p className="text-[11px] text-[var(--admin-text-secondary)] max-w-md">
               Draft per-platform posts with AI, add an image, and post or schedule via Buffer.
             </p>
           </div>
@@ -612,21 +683,45 @@ export default function SocialEditor({
 
       {/* ── Image ── */}
       <div className={cardClass}>
-        <div className="flex gap-3 items-start">
-          <div className="w-20 h-20 rounded-lg border border-dashed border-[var(--admin-border)] bg-[var(--admin-input-bg)] flex items-center justify-center shrink-0 overflow-hidden">
+        {/* Label + provider */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <FiImage size={13} className="text-emerald-600" />
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-secondary)]">
+              Image
+            </span>
+          </div>
+          <select
+            value={imageProvider}
+            onChange={(e) => {
+              const next = e.target.value as "auto" | "fal" | "unsplash";
+              setImageProvider(next);
+              if (!imagePrompt.trim()) userEditedPromptRef.current = false;
+            }}
+            className="px-2.5 py-1 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-[11px] text-[var(--admin-text-secondary)] focus:outline-none focus:border-emerald-500"
+          >
+            <option value="auto">Auto</option>
+            <option value="fal">fal.ai</option>
+            <option value="unsplash">Unsplash</option>
+          </select>
+        </div>
+
+        {/* Preview + prompt inputs */}
+        <div className="flex gap-3 items-stretch">
+          <div className="w-24 h-24 rounded-xl border border-dashed border-[var(--admin-border)] bg-[var(--admin-input-bg)] flex items-center justify-center shrink-0 overflow-hidden">
             {imageUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
             ) : (
-              <FiImage size={20} className="text-[var(--admin-text-muted)]" />
+              <FiImage size={22} className="text-[var(--admin-text-muted)]" />
             )}
           </div>
-          <div className="flex-1 space-y-2">
+          <div className="flex-1 flex flex-col justify-center gap-2">
             <input
               value={imageProvider === "unsplash" ? imagePrompt : (composition.image_query || imagePrompt)}
               onChange={(e) => { userEditedPromptRef.current = true; setImagePrompt(e.target.value); }}
               className={inputClass + " text-xs"}
-              placeholder="image search words (Unsplash)"
+              placeholder="Image search words (Unsplash)"
             />
             <input
               value={imageProvider !== "unsplash" ? imagePrompt : (composition.image_prompt || "")}
@@ -635,103 +730,120 @@ export default function SocialEditor({
               placeholder="AI image prompt (fal.ai)"
             />
           </div>
-          <div className="flex flex-col gap-2 shrink-0">
-            <select
-              value={imageProvider}
-              onChange={(e) => {
-                const next = e.target.value as "auto" | "fal" | "unsplash";
-                setImageProvider(next);
-                if (!imagePrompt.trim()) userEditedPromptRef.current = false;
-              }}
-              className="px-2 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs text-[var(--admin-text-secondary)] focus:outline-none"
-            >
-              <option value="auto">Auto</option>
-              <option value="fal">fal.ai</option>
-              <option value="unsplash">Unsplash</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => generateImage("landscape")}
-              disabled={generating}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-50"
-            >
-              <FiImage size={12} />
-              {generating ? "…" : "Generate"}
-            </button>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-xs hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-50"
-            >
-              <FiUploadCloud size={12} />
-              {uploading ? "…" : "Upload"}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              className="hidden"
-              onChange={handleUpload}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setSavedOpen((v) => !v);
-                if (!savedOpen && savedImages.length === 0) fetchSavedImages();
-              }}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-colors ${
-                savedOpen
-                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600"
-                  : "bg-[var(--admin-surface)] border-[var(--admin-border)] hover:border-emerald-500 hover:text-emerald-600"
-              }`}
-            >
-              <FiFolder size={12} />
-              Saved{savedImages.length > 0 ? ` (${savedImages.length})` : ""}
-            </button>
-          </div>
         </div>
+
+        {/* Action toolbar — one clean row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => generateImage("landscape")}
+            disabled={generating}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20 disabled:opacity-50"
+          >
+            <FiImage size={12} />
+            {generating ? "Generating…" : "Generate"}
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-xs text-[var(--admin-text-secondary)] hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-50"
+          >
+            <FiUploadCloud size={12} />
+            {uploading ? "Uploading…" : "Upload"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="hidden"
+            onChange={handleUpload}
+          />
+          <button
+            type="button"
+            onClick={imageToPost}
+            disabled={postingFromImage || !imageUrl}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-semibold hover:bg-purple-500 disabled:opacity-40 shadow-sm"
+            title="Write per-platform posts from this image"
+          >
+            <FiZap size={12} />
+            {postingFromImage ? "Reading image…" : "Post from image"}
+          </button>
+          {imageUrl && (
+            <button
+              type="button"
+              onClick={saveToLibrary}
+              disabled={savingImage}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-xs text-[var(--admin-text-secondary)] hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-50"
+              title="Save this image to your library"
+            >
+              <FiSave size={12} />
+              {savingImage ? "Saving…" : "Save"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setSavedOpen((v) => !v)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-colors ${
+              savedOpen
+                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600"
+                : "bg-[var(--admin-input-bg)] border-[var(--admin-border)] text-[var(--admin-text-secondary)] hover:border-emerald-500 hover:text-emerald-600"
+            }`}
+          >
+            <FiFolder size={12} />
+            Saved{savedImages.length > 0 ? ` (${savedImages.length})` : ""}
+          </button>
+          <div className="flex-1" />
+          {imageUrl && (
+            <button
+              type="button"
+              onClick={() => { setImageUrl(""); setImageCredit(null); }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-400/10"
+            >
+              <FiTrash2 size={12} />
+              Clear
+            </button>
+          )}
+        </div>
+
+        {/* Current image URL */}
         {imageUrl && (
           <div className="flex items-center gap-2">
             <input
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
-              className={inputClass + " text-xs font-mono flex-1"}
+              className={inputClass + " text-[11px] font-mono flex-1"}
               placeholder="Image URL"
             />
             {imageCredit && (
               <span className="text-[10px] text-[var(--admin-text-muted)] font-mono shrink-0">{imageCredit}</span>
             )}
-            <button
-              type="button"
-              onClick={() => { setImageUrl(""); setImageCredit(null); }}
-              className="px-2 py-1 rounded text-[10px] text-red-400 hover:bg-red-400/10"
-            >
-              Clear
-            </button>
           </div>
         )}
+
+        {/* Saved-image library — horizontal strip */}
         {savedOpen && (
           <div className="border-t border-[var(--admin-border)] pt-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-secondary)]">
-                Saved Images
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)]">
+                {savedImages.length > 0 ? `${savedImages.length} saved` : "Saved images"}
               </span>
               <button
                 type="button"
                 onClick={fetchSavedImages}
                 disabled={savedLoading}
-                className="text-[10px] text-[var(--admin-text-muted)] hover:text-emerald-600"
+                className="inline-flex items-center gap-1 text-[10px] text-[var(--admin-text-muted)] hover:text-emerald-600"
               >
-                {savedLoading ? "Loading…" : "Refresh"}
+                <FiRefreshCw size={10} className={savedLoading ? "animate-spin" : ""} />
+                Refresh
               </button>
             </div>
             {savedImages.length === 0 ? (
-              <p className="text-[11px] text-[var(--admin-text-muted)] py-4 text-center">
-                {savedLoading ? "Loading saved images…" : "No saved images yet. Upload one to get started."}
+              <p className="text-[11px] text-[var(--admin-text-muted)] py-3 text-center">
+                {savedLoading ? "Loading…" : "No saved images yet. Upload or Save one to build your library."}
               </p>
             ) : (
-              <div className="grid grid-cols-5 sm:grid-cols-8 gap-2 max-h-48 overflow-y-auto">
+              <div className="flex gap-2 overflow-x-auto pb-1">
                 {savedImages.map((img) => (
                   <button
                     key={img.name}
@@ -739,15 +851,20 @@ export default function SocialEditor({
                     onClick={() => {
                       setImageUrl(img.url);
                       setImageCredit(null);
-                      setSavedOpen(false);
                       onSuccess("Image selected");
                     }}
-                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-colors hover:border-emerald-500 ${
+                    className={`relative h-16 w-16 shrink-0 rounded-lg overflow-hidden border-2 transition-colors hover:border-emerald-500 ${
                       imageUrl === img.url ? "border-emerald-500" : "border-[var(--admin-border)]"
                     }`}
+                    title={img.name}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                    {imageUrl === img.url && (
+                      <span className="absolute inset-0 bg-emerald-500/25 flex items-center justify-center">
+                        <FiCheck size={16} className="text-white drop-shadow" />
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
