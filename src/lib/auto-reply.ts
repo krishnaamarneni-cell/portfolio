@@ -82,9 +82,6 @@ type AutoReplyResult = {
  * Scans last N hours of emails, finds job matches >70%, auto-replies.
  */
 export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error("GROQ_API_KEY not set");
-
   const result: AutoReplyResult = {
     scanned: 0,
     jobEmails: 0,
@@ -93,6 +90,17 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
     skippedDuplicate: 0,
     errors: [],
   };
+
+  // KILL SWITCH — auto-sending replies on Krishna's behalf is OFF unless the
+  // env var AUTO_REPLY_ENABLED is explicitly set to "true". This stops "Lucy"
+  // from emailing recruiters without human review. Re-enable only intentionally.
+  if (process.env.AUTO_REPLY_ENABLED !== "true") {
+    result.errors.push("auto-reply disabled (set AUTO_REPLY_ENABLED=true to re-enable)");
+    return result;
+  }
+
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY not set");
 
   // Pull recent emails.
   const { messages, error } = await listRecentMessages({
