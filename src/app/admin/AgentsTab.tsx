@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FiZap,
   FiRefreshCw,
@@ -14,6 +14,8 @@ import {
   FiBarChart2,
   FiChevronDown,
   FiChevronUp,
+  FiMessageSquare,
+  FiSend,
 } from "react-icons/fi";
 import { AGENT_MODELS, DEFAULT_AGENT_MODEL } from "@/lib/agents";
 
@@ -535,6 +537,8 @@ export default function AgentsTab({
         ) : !newsState && !newsBusy && !newsError ? (
           <EmptyHint icon={FiTrendingUp} text="No run yet — hit Run." />
         ) : null}
+
+        <AgentChat agentKey="news" title="News scout" report={newsState?.markdown} model={model} accent="text-emerald-300" />
       </AgentCard>
 
       {/* ── Email Intelligence ── */}
@@ -895,6 +899,8 @@ export default function AgentsTab({
             })}
           </div>
         )}
+
+        <AgentChat agentKey="inbox" title="Email Intelligence" report={inboxState?.markdown} model={model} accent="text-sky-300" />
       </AgentCard>
 
       {/* ── Jobs scout ── */}
@@ -997,6 +1003,8 @@ export default function AgentsTab({
         ) : !jobsState && !jobsBusy && !jobsError ? (
           <EmptyHint icon={FiBriefcase} text="No run yet — set companies and hit Run." />
         ) : null}
+
+        <AgentChat agentKey="jobs" title="Jobs scout" report={jobsState?.markdown} model={model} accent="text-indigo-300" />
       </AgentCard>
 
       {/* ── Atlas Opportunities ── */}
@@ -1034,6 +1042,8 @@ export default function AgentsTab({
         ) : !oppState && !oppBusy && !oppError ? (
           <EmptyHint icon={FiTarget} text="No scan yet — hit Scan." />
         ) : null}
+
+        <AgentChat agentKey="opportunities" title="Atlas" report={oppState?.markdown} model={model} accent="text-fuchsia-300" />
       </AgentCard>
 
       {/* ── Stock Screener ── */}
@@ -1127,6 +1137,8 @@ export default function AgentsTab({
         ) : !screenState && !screenBusy && !screenError ? (
           <EmptyHint icon={FiBarChart2} text="Set your risk level and hit Scan market." />
         ) : null}
+
+        <AgentChat agentKey="screener" title="Stock Screener" report={screenState?.markdown} model={model} accent="text-amber-300" />
       </AgentCard>
 
       {/* Footer help */}
@@ -1143,6 +1155,128 @@ export default function AgentsTab({
         </p>
       </div>
     </section>
+  );
+}
+
+/* ── Conversational chat with one agent, grounded in its latest report ── */
+function AgentChat({
+  agentKey,
+  title,
+  report,
+  model,
+  accent,
+}: {
+  agentKey: string;
+  title: string;
+  report?: string;
+  model: string;
+  accent: string;
+}) {
+  const [messages, setMessages] = useState<
+    { role: "user" | "assistant"; content: string }[]
+  >([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [messages, busy]);
+
+  async function send() {
+    const text = input.trim();
+    if (!text || busy) return;
+    const next = [...messages, { role: "user" as const, content: text }];
+    setMessages(next);
+    setInput("");
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/agents/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentKey,
+          messages: next,
+          report: report || undefined,
+          model,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: j.reply || `⚠️ ${j.error || "No response"}`,
+        },
+      ]);
+    } catch {
+      setMessages((m) => [...m, { role: "assistant", content: "⚠️ Network error" }]);
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-3 space-y-2.5">
+      <div className="flex items-center gap-2">
+        <FiMessageSquare size={12} className={accent} />
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[#666]">
+          Ask {title}
+        </span>
+      </div>
+      {messages.length > 0 && (
+        <div ref={scrollRef} className="max-h-72 overflow-y-auto space-y-2 pr-1">
+          {messages.map((m, i) => (
+            <div
+              key={i}
+              className={m.role === "user" ? "flex justify-end" : "flex justify-start"}
+            >
+              <div
+                className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
+                  m.role === "user"
+                    ? "bg-white/[0.08] text-white"
+                    : "bg-white/[0.03] border border-white/[0.05] text-[#ddd]"
+                }`}
+              >
+                {m.role === "assistant" ? (
+                  <Markdown text={m.content} />
+                ) : (
+                  <span className="whitespace-pre-wrap">{m.content}</span>
+                )}
+              </div>
+            </div>
+          ))}
+          {busy && (
+            <div className="flex justify-start">
+              <div className="rounded-xl px-3 py-2 text-[11px] text-[#666] bg-white/[0.03] border border-white/[0.05] animate-pulse">
+                thinking…
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              send();
+            }
+          }}
+          placeholder={report ? "Ask a follow-up about the results…" : "Ask this agent anything…"}
+          className="flex-1 px-3 py-2 rounded-xl bg-[#1a1a1a] border border-white/[0.08] focus:border-white/20 focus:outline-none text-xs text-white placeholder:text-[#555]"
+        />
+        <button
+          type="button"
+          onClick={send}
+          disabled={busy || !input.trim()}
+          className="inline-flex items-center justify-center px-3.5 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] text-white hover:bg-white/[0.1] disabled:opacity-40"
+        >
+          <FiSend size={12} />
+        </button>
+      </div>
+    </div>
   );
 }
 
