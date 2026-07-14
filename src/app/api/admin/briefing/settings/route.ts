@@ -22,12 +22,14 @@ export async function PUT(request: Request) {
     morning_briefing_to?: string | null;
     sunday_reflection_enabled?: boolean;
     sunday_reflection_to?: string | null;
+    auto_reply_enabled?: boolean;
   };
   const settings = await updateSettings({
     morning_briefing_enabled: body.morning_briefing_enabled,
     morning_briefing_to: body.morning_briefing_to,
     sunday_reflection_enabled: body.sunday_reflection_enabled,
     sunday_reflection_to: body.sunday_reflection_to,
+    auto_reply_enabled: body.auto_reply_enabled,
   });
   return NextResponse.json({ settings });
 }

@@ -91,11 +91,12 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
     errors: [],
   };
 
-  // KILL SWITCH — auto-sending replies on Krishna's behalf is OFF unless the
-  // env var AUTO_REPLY_ENABLED is explicitly set to "true". This stops "Lucy"
-  // from emailing recruiters without human review. Re-enable only intentionally.
-  if (process.env.AUTO_REPLY_ENABLED !== "true") {
-    result.errors.push("auto-reply disabled (set AUTO_REPLY_ENABLED=true to re-enable)");
+  // KILL SWITCH — controlled from Settings → Auto-reply (admin_settings row).
+  // Default OFF, so "Lucy" never emails recruiters unless it's toggled on.
+  const { getSettings } = await import("@/lib/briefing");
+  const settings = await getSettings().catch(() => null);
+  if (!settings?.auto_reply_enabled) {
+    result.errors.push("auto-reply disabled (turn it on in Settings)");
     return result;
   }
 

@@ -18,6 +18,7 @@ import FaceLockCard from "./FaceLockCard";
 import LucyImportCard from "./LucyImportCard";
 import SignOutCard from "./SignOutCard";
 import { MorningBriefingCard, SundayReflectionCard } from "./PersonalTab";
+import AutoReplyCard from "./personal/AutoReplyCard";
 import { getToolsForDisplay } from "@/lib/mcp-tools";
 
 type Props = {
@@ -200,6 +201,9 @@ export default function ConnectorsEditor({ onSuccess, onError, sessionEmail }: P
       </div>
       <div className="mt-4">
         <SundayReflectionCard onError={onError} onSuccess={onSuccess} />
+      </div>
+      <div className="mt-4">
+        <AutoReplyCard onError={onError} onSuccess={onSuccess} />
       </div>
 
       {/* Lucy MCP Hub — connection info for external agents */}
