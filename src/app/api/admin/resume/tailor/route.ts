@@ -17,6 +17,14 @@ type Body = {
   customResume?: string;
 };
 
+/** GET — return the base/reference resume the AI tailors from. */
+export async function GET() {
+  if (!(await getSession())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return NextResponse.json({ baseResume: MASTER_RESUME });
+}
+
 export async function POST(request: Request) {
   if (!(await getSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

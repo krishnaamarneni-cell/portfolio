@@ -14,7 +14,6 @@ import {
   FiCheckCircle,
   FiTarget,
   FiEdit2,
-  FiPrinter,
 } from "react-icons/fi";
 
 type ResumeSection = {
@@ -98,8 +97,18 @@ export default function ResumeCreatorTab({
   const [showAnalysis, setShowAnalysis] = useState(true);
   const resumeRef = useRef<HTMLDivElement>(null);
 
+  // Reference (base) resume the AI tailors from
+  const [baseResume, setBaseResume] = useState("");
+  const [showReference, setShowReference] = useState(false);
+
   useEffect(() => {
     loadVersions();
+    fetch("/api/admin/resume/tailor")
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.baseResume) setBaseResume(j.baseResume);
+      })
+      .catch(() => {});
   }, []);
 
   async function loadVersions() {
@@ -200,35 +209,165 @@ export default function ResumeCreatorTab({
     setResume(updated);
   }
 
-  async function exportResume(format: "pdf" | "docx") {
-    if (!resume) return;
-    if (format === "pdf") {
-      const printWindow = window.open("", "_blank");
-      if (!printWindow) {
-        onError("Pop-up blocked — allow pop-ups and try again");
-        return;
-      }
-      printWindow.document.write(buildPrintHtml(resume));
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 300);
-      return;
-    }
+  function triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /** Real, selectable, ATS-friendly PDF built client-side with jsPDF. */
+  async function downloadPdf(r: ResumeSection) {
     try {
-      const r = await fetch("/api/admin/resume/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ format, resume, name: "Krishna Amarneni" }),
-      });
-      const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Krishna_Amarneni_Resume.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-      onSuccess("Resume downloaded");
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "pt", format: "letter" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const margin = 54;
+      const contentW = pageW - margin * 2;
+      let y = margin;
+
+      const ensure = (h: number) => {
+        if (y + h > pageH - margin) {
+          doc.addPage();
+          y = margin;
+        }
+      };
+      const para = (
+        text: string,
+        size: number,
+        color: [number, number, number],
+        align: "left" | "center" = "left",
+        gapAfter = 0,
+      ) => {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(size);
+        doc.setTextColor(color[0], color[1], color[2]);
+        const lines = doc.splitTextToSize(text, contentW) as string[];
+        const lh = size * 1.32;
+        for (const line of lines) {
+          ensure(lh);
+          doc.text(line, align === "center" ? pageW / 2 : margin, y, { align });
+          y += lh;
+        }
+        y += gapAfter;
+      };
+      const header = (title: string) => {
+        y += 8;
+        ensure(22);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(26, 26, 26);
+        doc.text(title.toUpperCase(), margin, y);
+        y += 4;
+        doc.setDrawColor(51, 51, 51);
+        doc.setLineWidth(1);
+        doc.line(margin, y, pageW - margin, y);
+        y += 11;
+      };
+      const bullet = (text: string) => {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(55, 55, 55);
+        const indent = 12;
+        const lines = doc.splitTextToSize(text, contentW - indent) as string[];
+        const lh = 13;
+        lines.forEach((line, i) => {
+          ensure(lh);
+          if (i === 0) doc.text("•", margin, y);
+          doc.text(line, margin + indent, y);
+          y += lh;
+        });
+      };
+
+      // Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(20, 20, 20);
+      doc.text("KRISHNA AMARNENI", pageW / 2, y + 6, { align: "center" });
+      y += 24;
+      para(
+        "(203) 804-9291  ·  krishnaamarneni.com  ·  linkedin.com/in/krishnaamarneni",
+        9,
+        [90, 90, 90],
+        "center",
+        4,
+      );
+
+      if (r.summary) {
+        header("Professional Summary");
+        para(r.summary, 10, [55, 55, 55]);
+      }
+      if (r.skills?.length) {
+        header("Core Skills");
+        para(r.skills.join("  ·  "), 10, [55, 55, 55]);
+      }
+      if (r.experience?.length) {
+        header("Experience");
+        for (const e of r.experience) {
+          ensure(18);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10.5);
+          doc.setTextColor(26, 26, 26);
+          const title = `${e.title} — ${e.company}${e.location ? `, ${e.location}` : ""}`;
+          const tLines = doc.splitTextToSize(title, contentW - 96) as string[];
+          tLines.forEach((line, i) => {
+            ensure(14);
+            doc.text(line, margin, y);
+            if (i === 0 && e.period) {
+              doc.setFont("helvetica", "normal");
+              doc.setFontSize(9.5);
+              doc.setTextColor(95, 95, 95);
+              doc.text(e.period, pageW - margin, y, { align: "right" });
+              doc.setFont("helvetica", "bold");
+              doc.setFontSize(10.5);
+              doc.setTextColor(26, 26, 26);
+            }
+            y += 14;
+          });
+          for (const b of e.bullets ?? []) bullet(b);
+          y += 5;
+        }
+      }
+      if (r.projects?.length) {
+        header("Projects");
+        for (const p of r.projects) {
+          para(`${p.name} — ${p.description}`, 10, [40, 40, 40]);
+          if (p.tech?.length) para(p.tech.join(", "), 9, [95, 95, 95], "left", 4);
+        }
+      }
+      if (r.education?.length) {
+        header("Education");
+        for (const e of r.education)
+          para(`${e.degree} — ${e.school}${e.year ? ` (${e.year})` : ""}`, 10, [55, 55, 55]);
+      }
+      if (r.certifications?.length) {
+        header("Certifications");
+        for (const c of r.certifications) bullet(c);
+      }
+      if (r.additional) {
+        header("Additional");
+        para(r.additional, 10, [55, 55, 55]);
+      }
+
+      doc.save("krishna.amarneni.pdf");
+      onSuccess("PDF downloaded");
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "PDF generation failed");
+    }
+  }
+
+  /** Word document — styled HTML that Word opens with formatting intact. */
+  function downloadWord(r: ResumeSection) {
+    try {
+      const html = buildPrintHtml(r);
+      const blob = new Blob(["﻿", html], { type: "application/msword" });
+      triggerDownload(blob, "krishna.amarneni.doc");
+      onSuccess("Word document downloaded");
     } catch {
-      onError("Download failed");
+      onError("Word download failed");
     }
   }
 
@@ -295,6 +434,38 @@ export default function ResumeCreatorTab({
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Reference (base) resume — what the AI tailors from */}
+      {baseResume && (
+        <div className="rounded-2xl bg-[#0d0d0d] border border-white/[0.06] p-5">
+          <button
+            type="button"
+            onClick={() => setShowReference((v) => !v)}
+            className="flex items-center gap-2 w-full"
+          >
+            <FiFileText size={16} className="text-[#ff6b00]" />
+            <h3 className="text-sm font-bold uppercase tracking-widest text-[#888] flex-1 text-left">
+              Reference resume — base the AI tailors from
+            </h3>
+            {showReference ? (
+              <FiChevronUp size={14} className="text-[#666]" />
+            ) : (
+              <FiChevronDown size={14} className="text-[#666]" />
+            )}
+          </button>
+          {showReference && (
+            <div className="mt-3">
+              <p className="text-[11px] text-[#666] mb-2">
+                This master resume is the source. Each tailored version is built from it against the job description.
+                To override it for one run, tick <span className="text-[#999]">&ldquo;Paste custom resume&rdquo;</span> below.
+              </p>
+              <pre className="text-[11px] text-[#bbb] whitespace-pre-wrap font-mono bg-[#111] border border-white/[0.06] rounded-xl p-4 max-h-96 overflow-y-auto">
+                {baseResume}
+              </pre>
             </div>
           )}
         </div>
@@ -383,11 +554,11 @@ export default function ResumeCreatorTab({
           </button>
           {resume && (
             <>
-              <button type="button" onClick={() => exportResume("pdf")} className={btnSecondary}>
-                <FiPrinter size={12} /> Print / PDF
+              <button type="button" onClick={() => downloadPdf(resume)} className={btnSecondary}>
+                <FiDownload size={12} /> Download PDF
               </button>
-              <button type="button" onClick={() => exportResume("docx")} className={btnSecondary}>
-                <FiDownload size={12} /> Download TXT
+              <button type="button" onClick={() => downloadWord(resume)} className={btnSecondary}>
+                <FiDownload size={12} /> Download Word
               </button>
             </>
           )}
