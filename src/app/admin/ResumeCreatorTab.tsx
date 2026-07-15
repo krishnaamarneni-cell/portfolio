@@ -14,6 +14,7 @@ import {
   FiCheckCircle,
   FiTarget,
   FiEdit2,
+  FiUploadCloud,
 } from "react-icons/fi";
 
 type ResumeSection = {
@@ -100,6 +101,32 @@ export default function ResumeCreatorTab({
   // Reference (base) resume the AI tailors from
   const [baseResume, setBaseResume] = useState("");
   const [showReference, setShowReference] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const uploadRef = useRef<HTMLInputElement>(null);
+
+  async function onUploadResume(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExtracting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch("/api/admin/resume/extract", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) {
+        onError(j.error || "Couldn't read that file");
+      } else {
+        setCustomResume(j.text);
+        setUseCustom(true);
+        setShowReference(true);
+        onSuccess(`Loaded ${file.name} — now the reference the AI tailors from`);
+      }
+    } catch {
+      onError("Upload failed");
+    }
+    setExtracting(false);
+    if (uploadRef.current) uploadRef.current.value = "";
+  }
 
   useEffect(() => {
     loadVersions();
@@ -442,30 +469,78 @@ export default function ResumeCreatorTab({
       {/* Reference (base) resume — what the AI tailors from */}
       {baseResume && (
         <div className="rounded-2xl bg-[#0d0d0d] border border-white/[0.06] p-5">
-          <button
-            type="button"
-            onClick={() => setShowReference((v) => !v)}
-            className="flex items-center gap-2 w-full"
-          >
-            <FiFileText size={16} className="text-[#ff6b00]" />
-            <h3 className="text-sm font-bold uppercase tracking-widest text-[#888] flex-1 text-left">
-              Reference resume — base the AI tailors from
-            </h3>
-            {showReference ? (
-              <FiChevronUp size={14} className="text-[#666]" />
-            ) : (
-              <FiChevronDown size={14} className="text-[#666]" />
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowReference((v) => !v)}
+              className="flex items-center gap-2 flex-1 min-w-0 text-left"
+            >
+              <FiFileText size={16} className="text-[#ff6b00] shrink-0" />
+              <h3 className="text-sm font-bold uppercase tracking-widest text-[#888] truncate">
+                Reference resume — base the AI tailors from
+              </h3>
+            </button>
+            <button
+              type="button"
+              onClick={() => uploadRef.current?.click()}
+              disabled={extracting}
+              className={btnSecondary}
+            >
+              <FiUploadCloud size={12} /> {extracting ? "Reading…" : "Upload resume"}
+            </button>
+            <input
+              ref={uploadRef}
+              type="file"
+              accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+              className="hidden"
+              onChange={onUploadResume}
+            />
+            <button
+              type="button"
+              onClick={() => setShowReference((v) => !v)}
+              className="text-[#666] hover:text-white shrink-0 p-0.5"
+            >
+              {showReference ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
+            </button>
+          </div>
           {showReference && (
             <div className="mt-3">
-              <p className="text-[11px] text-[#666] mb-2">
-                This master resume is the source. Each tailored version is built from it against the job description.
-                To override it for one run, tick <span className="text-[#999]">&ldquo;Paste custom resume&rdquo;</span> below.
-              </p>
-              <pre className="text-[11px] text-[#bbb] whitespace-pre-wrap font-mono bg-[#111] border border-white/[0.06] rounded-xl p-4 max-h-96 overflow-y-auto">
-                {baseResume}
-              </pre>
+              {useCustom && customResume.trim() ? (
+                <>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                      Active — your uploaded / pasted resume
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUseCustom(false);
+                        setCustomResume("");
+                      }}
+                      className="text-[10px] text-[#666] hover:text-[#999] underline"
+                    >
+                      Reset to master
+                    </button>
+                  </div>
+                  <pre className="text-[11px] text-[#ddd] whitespace-pre-wrap font-mono bg-[#111] border border-emerald-500/20 rounded-xl p-4 max-h-96 overflow-y-auto">
+                    {customResume}
+                  </pre>
+                  <p className="text-[10px] text-[#666] mt-1">
+                    Tweak this text in the &ldquo;Paste custom resume&rdquo; box below if needed, then Analyze.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[11px] text-[#666] mb-2">
+                    This master resume is the source. Each tailored version is built from it against the job
+                    description. <span className="text-[#999]">Upload your resume</span> above (PDF / Word / TXT) or
+                    paste one below to override it.
+                  </p>
+                  <pre className="text-[11px] text-[#bbb] whitespace-pre-wrap font-mono bg-[#111] border border-white/[0.06] rounded-xl p-4 max-h-96 overflow-y-auto">
+                    {baseResume}
+                  </pre>
+                </>
+              )}
             </div>
           )}
         </div>
