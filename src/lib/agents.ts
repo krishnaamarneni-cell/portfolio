@@ -217,14 +217,12 @@ export async function fetchPortfolioSnapshot(): Promise<{
     if (!url) continue;
     if (!looksLikeMcp(url)) continue;
     try {
-      const initRes = await mcpInitialize(url, c.bearer_token).catch(() => undefined);
-      if (initRes?.error) {
-        console.warn(`[portfolio] MCP init failed for ${c.label}: ${initRes.error.message}`);
-        continue;
-      }
+      // `initialize` is an optional handshake — attempt it but don't bail if it
+      // errors; tools/list is what actually matters, and some servers skip it.
+      await mcpInitialize(url, c.bearer_token).catch(() => undefined);
       const tools = await mcpListTools(url, c.bearer_token);
       if (tools.length === 0) {
-        console.warn(`[portfolio] MCP tools/list returned 0 tools for ${c.label} — token may be invalid`);
+        console.warn(`[portfolio] MCP tools/list returned 0 tools for ${c.label} — token may be invalid/expired`);
         continue;
       }
 
