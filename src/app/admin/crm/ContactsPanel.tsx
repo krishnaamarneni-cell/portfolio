@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   FiSearch,
   FiStar,
@@ -16,6 +16,7 @@ import {
   FiExternalLink,
   FiDownload,
   FiSend,
+  FiUploadCloud,
 } from "react-icons/fi";
 import { type Contact, type ContactType, CONTACT_TYPES, typeInfo, timeAgo } from "./types";
 
@@ -593,7 +594,40 @@ function BulkComposeModal({
   const [message, setMessage] = useState("");
   const [roleSeeking, setRoleSeeking] = useState("");
   const [attachResume, setAttachResume] = useState(true);
+  const [resumeInfo, setResumeInfo] = useState<{ url: string; name: string } | null>(null);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const resumeUploadRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/resume")
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.url) setResumeInfo({ url: j.url, name: j.name || "Resume" });
+      })
+      .catch(() => {});
+  }, []);
+
+  async function uploadResume(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingResume(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch("/api/admin/resume", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) onError(j.error || "Upload failed");
+      else {
+        setResumeInfo({ url: j.url, name: j.name || file.name });
+        onSuccess("Resume updated — this is what will be attached");
+      }
+    } catch {
+      onError("Upload failed");
+    }
+    setUploadingResume(false);
+    if (resumeUploadRef.current) resumeUploadRef.current.value = "";
+  }
   const [generating, setGenerating] = useState<"both" | "subject" | "message" | null>(null);
   const [result, setResult] = useState<{
     sent: number;
@@ -821,6 +855,53 @@ function BulkComposeModal({
                 />
                 Attach resume file (PDF/DOCX)
               </label>
+
+              {attachResume && (
+                <div className="rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)] font-semibold">
+                        Resume that will be attached
+                      </p>
+                      <p className="text-xs text-[var(--admin-text)] truncate">
+                        {resumeInfo?.name || "Krishna_Amarneni_Resume.docx (default)"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {resumeInfo?.url && (
+                        <a
+                          href={resumeInfo.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-[#ff6b00] hover:underline inline-flex items-center gap-1"
+                        >
+                          <FiExternalLink size={12} /> View
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => resumeUploadRef.current?.click()}
+                        disabled={uploadingResume}
+                        className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] hover:border-[#ff6b00] hover:text-[#ff6b00] disabled:opacity-50"
+                      >
+                        <FiUploadCloud size={12} /> {uploadingResume ? "Uploading…" : "Upload new"}
+                      </button>
+                      <input
+                        ref={resumeUploadRef}
+                        type="file"
+                        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        className="hidden"
+                        onChange={uploadResume}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-[var(--admin-text-muted)]">
+                    Click <span className="text-[var(--admin-text-secondary)]">View</span> to check the exact file, or{" "}
+                    <span className="text-[var(--admin-text-secondary)]">Upload new</span> to replace it before sending —
+                    this file is attached to every email.
+                  </p>
+                </div>
+              )}
 
               <button
                 onClick={handleSend}
