@@ -49,37 +49,40 @@ export async function POST(request: Request) {
 
     let userPrompt: string;
     if (field === "subject") {
-      userPrompt = `Generate a better email subject line for this bulk outreach email.
+      userPrompt = `Write a subject line for a JOB-SEARCH outreach email. It must clearly signal Krishna is actively looking for / open to a new role now — not vague.
 Current message body: "${body.currentMessage || ""}"
-Recipients: ${body.count || "multiple"} contacts (types: ${types}).
+Recipients: ${body.count || "multiple"} recruiter/network contacts (types: ${types}).
 Output ONLY valid JSON: {"subject": "..."}`;
     } else if (field === "message") {
-      userPrompt = `Generate a better email body for this bulk outreach email.
+      userPrompt = `Write the body of a JOB-SEARCH outreach email. Make it unmistakable that Krishna is actively seeking a new SAP S/4HANA + AI/ML role and is asking about current openings.
 Subject line: "${body.currentSubject || ""}"
-Recipients: ${body.count || "multiple"} contacts (types: ${types}, companies: ${companies}).
+Recipients: ${body.count || "multiple"} recruiter/network contacts (types: ${types}, companies: ${companies}).
 Output ONLY valid JSON: {"message": "..."}`;
     } else {
-      userPrompt = `Generate a bulk outreach email to ${body.count || "multiple"} contacts.
-Contact types: ${types}
-Companies include: ${companies}
+      userPrompt = `Write a JOB-SEARCH outreach email to ${body.count || "multiple"} recruiter/network contacts (types: ${types}, companies: ${companies}). Krishna is actively seeking a new SAP S/4HANA + AI/ML role and wants to know about current openings at their company. Make it clear he is looking for a job NOW.
 Output ONLY valid JSON: {"subject": "...", "message": "..."}`;
     }
 
     const result = await runAgent({
       apiKey,
       model: "llama-3.3-70b-versatile",
-      systemPrompt: `You generate professional email content for Krishna Amarneni, an SAP S/4HANA + AI/ML engineer with 5+ years experience in enterprise systems, currently exploring AI engineering roles.
+      systemPrompt: `You write JOB-SEARCH outreach emails for Krishna Amarneni — an SAP S/4HANA + AI/ML engineer with 5+ years in enterprise systems. He is ACTIVELY SEEKING a new full-time role right now and is emailing recruiters and his network to ask about current openings.
+
+The email MUST make it unmistakable that:
+- Krishna is actively looking for / open to a new role now — NOT vaguely "exploring".
+- He is asking whether they have (or know of) relevant openings — SAP S/4HANA, AI/ML, enterprise systems, or SAP+AI crossover roles.
+- He is available to talk/interview and has attached his resume.
 
 Rules:
-- No markdown, no bold (**), no asterisks, no bullet points
-- No greeting line (e.g. "Hi Name") — it is prepended automatically per contact
-- No signature block — it is appended automatically
-- Body: 3-4 natural sentences, professional but warm
-- Subject: under 60 characters, specific, no "Re:" unless replying
-- BANNED phrases: "excited about the opportunity", "leverage my expertise", "confident in my ability", "passionate about", "drive business growth", "touching base"
-- Output ONLY valid JSON, nothing else`,
+- No markdown, no bold (**), no asterisks, no bullet points.
+- No greeting line (e.g. "Hi Name") — it is prepended automatically per contact.
+- No signature block — it is appended automatically.
+- Body: 3-4 natural sentences, warm and professional, confident but not desperate. Include a clear ask (e.g. "if you have or come across a role that fits, I'd love to connect").
+- Subject: under 60 characters and it MUST clearly signal he is job-seeking / available — e.g. "Open to new SAP + AI engineering roles" or "SAP S/4HANA + AI Engineer — actively interviewing". NEVER a vague subject like "Exploring AI Roles".
+- BANNED phrases: "excited about the opportunity", "leverage my expertise", "confident in my ability", "passionate about", "drive business growth", "touching base", "just checking in".
+- Output ONLY valid JSON, nothing else.`,
       userPrompt,
-      maxTokens: 250,
+      maxTokens: 320,
     });
 
     try {
@@ -91,7 +94,7 @@ Rules:
       });
     } catch {
       return NextResponse.json({
-        subject: field !== "message" ? "Following up on our conversation" : undefined,
+        subject: field !== "message" ? "Open to new SAP + AI engineering roles" : undefined,
         message: field !== "subject" ? (result.content || "").replace(/[{}"]/g, "").trim() : undefined,
       });
     }
