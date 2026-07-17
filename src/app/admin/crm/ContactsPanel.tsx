@@ -110,6 +110,19 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
     return { total, recruiters, starred, dnc, withPhone };
   }, [contacts]);
 
+  // Quick-select audiences for a bulk send — both skip Do-Not-Contact + excluded.
+  const presets = useMemo(() => {
+    const sendable = (c: Contact) => !c.do_not_contact && !c.excluded_from_bulk;
+    return {
+      jobTargets: contacts.filter(
+        (c) => sendable(c) && (c.contact_type === "recruiter" || c.contact_type === "hiring_manager")
+      ),
+      noVendorPersonal: contacts.filter(
+        (c) => sendable(c) && c.contact_type !== "vendor" && c.contact_type !== "personal"
+      ),
+    };
+  }, [contacts]);
+
   const selectedContact = selectedId ? contacts.find((c) => c.id === selectedId) ?? null : null;
 
   function exportCSV(rows: Contact[]) {
@@ -201,6 +214,39 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
         >
           <FiDownload size={14} /> Export CSV
         </button>
+      </div>
+
+      {/* Quick-select audiences for bulk send */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--admin-text-muted)]">
+          Quick select
+        </span>
+        <button
+          type="button"
+          onClick={() => setSelectedIds(new Set(presets.jobTargets.map((c) => c.id)))}
+          className="px-2.5 py-1 rounded-full text-[11px] border bg-[#ff6b00]/10 border-[#ff6b00]/30 text-[#ff8c38] hover:bg-[#ff6b00]/20"
+        >
+          Recruiters + Hiring mgrs ({presets.jobTargets.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setSelectedIds(new Set(presets.noVendorPersonal.map((c) => c.id)))}
+          className="px-2.5 py-1 rounded-full text-[11px] border bg-[var(--admin-surface-hover)] border-[var(--admin-border)] text-[var(--admin-text-secondary)] hover:border-[#ff6b00]/40 hover:text-[#ff8c38]"
+        >
+          Exclude vendors + personal ({presets.noVendorPersonal.length})
+        </button>
+        {selectedIds.size > 0 && (
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-[11px] text-[var(--admin-text-muted)] hover:underline ml-1"
+          >
+            Clear selection
+          </button>
+        )}
+        <span className="text-[10px] text-[var(--admin-text-muted)]">
+          Both skip Do-Not-Contact &amp; excluded contacts automatically.
+        </span>
       </div>
 
       {/* Bulk action bar */}
