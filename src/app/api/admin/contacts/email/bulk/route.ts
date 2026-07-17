@@ -26,6 +26,7 @@ type BulkBody = {
   field?: "both" | "subject" | "message";
   currentSubject?: string;
   currentMessage?: string;
+  roleSeeking?: string;
 };
 
 export async function POST(request: Request) {
@@ -46,20 +47,25 @@ export async function POST(request: Request) {
     const field = body.field || "both";
     const types = body.contactTypes?.join(", ") || "mixed";
     const companies = body.companies?.slice(0, 8).join(", ") || "various";
+    const role = body.roleSeeking?.trim() || "SAP S/4HANA and/or AI/ML engineering roles";
+    const roleLine = `The specific role(s) Krishna is looking for: ${role}. Name this target explicitly in the email.`;
 
     let userPrompt: string;
     if (field === "subject") {
-      userPrompt = `Write a subject line for a JOB-SEARCH outreach email. It must clearly signal Krishna is actively looking for / open to a new role now — not vague.
+      userPrompt = `Write a subject line for a JOB-SEARCH outreach email. It must clearly signal Krishna is actively looking for / open to a new role now — not vague — and reference the target role.
+${roleLine}
 Current message body: "${body.currentMessage || ""}"
 Recipients: ${body.count || "multiple"} recruiter/network contacts (types: ${types}).
 Output ONLY valid JSON: {"subject": "..."}`;
     } else if (field === "message") {
-      userPrompt = `Write the body of a JOB-SEARCH outreach email. Make it unmistakable that Krishna is actively seeking a new SAP S/4HANA + AI/ML role and is asking about current openings.
+      userPrompt = `Write the body of a JOB-SEARCH outreach email. Make it unmistakable that Krishna is actively seeking the target role and is asking about current openings.
+${roleLine}
 Subject line: "${body.currentSubject || ""}"
 Recipients: ${body.count || "multiple"} recruiter/network contacts (types: ${types}, companies: ${companies}).
 Output ONLY valid JSON: {"message": "..."}`;
     } else {
-      userPrompt = `Write a JOB-SEARCH outreach email to ${body.count || "multiple"} recruiter/network contacts (types: ${types}, companies: ${companies}). Krishna is actively seeking a new SAP S/4HANA + AI/ML role and wants to know about current openings at their company. Make it clear he is looking for a job NOW.
+      userPrompt = `Write a JOB-SEARCH outreach email to ${body.count || "multiple"} recruiter/network contacts (types: ${types}, companies: ${companies}). Krishna is actively seeking a new role and wants to know about current openings at their company. Make it clear he is looking for a job NOW.
+${roleLine}
 Output ONLY valid JSON: {"subject": "...", "message": "..."}`;
     }
 
@@ -202,6 +208,38 @@ Rules:
 
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL || "https://krishnaamarneni.com";
+
+  // Load the resume file once so we can ATTACH it (not just link it).
+  let resumeAttachment: { filename: string; content: Buffer; contentType: string } | null = null;
+  if (body.attachResume) {
+    try {
+      const { data: settings } = await db
+        .from("admin_settings")
+        .select("resume_url, resume_name")
+        .eq("id", "singleton")
+        .maybeSingle();
+      const resumeUrl = settings?.resume_url || `${siteUrl}/Krishna_Amarneni_Resume.docx`;
+      const rr = await fetch(resumeUrl, { cache: "no-store" });
+      if (rr.ok) {
+        const buf = Buffer.from(await rr.arrayBuffer());
+        const ext = (resumeUrl.split("?")[0].split(".").pop() || "docx").toLowerCase();
+        const contentType =
+          ext === "pdf"
+            ? "application/pdf"
+            : ext === "docx"
+              ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              : "application/octet-stream";
+        resumeAttachment = {
+          filename: `Krishna_Amarneni_Resume.${ext}`,
+          content: buf,
+          contentType,
+        };
+      }
+    } catch {
+      // fall back to a link below
+    }
+  }
+
   const results: Array<{
     id: string;
     email: string;
@@ -224,7 +262,9 @@ ${SIGNATURE_HTML}`;
 ${htmlBody}
 </body></html>`;
 
-      if (body.attachResume) {
+      // Resume is attached as a file (below). Only if we couldn't fetch the
+      // file do we fall back to a link so the resume is never silently dropped.
+      if (body.attachResume && !resumeAttachment) {
         const resumeLink = `${siteUrl}/Krishna_Amarneni_Resume.docx`;
         html = html.replace(
           "</body>",
@@ -241,6 +281,7 @@ ${htmlBody}
         subject: body.subject,
         html,
         text: plainText,
+        attachments: resumeAttachment ? [resumeAttachment] : undefined,
       });
 
       if (r.ok) {

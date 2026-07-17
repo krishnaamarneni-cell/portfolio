@@ -591,6 +591,7 @@ function BulkComposeModal({
 }) {
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [roleSeeking, setRoleSeeking] = useState("");
   const [attachResume, setAttachResume] = useState(true);
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState<"both" | "subject" | "message" | null>(null);
@@ -635,6 +636,7 @@ function BulkComposeModal({
           companies: contactContext.companies,
           currentSubject: subject,
           currentMessage: message,
+          roleSeeking: roleSeeking || undefined,
         }),
       });
       const d = await r.json();
@@ -734,6 +736,32 @@ function BulkComposeModal({
           {!result ? (
             <>
               <div className="space-y-1.5">
+                <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">
+                  Role you&apos;re seeking
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={roleSeeking}
+                    onChange={(e) => setRoleSeeking(e.target.value)}
+                    placeholder="e.g. SAP S/4HANA Consultant, AI/ML Engineer, Supply Chain Analyst"
+                    onKeyDown={(e) => { if (e.key === "Enter") generateDraft("both"); }}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)]"
+                  />
+                  <button
+                    onClick={() => generateDraft("both")}
+                    disabled={!!generating}
+                    className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-xs font-semibold text-purple-300 hover:bg-purple-500/25 disabled:opacity-50"
+                  >
+                    {generating === "both" ? <FiRefreshCw size={11} className="animate-spin" /> : <span>✦</span>}
+                    {generating === "both" ? "Writing…" : "Generate"}
+                  </button>
+                </div>
+                <p className="text-[10px] text-[var(--admin-text-muted)]">
+                  Name the role you want and hit Generate — the email will target it. You can still edit below.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Subject</label>
                   <button
@@ -791,7 +819,7 @@ function BulkComposeModal({
                   onChange={(e) => setAttachResume(e.target.checked)}
                   className="rounded border-[var(--admin-border)] text-[#ff6b00] focus:ring-[#ff6b00]"
                 />
-                Attach resume link
+                Attach resume file (PDF/DOCX)
               </label>
 
               <button

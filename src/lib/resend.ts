@@ -12,11 +12,14 @@ export function hasResend(): boolean {
   return !!process.env.RESEND_API_KEY;
 }
 
+export type MailAttachment = { filename: string; content: Buffer; contentType: string };
+
 export async function sendViaResend(opts: {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  attachments?: MailAttachment[];
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, error: "RESEND_API_KEY not set" };
@@ -35,6 +38,9 @@ export async function sendViaResend(opts: {
       subject: opts.subject,
       html: opts.html,
       text: opts.text,
+      ...(opts.attachments?.length
+        ? { attachments: opts.attachments.map((a) => ({ filename: a.filename, content: a.content })) }
+        : {}),
     });
     if (error) {
       return { ok: false, error: error.message };
@@ -56,6 +62,7 @@ export async function sendEmailUnified(opts: {
   subject: string;
   html: string;
   text?: string;
+  attachments?: MailAttachment[];
 }): Promise<{ ok: boolean; id?: string; error?: string; provider: string }> {
   // 1. Try Gmail first (no domain restrictions, user already connected)
   try {

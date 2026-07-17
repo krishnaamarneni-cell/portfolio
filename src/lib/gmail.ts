@@ -194,41 +194,91 @@ function toBase64Url(s: string): string {
     .replace(/=+$/g, "");
 }
 
+export type EmailAttachment = { filename: string; content: Buffer; contentType: string };
+
 export async function sendEmail(opts: {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  attachments?: EmailAttachment[];
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   const access = await getAccessToken();
   if (!access) return { ok: false, error: "Gmail not connected" };
   const row = await getStoredTokens();
   const from = row?.email || "me";
-  // Build a minimal RFC 2822 MIME message with both text and HTML parts.
-  const boundary = `bnd_${Math.random().toString(36).slice(2)}`;
+  const rand = Math.random().toString(36).slice(2);
   const textPart = opts.text || opts.html.replace(/<[^>]+>/g, "").trim();
-  const mime = [
-    `From: ${from}`,
-    `To: ${opts.to}`,
-    `Subject: ${opts.subject}`,
-    "MIME-Version: 1.0",
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    "",
-    `--${boundary}`,
-    "Content-Type: text/plain; charset=UTF-8",
-    "Content-Transfer-Encoding: 7bit",
-    "",
-    textPart,
-    "",
-    `--${boundary}`,
-    "Content-Type: text/html; charset=UTF-8",
-    "Content-Transfer-Encoding: 7bit",
-    "",
-    opts.html,
-    "",
-    `--${boundary}--`,
-    "",
-  ].join("\r\n");
+
+  let mime: string;
+  if (opts.attachments?.length) {
+    // multipart/mixed: [ alternative(text+html), ...attachments ]
+    const alt = `alt_${rand}`;
+    const mixed = `mix_${rand}`;
+    const lines: string[] = [
+      `From: ${from}`,
+      `To: ${opts.to}`,
+      `Subject: ${opts.subject}`,
+      "MIME-Version: 1.0",
+      `Content-Type: multipart/mixed; boundary="${mixed}"`,
+      "",
+      `--${mixed}`,
+      `Content-Type: multipart/alternative; boundary="${alt}"`,
+      "",
+      `--${alt}`,
+      "Content-Type: text/plain; charset=UTF-8",
+      "Content-Transfer-Encoding: 7bit",
+      "",
+      textPart,
+      "",
+      `--${alt}`,
+      "Content-Type: text/html; charset=UTF-8",
+      "Content-Transfer-Encoding: 7bit",
+      "",
+      opts.html,
+      "",
+      `--${alt}--`,
+      "",
+    ];
+    for (const att of opts.attachments) {
+      const b64 = att.content.toString("base64").replace(/(.{76})/g, "$1\r\n");
+      lines.push(
+        `--${mixed}`,
+        `Content-Type: ${att.contentType}; name="${att.filename}"`,
+        `Content-Disposition: attachment; filename="${att.filename}"`,
+        "Content-Transfer-Encoding: base64",
+        "",
+        b64,
+        "",
+      );
+    }
+    lines.push(`--${mixed}--`, "");
+    mime = lines.join("\r\n");
+  } else {
+    const boundary = `bnd_${rand}`;
+    mime = [
+      `From: ${from}`,
+      `To: ${opts.to}`,
+      `Subject: ${opts.subject}`,
+      "MIME-Version: 1.0",
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      "",
+      `--${boundary}`,
+      "Content-Type: text/plain; charset=UTF-8",
+      "Content-Transfer-Encoding: 7bit",
+      "",
+      textPart,
+      "",
+      `--${boundary}`,
+      "Content-Type: text/html; charset=UTF-8",
+      "Content-Transfer-Encoding: 7bit",
+      "",
+      opts.html,
+      "",
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+  }
   const raw = toBase64Url(mime);
   const r = await fetch(
     "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
