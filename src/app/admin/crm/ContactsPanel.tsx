@@ -656,7 +656,7 @@ function BulkComposeModal({
     };
   }, [eligible]);
 
-  async function generateDraft(field: "both" | "subject" | "message") {
+  async function generateDraft(field: "both" | "subject" | "message", roleOverride?: string) {
     setGenerating(field);
     try {
       const r = await fetch("/api/admin/contacts/email/bulk", {
@@ -670,7 +670,7 @@ function BulkComposeModal({
           companies: contactContext.companies,
           currentSubject: subject,
           currentMessage: message,
-          roleSeeking: roleSeeking || undefined,
+          roleSeeking: (roleOverride ?? roleSeeking) || undefined,
         }),
       });
       const d = await r.json();
@@ -790,8 +790,38 @@ function BulkComposeModal({
                     {generating === "both" ? "Writing…" : "Generate"}
                   </button>
                 </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "SAP MM/SD Consultant",
+                    "SAP S/4HANA Consultant",
+                    "AI/ML Engineer",
+                    "Business Systems Analyst",
+                    "Supply Chain Analyst",
+                  ].map((r) => {
+                    const active = roleSeeking.trim().toLowerCase() === r.toLowerCase();
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        disabled={!!generating}
+                        onClick={() => {
+                          setRoleSeeking(r);
+                          generateDraft("both", r);
+                        }}
+                        className={`px-2.5 py-1 rounded-full text-[11px] border transition-colors disabled:opacity-50 ${
+                          active
+                            ? "bg-[#ff6b00]/15 border-[#ff6b00]/40 text-[#ff8c38]"
+                            : "bg-[var(--admin-surface-hover)] border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:border-[#ff6b00]/40 hover:text-[#ff8c38]"
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    );
+                  })}
+                </div>
                 <p className="text-[10px] text-[var(--admin-text-muted)]">
-                  Name the role you want and hit Generate — the email will target it. You can still edit below.
+                  Pick a role above (or type one) — the email will target that specific role, not both. You can still
+                  edit below.
                 </p>
               </div>
 
