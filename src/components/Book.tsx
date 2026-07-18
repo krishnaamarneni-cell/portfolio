@@ -30,10 +30,10 @@ import type { BookSection } from "@/lib/site-content-types";
  * If any of these files is missing, that face falls back to the spread
  * (Bookcover.png) slice — so you can swap them in one at a time.
  */
-const COVER_IMAGE_SRC = "/Bookcover.png";
-const BOOK_FRONT_SRC = "/Front.png";
-const BOOK_BACK_SRC = "/back.png";
-const BOOK_SPINE_SRC = "/spine.png";
+const COVER_IMAGE_SRC = "/Bookcover.webp";
+const BOOK_FRONT_SRC = "/Front.webp";
+const BOOK_BACK_SRC = "/back.webp";
+const BOOK_SPINE_SRC = "/spine.webp";
 
 // Book proportions on screen. The 2:3 ratio matches a real-world book.
 const BOOK_W = 320; // front face width

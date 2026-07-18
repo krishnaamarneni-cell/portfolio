@@ -6,6 +6,7 @@ import ScrollReveal from "./ScrollReveal";
 import TiltCard from "./TiltCard";
 import Parallax3D from "./Parallax3D";
 import { useSiteContent } from "./SiteContentProvider";
+import { useIsDesktop, useInView } from "@/lib/clientGates";
 
 const SkillsAvatar = dynamic(() => import("./Avatar3D").then(mod => ({ default: mod.SkillsAvatar })), { ssr: false });
 import {
@@ -54,6 +55,8 @@ export default function Skills() {
   const sectionRef = useRef<HTMLElement>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const isDesktop = useIsDesktop();
+  const [avatarRef, avatarInView] = useInView<HTMLDivElement>();
 
   useEffect(() => {
     const handleMouse = (e: MouseEvent) => {
@@ -132,17 +135,32 @@ export default function Skills() {
           <div className="flex justify-center items-start lg:-mt-36 min-w-0 w-full overflow-hidden">
             <ScrollReveal direction="flipY" delay={0.2}>
               <div
+                ref={avatarRef}
                 className="relative"
                 style={{
                   transform: `perspective(1000px) rotateY(${-4 + scrollProgress * 4}deg) rotateX(${1 - scrollProgress * 1}deg)`,
                   transition: "transform 0.1s ease-out",
                 }}
               >
-                <SkillsAvatar
-                  mouseX={mousePos.x}
-                  mouseY={mousePos.y}
-                  className="w-[300px] h-[440px] sm:w-[360px] sm:h-[520px] lg:w-[520px] lg:h-[780px]"
-                />
+                {isDesktop && avatarInView ? (
+                  <SkillsAvatar
+                    mouseX={mousePos.x}
+                    mouseY={mousePos.y}
+                    className="w-[300px] h-[440px] sm:w-[360px] sm:h-[520px] lg:w-[520px] lg:h-[780px]"
+                  />
+                ) : (
+                  <div className="w-[300px] h-[440px] sm:w-[360px] sm:h-[520px] lg:w-[520px] lg:h-[780px] flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="/avatar-poster.webp"
+                      alt="Krishna Amarneni"
+                      width={320}
+                      height={320}
+                      loading="lazy"
+                      className="w-[220px] h-[220px] lg:w-[320px] lg:h-[320px] rounded-full object-cover border-2 border-[#ff6b00]/20 shadow-[0_10px_50px_rgba(255,107,0,0.15)]"
+                    />
+                  </div>
+                )}
               </div>
             </ScrollReveal>
           </div>

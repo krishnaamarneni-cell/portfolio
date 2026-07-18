@@ -158,6 +158,8 @@ export default function Avatar3D({ mouseX, mouseY, className }: { mouseX: number
   return <HeroAvatar mouseX={mouseX} mouseY={mouseY} className={className} />;
 }
 
-// Preload models
+// Preload only the hero (above-the-fold) model. The skills model is loaded
+// lazily when the Skills section scrolls into view, so we deliberately do NOT
+// preload it here — preloading would pull ~4 MB on initial load and undo the
+// lazy-mount gate in Skills.tsx.
 useGLTF.preload("/avatar-standing.glb");
-useGLTF.preload("/avatar-skills.glb");

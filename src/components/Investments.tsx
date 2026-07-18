@@ -236,11 +236,16 @@ function Carousel({ holdings, label }: { holdings: Holding[]; label: string }) {
               <button
                 key={i}
                 onClick={() => setPage(i)}
-                className={`h-2 rounded-full transition-all ${
-                  i === page ? "w-8 bg-[#ff6b00]" : "w-2 bg-white/[0.15] hover:bg-white/30"
-                }`}
                 aria-label={`Page ${i + 1}`}
-              />
+                aria-current={i === page ? "true" : undefined}
+                className="group flex h-6 min-w-6 items-center justify-center"
+              >
+                <span
+                  className={`h-2 rounded-full transition-all ${
+                    i === page ? "w-8 bg-[#ff6b00]" : "w-2 bg-white/[0.15] group-hover:bg-white/30"
+                  }`}
+                />
+              </button>
             ))}
           </div>
 

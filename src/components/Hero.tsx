@@ -4,14 +4,36 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { FiArrowDown } from "react-icons/fi";
 import dynamic from "next/dynamic";
 import { useSiteContent } from "./SiteContentProvider";
+import { useIsDesktop } from "@/lib/clientGates";
 
 const Avatar3D = dynamic(
   () => import("./Avatar3D").then((mod) => ({ default: mod.HeroAvatar })),
   { ssr: false }
 );
 
+// Lightweight stand-in for the 3D avatar: shown on phones (where mounting a
+// WebGL canvas + downloading a multi-MB model would tank performance) and as
+// the instant placeholder on desktop until the 3D model is mounted.
+function AvatarPoster({ className }: { className?: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/avatar-poster.webp"
+      alt="Krishna Amarneni"
+      width={300}
+      height={300}
+      fetchPriority="high"
+      className={
+        className ||
+        "w-44 h-44 sm:w-52 sm:h-52 rounded-full object-cover border-2 border-[#ff6b00]/25 shadow-[0_10px_50px_rgba(255,107,0,0.18)]"
+      }
+    />
+  );
+}
+
 export default function Hero() {
   const { hero } = useSiteContent();
+  const isDesktop = useIsDesktop();
   const roles = hero.roles.length > 0 ? hero.roles : ["Builder"];
   const [roleIndex, setRoleIndex] = useState(0);
   const [text, setText] = useState("");
@@ -123,8 +145,8 @@ export default function Hero() {
             {hero.first_name}
           </h1>
 
-          <div className="shrink-0 -my-2 opacity-0 animate-[fadeIn_0.3s_0.2s_forwards]">
-            <Avatar3D mouseX={mousePos.x} mouseY={mousePos.y} onLanded={handleLanded} className="w-[280px] h-[360px]" />
+          <div className="shrink-0 -my-2 opacity-0 animate-[fadeIn_0.3s_0.2s_forwards] py-4">
+            <AvatarPoster />
           </div>
 
           <h1
@@ -156,9 +178,15 @@ export default function Hero() {
             {hero.first_name}
           </h1>
 
-          {/* Avatar */}
+          {/* Avatar — 3D on desktop only; poster reserves the box (no CLS) until it mounts */}
           <div className="shrink-0 mx-0 opacity-0 animate-[fadeIn_0.3s_0.2s_forwards]">
-            <Avatar3D mouseX={mousePos.x} mouseY={mousePos.y} onLanded={handleLanded} />
+            {isDesktop ? (
+              <Avatar3D mouseX={mousePos.x} mouseY={mousePos.y} onLanded={handleLanded} />
+            ) : (
+              <div className="w-[240px] h-[480px] sm:w-[280px] sm:h-[530px] md:w-[320px] md:h-[580px] lg:w-[360px] lg:h-[640px] flex items-center justify-center">
+                <AvatarPoster className="w-[240px] h-[240px] lg:w-[300px] lg:h-[300px] rounded-full object-cover border-2 border-[#ff6b00]/25 shadow-[0_10px_50px_rgba(255,107,0,0.18)]" />
+              </div>
+            )}
           </div>
 
           {/* AMARNENI */}

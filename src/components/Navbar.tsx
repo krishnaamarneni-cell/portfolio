@@ -356,6 +356,8 @@ export default function Navbar() {
           </span>
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
             className="w-10 h-10 flex items-center justify-center rounded-full border border-[var(--border)] text-[var(--text-primary)]"
           >
             {mobileOpen ? <HiX size={18} /> : <HiMenuAlt3 size={18} />}

@@ -78,15 +78,17 @@ export default function Footer() {
 
             <div className="flex items-center gap-3">
               {[
-                { icon: FiGithub, href: "https://github.com/krishnaamarneni" },
-                { icon: FiLinkedin, href: "https://linkedin.com/in/krishnaamarneni" },
-                { icon: FiMail, href: "mailto:krishna.amarneni@gmail.com" },
-              ].map(({ icon: Icon, href }) => (
+                { icon: FiGithub, href: "https://github.com/krishnaamarneni", label: "GitHub" },
+                { icon: FiLinkedin, href: "https://linkedin.com/in/krishnaamarneni", label: "LinkedIn" },
+                { icon: FiMail, href: "mailto:krishna.amarneni@gmail.com", label: "Email Krishna Amarneni" },
+              ].map(({ icon: Icon, href, label }) => (
                 <a
                   key={href}
                   href={href}
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label={label}
+                  title={label}
                   className="w-9 h-9 rounded-lg border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] hover:text-[#ff6b00] hover:border-[#ff6b00]/20 transition-all"
                 >
                   <Icon size={16} />
@@ -95,6 +97,8 @@ export default function Footer() {
 
               <button
                 onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                aria-label="Back to top"
+                title="Back to top"
                 className="w-9 h-9 rounded-lg bg-[#ff6b00]/10 flex items-center justify-center text-[#ff6b00] hover:bg-[#ff6b00]/20 transition-all ml-2"
               >
                 <FiArrowUp size={16} />
