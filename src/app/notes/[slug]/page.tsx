@@ -1,12 +1,50 @@
-"use client";
-
-import { use } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { fieldNotes, getNoteBySlug } from "@/lib/field-notes";
 import { FiArrowLeft, FiClock, FiCalendar, FiArrowUpRight, FiLinkedin } from "react-icons/fi";
 import { FaXTwitter } from "react-icons/fa6";
 import HoverSpotlight from "@/components/HoverSpotlight";
+
+// Pre-render every note at build time (static, fast, crawlable).
+export function generateStaticParams() {
+  return fieldNotes.map((n) => ({ slug: n.slug }));
+}
+
+// Per-note SEO: unique title, description, and Open Graph so each article
+// is indexed on its own merits instead of inheriting the homepage metadata.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const note = getNoteBySlug(slug);
+  if (!note) return {};
+
+  const url = `/notes/${note.slug}`;
+  return {
+    title: `${note.title} · Krishna Amarneni`,
+    description: note.summary,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "article",
+      title: note.title,
+      description: note.summary,
+      url,
+      publishedTime: note.date,
+      authors: ["Krishna Amarneni"],
+      tags: [note.tag],
+      images: ["/og-image.png"],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: note.title,
+      description: note.summary,
+      images: ["/og-image.png"],
+    },
+  };
+}
 
 const tagColors: Record<string, string> = {
   AI: "from-[#a855f7] to-[#7c3aed]",
@@ -128,8 +166,8 @@ function renderInline(text: string): React.ReactNode {
   return <>{parts}</>;
 }
 
-export default function NotePage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = use(params);
+export default async function NotePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const note = getNoteBySlug(slug);
 
   if (!note) notFound();
