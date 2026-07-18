@@ -212,7 +212,7 @@ export default function Experience() {
                             {/* Category */}
                             <p
                               className={`text-sm mb-3 font-medium ${
-                                isTop ? "text-[#ff6b00]" : "text-[#ff6b00]/50"
+                                isTop ? "text-[#c2410c]" : "text-[#ff6b00]/50"
                               }`}
                               style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}
                             >
@@ -235,13 +235,13 @@ export default function Experience() {
                                 {exp.company}
                               </span>
                               <span className={`flex items-center gap-1.5 text-sm ${
-                                isTop ? "text-[#888]" : "text-[var(--text-muted)]"
+                                isTop ? "text-[#6b6b6b]" : "text-[var(--text-muted)]"
                               }`}>
                                 <FiMapPin size={13} />
                                 {exp.location}
                               </span>
                               <span className={`flex items-center gap-1.5 text-xs font-mono px-3 py-1 rounded-full ${
-                                isTop ? "bg-[#f5f5f5] text-[#888]" : "bg-white/[0.05] text-[#666]"
+                                isTop ? "bg-[#f5f5f5] text-[#6b6b6b]" : "bg-white/[0.05] text-[#666]"
                               }`}>
                                 <FiCalendar size={11} />
                                 {exp.period}
@@ -274,7 +274,7 @@ export default function Experience() {
                                   key={t}
                                   className={`text-xs px-3 py-1.5 rounded-full font-medium ${
                                     isTop
-                                      ? "bg-[#ff6b00]/10 text-[#ff6b00] border border-[#ff6b00]/20"
+                                      ? "bg-[#ff6b00]/10 text-[#c2410c] border border-[#ff6b00]/20"
                                       : "bg-[#ff6b00]/[0.06] text-[#ff8c38] border border-[#ff6b00]/15"
                                   }`}
                                 >
@@ -297,7 +297,7 @@ export default function Experience() {
                               </div>
                               <div>
                                 <p className={`text-sm font-semibold ${isTop ? "text-[#333]" : "text-[var(--text-primary)]"}`}>{exp.company}</p>
-                                <p className={`text-xs ${isTop ? "text-[#999]" : "text-[var(--text-muted)]"}`}>{exp.location}</p>
+                                <p className={`text-xs ${isTop ? "text-[#6b6b6b]" : "text-[var(--text-muted)]"}`}>{exp.location}</p>
                               </div>
                             </div>
                           </div>

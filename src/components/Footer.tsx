@@ -38,8 +38,9 @@ export default function Footer() {
         </div>
       </div>
 
-      {/* Scrolling marquee */}
-      <div className="relative overflow-hidden border-t border-b border-[var(--border)] py-6">
+      {/* Scrolling marquee — decorative watermark; hidden from a11y tree (its
+          message is already conveyed by the visible heading above). */}
+      <div className="relative overflow-hidden border-t border-b border-[var(--border)] py-6" aria-hidden="true">
         <div className="marquee-track flex whitespace-nowrap">
           <span className="marquee-content text-2xl md:text-4xl font-bold text-[var(--text-primary)]/[0.07] uppercase tracking-wider">
             {repeatedText}

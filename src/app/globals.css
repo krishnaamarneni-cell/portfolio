@@ -12,7 +12,7 @@
   --accent-glow: rgba(255, 107, 0, 0.15);
   --text-primary: #ffffff;
   --text-secondary: #999999;
-  --text-muted: #555555;
+  --text-muted: #8a8a8a; /* was #555 — failed WCAG AA on the dark bg (2.6:1); #8a8a8a is 5.67:1 */
   --border: rgba(255, 255, 255, 0.06);
   --border-hover: rgba(255, 107, 0, 0.3);
 
