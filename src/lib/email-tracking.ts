@@ -1,14 +1,17 @@
 /**
  * Bulk-email response + deliverability tracking.
  *
- * The bulk sender records one `bulk_sends` row per recipient. This module is
- * the agent that later reconciles those sends against the mailbox:
- *   - who replied (so you know which contacts actually engage)
- *   - which addresses bounced (so dead ones can be pruned)
+ * Two sources are reconciled against the mailbox:
+ *   1. `bulk_sends` — one row per recipient, written by the bulk sender. Precise,
+ *      but only covers sends made after this feature existed.
+ *   2. `recruiter_contacts.emailed_at` — the historical record. Lets the scan work
+ *      RETROACTIVELY on everything emailed before tracking was added.
  *
- * Efficiency note: we deliberately do NOT query Gmail per contact. Two searches
- * are issued regardless of list size — one for recent inbound mail, one for
- * bounce notifications — then everything is matched in memory.
+ * A bounce in Gmail is proof an address is dead regardless of how it was sent, so
+ * bounce detection deliberately does not require a `bulk_sends` row.
+ *
+ * Efficiency: two Gmail searches total regardless of list size (recent inbound +
+ * bounce notices), matched in memory — never one query per contact.
  */
 
 import { requireSupabaseAdmin } from "@/lib/supabase";
@@ -36,11 +39,6 @@ function parseAddress(from?: string): string | null {
   return raw.includes("@") ? raw : null;
 }
 
-function extractEmails(text: string): string[] {
-  const found = text.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi);
-  return found ? found.map((s) => s.toLowerCase()) : [];
-}
-
 function toTime(value?: string | null): number {
   if (!value) return 0;
   const t = new Date(value).getTime();
@@ -48,8 +46,40 @@ function toTime(value?: string | null): number {
 }
 
 /**
- * Record what a bulk run actually sent. Called per successful send so replies
- * and bounces can be attributed later. Never throws — tracking must not be able
+ * Pull the FAILED RECIPIENT out of a bounce notice.
+ *
+ * Deliberately narrow: bounce bodies also contain the sender, support links and
+ * help-centre addresses, so extracting every address in the text would mark good
+ * contacts as dead. We only accept an address that follows an explicit
+ * delivery-failure phrase, e.g.
+ *   "Your message wasn't delivered to notify@oorwindigital.com because ..."
+ *   "Your message couldn't be delivered to jobs@my.theladders.com because ..."
+ */
+export function extractFailedRecipients(text: string): string[] {
+  const out = new Set<string>();
+  const patterns = [
+    // "…wasn't delivered to X", "…couldn't be delivered to X", "Delivery to X failed".
+    // Deliberately keyed on "deliver(ed) to" rather than the negation word: Gmail
+    // renders a CURLY apostrophe (U+2019) in "wasn't"/"couldn't", so matching the
+    // contraction misses every real Gmail bounce.
+    /deliver(?:ed|y)?\s+to:?\s*<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/gi,
+    /(?:recipient|address|to)\s*:?\s*<([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>\s*(?:not found|does not exist|unknown)/gi,
+    /<([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>[^\n]{0,40}(?:550|551|553|user unknown|no such user|address not found)/gi,
+  ];
+  for (const re of patterns) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const addr = m[1]?.toLowerCase();
+      if (!addr) continue;
+      if (addr.includes("mailer-daemon") || addr.includes("postmaster")) continue;
+      out.add(addr);
+    }
+  }
+  return [...out];
+}
+
+/**
+ * Record what a bulk run actually sent. Never throws — tracking must not be able
  * to fail an email that already went out.
  */
 export async function recordBulkSend(rows: Array<{
@@ -75,7 +105,7 @@ export async function recordBulkSend(rows: Array<{
       }))
     );
   } catch {
-    // Tracking is best-effort; the send itself already succeeded.
+    // Best-effort; the send itself already succeeded.
   }
 }
 
@@ -91,21 +121,22 @@ export type ScanResult = {
 /**
  * Reconcile outstanding sends against the mailbox.
  *
- * A send counts as "replied" when there is inbound mail from that address dated
- * after we sent. It counts as "bounced" when a mailer-daemon/postmaster failure
- * notice names the address.
+ * Replied  = inbound mail from that address dated after we emailed them.
+ * Bounced  = a delivery-failure notice names that address.
  */
 export async function scanBulkResponses(opts?: {
   lookbackDays?: number;
   maxSends?: number;
 }): Promise<ScanResult> {
-  const lookbackDays = Math.max(1, Math.min(120, opts?.lookbackDays ?? 45));
-  const maxSends = Math.max(1, Math.min(2000, opts?.maxSends ?? 1000));
+  const lookbackDays = Math.max(1, Math.min(365, opts?.lookbackDays ?? 90));
+  const maxSends = Math.max(1, Math.min(5000, opts?.maxSends ?? 2000));
   const db = requireSupabaseAdmin();
+  const empty = { repliedContacts: [], bouncedContacts: [] };
 
   const since = new Date(Date.now() - lookbackDays * 86400_000).toISOString();
 
-  const { data: pending } = await db
+  // --- Source 1: precise per-send rows (post-feature) ---
+  const { data: pendingRaw, error: sendsErr } = await db
     .from("bulk_sends")
     .select("id, contact_id, email, name, subject, sent_at, replied, reply_count, bounced")
     .eq("replied", false)
@@ -114,9 +145,41 @@ export async function scanBulkResponses(opts?: {
     .order("sent_at", { ascending: false })
     .limit(maxSends);
 
-  const sends = (pending ?? []) as BulkSendRow[];
-  if (sends.length === 0) {
-    return { checked: 0, newReplies: 0, newBounces: 0, repliedContacts: [], bouncedContacts: [] };
+  // Surface a missing table loudly instead of silently reporting "0 sends".
+  if (sendsErr) {
+    const missing = /does not exist|schema cache|relation/i.test(sendsErr.message ?? "");
+    return {
+      checked: 0,
+      newReplies: 0,
+      newBounces: 0,
+      ...empty,
+      error: missing
+        ? "The bulk_sends table doesn't exist yet — run supabase/bulk_email_tracking.sql in the Supabase SQL editor."
+        : sendsErr.message,
+    };
+  }
+  const sends = (pendingRaw ?? []) as BulkSendRow[];
+
+  // --- Source 2: historical contacts (pre-feature). Bounces/replies for these
+  // are still discoverable in Gmail even though no bulk_sends row exists. ---
+  const { data: contactsRaw } = await db
+    .from("recruiter_contacts")
+    .select("id, name, email, emailed_at, replied_count, bounced")
+    .not("emailed_at", "is", null)
+    .eq("bounced", false)
+    .gte("emailed_at", since)
+    .limit(maxSends);
+  const contacts = (contactsRaw ?? []) as Array<{
+    id: string;
+    name: string | null;
+    email: string;
+    emailed_at: string | null;
+    replied_count: number | null;
+    bounced: boolean | null;
+  }>;
+
+  if (sends.length === 0 && contacts.length === 0) {
+    return { checked: 0, newReplies: 0, newBounces: 0, ...empty };
   }
 
   // --- One query: recent inbound mail (excludes our own sent mail) ---
@@ -124,18 +187,7 @@ export async function scanBulkResponses(opts?: {
     query: `newer_than:${lookbackDays}d -in:sent -in:draft`,
     maxResults: 400,
   });
-  if (inbound.error && inbound.messages.length === 0) {
-    return {
-      checked: sends.length,
-      newReplies: 0,
-      newBounces: 0,
-      repliedContacts: [],
-      bouncedContacts: [],
-      error: inbound.error,
-    };
-  }
 
-  // sender address -> { latest reply time, how many messages }
   const replies = new Map<string, { latest: number; count: number }>();
   for (const m of inbound.messages) {
     const addr = parseAddress(m.from);
@@ -148,61 +200,75 @@ export async function scanBulkResponses(opts?: {
     });
   }
 
-  // --- One query: bounce / delivery-failure notices ---
+  // --- One query: delivery-failure notices ---
   const bounceMsgs = await listRecentMessages({
-    query: `newer_than:${lookbackDays}d (from:mailer-daemon OR from:postmaster OR subject:"Delivery Status Notification" OR subject:"Undeliverable")`,
-    maxResults: 150,
+    query:
+      `newer_than:${lookbackDays}d (from:mailer-daemon OR from:postmaster OR ` +
+      `subject:"Delivery Status Notification" OR subject:"Undeliverable" OR ` +
+      `subject:"Address not found" OR subject:"Message not delivered")`,
+    maxResults: 250,
   });
-  // failed address -> reason
+
   const bounced = new Map<string, string>();
   for (const m of bounceMsgs.messages) {
     const text = `${m.subject ?? ""} ${m.snippet ?? ""}`;
-    const reason = (m.subject ?? "Delivery failure").slice(0, 200);
-    for (const addr of extractEmails(text)) {
-      // ignore the daemon's own address
-      if (addr.includes("mailer-daemon") || addr.includes("postmaster")) continue;
-      if (!bounced.has(addr)) bounced.set(addr, reason);
+    for (const addr of extractFailedRecipients(text)) {
+      if (!bounced.has(addr)) {
+        const why = /couldn't be found|address not found|no such user|user unknown/i.test(text)
+          ? "Address not found"
+          : /misconfigured/i.test(text)
+          ? "Remote server misconfigured"
+          : "Delivery failed";
+        bounced.set(addr, why);
+      }
     }
+  }
+
+  if (inbound.error && bounceMsgs.error) {
+    return {
+      checked: sends.length + contacts.length,
+      newReplies: 0,
+      newBounces: 0,
+      ...empty,
+      error: inbound.error,
+    };
   }
 
   const repliedContacts: ScanResult["repliedContacts"] = [];
   const bouncedContacts: ScanResult["bouncedContacts"] = [];
   const now = new Date().toISOString();
+  const markedBounced = new Set<string>();
+  const markedReplied = new Set<string>();
 
+  // --- Pass 1: precise bulk_sends rows ---
   for (const s of sends) {
     const addr = s.email.toLowerCase();
-    const sentAt = toTime(s.sent_at);
-
-    const bounceReason = bounced.get(addr);
-    if (bounceReason) {
+    const reason = bounced.get(addr);
+    if (reason) {
       await db
         .from("bulk_sends")
-        .update({ bounced: true, bounce_reason: bounceReason, bounced_at: now, last_checked_at: now })
+        .update({ bounced: true, bounce_reason: reason, bounced_at: now, last_checked_at: now })
         .eq("id", s.id);
       if (s.contact_id) {
         await db
           .from("recruiter_contacts")
-          .update({ bounced: true, bounce_reason: bounceReason, bounce_detected_at: now, updated_at: now })
+          .update({ bounced: true, bounce_reason: reason, bounce_detected_at: now, updated_at: now })
           .eq("id", s.contact_id);
       }
-      bouncedContacts.push({ email: addr, name: s.name, reason: bounceReason });
+      if (!markedBounced.has(addr)) {
+        markedBounced.add(addr);
+        bouncedContacts.push({ email: addr, name: s.name, reason });
+      }
       continue;
     }
 
     const hit = replies.get(addr);
-    // Only counts if the inbound mail landed AFTER we sent.
-    if (hit && hit.latest > sentAt) {
+    if (hit && hit.latest > toTime(s.sent_at)) {
       const repliedAt = new Date(hit.latest).toISOString();
       await db
         .from("bulk_sends")
-        .update({
-          replied: true,
-          replied_at: repliedAt,
-          reply_count: hit.count,
-          last_checked_at: now,
-        })
+        .update({ replied: true, replied_at: repliedAt, reply_count: hit.count, last_checked_at: now })
         .eq("id", s.id);
-
       if (s.contact_id) {
         const { data: c } = await db
           .from("recruiter_contacts")
@@ -218,15 +284,50 @@ export async function scanBulkResponses(opts?: {
           })
           .eq("id", s.contact_id);
       }
-      repliedContacts.push({ email: addr, name: s.name, at: repliedAt });
+      if (!markedReplied.has(addr)) {
+        markedReplied.add(addr);
+        repliedContacts.push({ email: addr, name: s.name, at: repliedAt });
+      }
       continue;
     }
 
     await db.from("bulk_sends").update({ last_checked_at: now }).eq("id", s.id);
   }
 
+  // --- Pass 2: historical contacts with no bulk_sends row ---
+  for (const c of contacts) {
+    const addr = (c.email ?? "").toLowerCase();
+    if (!addr) continue;
+
+    const reason = bounced.get(addr);
+    if (reason && !markedBounced.has(addr)) {
+      await db
+        .from("recruiter_contacts")
+        .update({ bounced: true, bounce_reason: reason, bounce_detected_at: now, updated_at: now })
+        .eq("id", c.id);
+      markedBounced.add(addr);
+      bouncedContacts.push({ email: addr, name: c.name, reason });
+      continue;
+    }
+
+    const hit = replies.get(addr);
+    if (hit && !markedReplied.has(addr) && hit.latest > toTime(c.emailed_at)) {
+      const repliedAt = new Date(hit.latest).toISOString();
+      await db
+        .from("recruiter_contacts")
+        .update({
+          replied_count: (c.replied_count ?? 0) + 1,
+          last_replied_at: repliedAt,
+          updated_at: now,
+        })
+        .eq("id", c.id);
+      markedReplied.add(addr);
+      repliedContacts.push({ email: addr, name: c.name, at: repliedAt });
+    }
+  }
+
   return {
-    checked: sends.length,
+    checked: sends.length + contacts.length,
     newReplies: repliedContacts.length,
     newBounces: bouncedContacts.length,
     repliedContacts,
@@ -243,28 +344,69 @@ export type TrackingStats = {
   awaiting: number;
   topResponders: Array<{ email: string; name: string | null; replies: number; lastRepliedAt: string | null }>;
   deadAddresses: Array<{ email: string; name: string | null; reason: string | null; contactId: string | null }>;
+  error?: string;
 };
 
-/** Aggregate view for the CRM dashboard. */
+/**
+ * Aggregate view. Unions the precise `bulk_sends` log with contact-level history
+ * so retroactively-detected bounces/replies still show up.
+ */
 export async function getEmailTrackingStats(opts?: { lookbackDays?: number }): Promise<TrackingStats> {
   const db = requireSupabaseAdmin();
   const lookbackDays = Math.max(1, Math.min(365, opts?.lookbackDays ?? 90));
   const since = new Date(Date.now() - lookbackDays * 86400_000).toISOString();
 
-  const { data } = await db
+  const base: TrackingStats = {
+    totalSent: 0,
+    uniqueContacts: 0,
+    replied: 0,
+    replyRate: 0,
+    bounced: 0,
+    awaiting: 0,
+    topResponders: [],
+    deadAddresses: [],
+  };
+
+  const { data: sendRows, error: sendsErr } = await db
     .from("bulk_sends")
     .select("contact_id, email, name, replied, replied_at, reply_count, bounced, bounce_reason")
     .gte("sent_at", since)
     .limit(5000);
 
-  const rows = (data ?? []) as Array<Partial<BulkSendRow> & { contact_id: string | null }>;
-  const totalSent = rows.length;
-  const uniqueContacts = new Set(rows.map((r) => (r.email ?? "").toLowerCase())).size;
-  const replied = rows.filter((r) => r.replied).length;
-  const bounced = rows.filter((r) => r.bounced).length;
+  if (sendsErr) {
+    const missing = /does not exist|schema cache|relation/i.test(sendsErr.message ?? "");
+    return {
+      ...base,
+      error: missing
+        ? "Run supabase/bulk_email_tracking.sql in Supabase to enable response tracking."
+        : sendsErr.message,
+    };
+  }
+
+  const { data: contactRows } = await db
+    .from("recruiter_contacts")
+    .select("id, name, email, emailed_at, replied_count, last_replied_at, bounced, bounce_reason")
+    .not("emailed_at", "is", null)
+    .limit(5000);
+
+  const sends = (sendRows ?? []) as Array<Partial<BulkSendRow> & { contact_id: string | null }>;
+  const contacts = (contactRows ?? []) as Array<{
+    id: string;
+    name: string | null;
+    email: string;
+    emailed_at: string | null;
+    replied_count: number | null;
+    last_replied_at: string | null;
+    bounced: boolean | null;
+    bounce_reason: string | null;
+  }>;
+
+  const sentSet = new Set<string>();
+  for (const r of sends) if (r.email) sentSet.add(r.email.toLowerCase());
+  for (const c of contacts) if (c.email) sentSet.add(c.email.toLowerCase());
 
   const responders = new Map<string, { name: string | null; replies: number; lastRepliedAt: string | null }>();
-  for (const r of rows) {
+  for (const r of sends) {
     if (!r.replied || !r.email) continue;
     const key = r.email.toLowerCase();
     const prev = responders.get(key);
@@ -275,9 +417,20 @@ export async function getEmailTrackingStats(opts?: { lookbackDays?: number }): P
         toTime(r.replied_at) > toTime(prev?.lastRepliedAt) ? r.replied_at ?? null : prev?.lastRepliedAt ?? null,
     });
   }
+  for (const c of contacts) {
+    if (!c.replied_count || !c.email) continue;
+    const key = c.email.toLowerCase();
+    const prev = responders.get(key);
+    if (prev) continue; // bulk_sends data is more precise
+    responders.set(key, {
+      name: c.name,
+      replies: c.replied_count,
+      lastRepliedAt: c.last_replied_at,
+    });
+  }
 
   const dead = new Map<string, { name: string | null; reason: string | null; contactId: string | null }>();
-  for (const r of rows) {
+  for (const r of sends) {
     if (!r.bounced || !r.email) continue;
     dead.set(r.email.toLowerCase(), {
       name: r.name ?? null,
@@ -285,10 +438,21 @@ export async function getEmailTrackingStats(opts?: { lookbackDays?: number }): P
       contactId: r.contact_id ?? null,
     });
   }
+  for (const c of contacts) {
+    if (!c.bounced || !c.email) continue;
+    const key = c.email.toLowerCase();
+    if (!dead.has(key)) {
+      dead.set(key, { name: c.name, reason: c.bounce_reason, contactId: c.id });
+    }
+  }
+
+  const totalSent = sentSet.size;
+  const replied = responders.size;
+  const bounced = dead.size;
 
   return {
     totalSent,
-    uniqueContacts,
+    uniqueContacts: sentSet.size,
     replied,
     replyRate: totalSent > 0 ? Math.round((replied / totalSent) * 1000) / 10 : 0,
     bounced,
@@ -296,7 +460,7 @@ export async function getEmailTrackingStats(opts?: { lookbackDays?: number }): P
     topResponders: [...responders.entries()]
       .map(([email, v]) => ({ email, ...v }))
       .sort((a, b) => b.replies - a.replies)
-      .slice(0, 50),
-    deadAddresses: [...dead.entries()].map(([email, v]) => ({ email, ...v })).slice(0, 200),
+      .slice(0, 100),
+    deadAddresses: [...dead.entries()].map(([email, v]) => ({ email, ...v })).slice(0, 300),
   };
 }

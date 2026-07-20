@@ -26,6 +26,7 @@ type Stats = {
   awaiting: number;
   topResponders: Array<{ email: string; name: string | null; replies: number; lastRepliedAt: string | null }>;
   deadAddresses: Array<{ email: string; name: string | null; reason: string | null; contactId: string | null }>;
+  error?: string;
 };
 
 export default function ResponsesPanel({ onSuccess, onError }: Props) {
@@ -62,9 +63,15 @@ export default function ResponsesPanel({ onSuccess, onError }: Props) {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Scan failed");
-      onSuccess(
-        `Checked ${j.checked} sends — ${j.newReplies} new ${j.newReplies === 1 ? "reply" : "replies"}, ${j.newBounces} dead ${j.newBounces === 1 ? "address" : "addresses"}.`
-      );
+      if (j.error) {
+        // e.g. migration not run, or Gmail not connected — say so instead of
+        // silently reporting zero.
+        onError(j.error);
+      } else {
+        onSuccess(
+          `Checked ${j.checked} sends — ${j.newReplies} new ${j.newReplies === 1 ? "reply" : "replies"}, ${j.newBounces} dead ${j.newBounces === 1 ? "address" : "addresses"}.`
+        );
+      }
       await load();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Scan failed");
@@ -120,6 +127,14 @@ export default function ResponsesPanel({ onSuccess, onError }: Props) {
           {scanning ? "Scanning mailbox…" : "Scan for replies"}
         </button>
       </div>
+
+      {/* Setup / connectivity problems surface here rather than as silent zeros */}
+      {stats?.error && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 flex items-start gap-2">
+          <FiAlertTriangle size={15} className="text-amber-400 mt-0.5 shrink-0" />
+          <p className="text-amber-200 text-sm">{stats.error}</p>
+        </div>
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
