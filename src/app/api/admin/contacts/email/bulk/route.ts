@@ -120,7 +120,7 @@ Rules:
   const { data: contacts } = await db
     .from("recruiter_contacts")
     .select(
-      "id, name, email, company, company_id, do_not_contact, excluded_from_bulk, times_contacted",
+      "id, name, email, company, company_id, do_not_contact, excluded_from_bulk, times_contacted, bounced, bounce_reason",
     )
     .in("id", body.contactIds);
 
@@ -173,6 +173,15 @@ Rules:
       skipped.push({ id: c.id, email: c.email, reason: "Do Not Contact" });
     } else if (auto.unsendable) {
       skipped.push({ id: c.id, email: c.email, reason: auto.reason ?? "No-reply address" });
+    } else if (c.bounced) {
+      // A confirmed bounce means the mailbox doesn't exist — never re-send,
+      // even if it was never explicitly excluded. Re-sending to known-dead
+      // addresses is what damages sender reputation.
+      skipped.push({
+        id: c.id,
+        email: c.email,
+        reason: c.bounce_reason ? `Dead address — ${c.bounce_reason}` : "Dead address (bounced)",
+      });
     } else if (c.excluded_from_bulk) {
       skipped.push({ id: c.id, email: c.email, reason: "Excluded from bulk" });
     } else if (excEmails.has(c.email.toLowerCase())) {
