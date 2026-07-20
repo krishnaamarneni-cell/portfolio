@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 import { sendEmailUnified } from "@/lib/resend";
+import { recordBulkSend } from "@/lib/email-tracking";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -247,6 +248,8 @@ Rules:
     error?: string;
   }> = [];
 
+  const sentRecords: Parameters<typeof recordBulkSend>[0] = [];
+
   for (let i = 0; i < eligible.length; i++) {
     const c = eligible[i];
     try {
@@ -294,6 +297,15 @@ ${htmlBody}
           })
           .eq("id", c.id);
         results.push({ id: c.id, email: c.email, status: "sent" });
+        // Recorded so the tracking agent can later attribute replies/bounces.
+        sentRecords.push({
+          contactId: c.id,
+          email: c.email,
+          name: c.name ?? null,
+          subject: body.subject,
+          providerMessageId: r.id ?? null,
+          campaign: body.roleSeeking || null,
+        });
       } else {
         results.push({
           id: c.id,
@@ -315,6 +327,8 @@ ${htmlBody}
       });
     }
   }
+
+  await recordBulkSend(sentRecords);
 
   return NextResponse.json({
     sent: results.filter((r) => r.status === "sent").length,

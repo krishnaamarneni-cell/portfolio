@@ -2,6 +2,7 @@ export type CRMTab =
   | "contacts"
   | "companies"
   | "conversations"
+  | "responses"
   | "audience"
   | "exclusions"
   | "enrichment";

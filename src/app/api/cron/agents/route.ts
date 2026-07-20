@@ -114,6 +114,17 @@ export async function GET(request: Request) {
     results.autoReply = `error: ${err instanceof Error ? err.message : "unknown"}`;
   }
 
+  // Bulk-email response tracking — who replied, which addresses are dead.
+  try {
+    const { scanBulkResponses } = await import("@/lib/email-tracking");
+    const scan = await scanBulkResponses();
+    results.emailTracking = scan.error
+      ? `error: ${scan.error}`
+      : `checked ${scan.checked}, ${scan.newReplies} new replies, ${scan.newBounces} dead addresses`;
+  } catch (err) {
+    results.emailTracking = `error: ${err instanceof Error ? err.message : "unknown"}`;
+  }
+
   return NextResponse.json({
     ok: true,
     ran_at: new Date().toISOString(),
