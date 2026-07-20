@@ -9,6 +9,7 @@ import {
   FiClock,
   FiSlash,
   FiSearch,
+  FiFilter,
 } from "react-icons/fi";
 import { timeAgo } from "./types";
 
@@ -48,6 +49,7 @@ export default function ResponsesPanel({ onSuccess, onError }: Props) {
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [pruning, setPruning] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
   const [segment, setSegment] = useState<Segment>("all");
   const [query, setQuery] = useState("");
 
@@ -111,6 +113,29 @@ export default function ResponsesPanel({ onSuccess, onError }: Props) {
       onError(e instanceof Error ? e.message : "Prune failed");
     } finally {
       setPruning(false);
+    }
+  };
+
+  const excludeNoReply = async () => {
+    setCleaning(true);
+    try {
+      const r = await fetch("/api/admin/contacts/email/tracking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "exclude-noreply" }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Cleanup failed");
+      onSuccess(
+        j.excluded === 0
+          ? "No no-reply addresses found — your list is already clean."
+          : `Excluded ${j.excluded} no-reply/notification ${j.excluded === 1 ? "address" : "addresses"} from bulk sends.`
+      );
+      await load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Cleanup failed");
+    } finally {
+      setCleaning(false);
     }
   };
 
@@ -183,7 +208,16 @@ export default function ResponsesPanel({ onSuccess, onError }: Props) {
             Click any number to see exactly which emails are in it.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={excludeNoReply}
+            disabled={cleaning}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border)] text-sm font-medium hover:border-[#ff6b00]/40 hover:text-[var(--text-primary)] disabled:opacity-50"
+            title="Exclude noreply@, notifications@ and similar bot addresses from bulk sends"
+          >
+            <FiFilter size={13} />
+            {cleaning ? "Cleaning…" : "Exclude no-reply addresses"}
+          </button>
           {!!stats?.bounced && (
             <button
               onClick={pruneDead}

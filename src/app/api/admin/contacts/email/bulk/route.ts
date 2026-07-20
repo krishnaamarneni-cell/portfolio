@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 import { sendEmailUnified } from "@/lib/resend";
 import { recordBulkSend } from "@/lib/email-tracking";
+import { classifyAddress } from "@/lib/unsendable";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -165,8 +166,13 @@ Rules:
   const skipped: Array<{ id: string; email: string; reason: string }> = [];
 
   for (const c of contacts) {
+    // Hard guard: no-reply / notification addresses can never respond, so they
+    // are skipped even if nothing marked them excluded yet.
+    const auto = classifyAddress(c.email);
     if (c.do_not_contact) {
       skipped.push({ id: c.id, email: c.email, reason: "Do Not Contact" });
+    } else if (auto.unsendable) {
+      skipped.push({ id: c.id, email: c.email, reason: auto.reason ?? "No-reply address" });
     } else if (c.excluded_from_bulk) {
       skipped.push({ id: c.id, email: c.email, reason: "Excluded from bulk" });
     } else if (excEmails.has(c.email.toLowerCase())) {

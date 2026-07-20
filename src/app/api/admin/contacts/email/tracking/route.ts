@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 import { getEmailTrackingStats, scanBulkResponses } from "@/lib/email-tracking";
+import { classifyAddress } from "@/lib/unsendable";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
 }
 
 type PostBody = {
-  action?: "scan" | "prune";
+  action?: "scan" | "prune" | "exclude-noreply";
   lookbackDays?: number;
   /** for prune: contact ids to exclude from future bulk sends */
   contactIds?: string[];
@@ -77,6 +78,39 @@ export async function POST(request: Request) {
         .in("id", target);
 
       return NextResponse.json({ pruned: target.length });
+    }
+
+    if (action === "exclude-noreply") {
+      const db = requireSupabaseAdmin();
+      const { data } = await db
+        .from("recruiter_contacts")
+        .select("id, name, email")
+        .eq("excluded_from_bulk", false)
+        .limit(5000);
+
+      const hits = (data ?? [])
+        .map((c: { id: string; name: string | null; email: string }) => ({
+          ...c,
+          verdict: classifyAddress(c.email),
+        }))
+        .filter((c) => c.verdict.unsendable);
+
+      if (hits.length === 0) {
+        return NextResponse.json({ excluded: 0, samples: [] });
+      }
+
+      await db
+        .from("recruiter_contacts")
+        .update({ excluded_from_bulk: true, updated_at: new Date().toISOString() })
+        .in(
+          "id",
+          hits.map((h) => h.id)
+        );
+
+      return NextResponse.json({
+        excluded: hits.length,
+        samples: hits.slice(0, 20).map((h) => ({ email: h.email, reason: h.verdict.reason })),
+      });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
