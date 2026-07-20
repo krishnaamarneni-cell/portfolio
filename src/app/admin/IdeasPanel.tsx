@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FiPlus, FiEdit3, FiTrash2, FiRefreshCw, FiZap } from "react-icons/fi";
+import { FiPlus, FiEdit3, FiTrash2, FiRefreshCw, FiZap, FiClock } from "react-icons/fi";
 
 type Idea = {
   id: string;
@@ -12,12 +12,25 @@ type Idea = {
   created_at: string;
 };
 
+function timeAgo(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return "";
+  const s = Math.floor((Date.now() - t) / 1000);
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return d < 30 ? `${d}d ago` : `${Math.floor(d / 30)}mo ago`;
+}
+
 export default function IdeasPanel({
   onDraft,
   onSuccess,
   onError,
 }: {
-  onDraft: (topic: string) => void;
+  onDraft: (topic: string, note?: string | null) => void;
   onSuccess: (m: string) => void;
   onError: (m: string) => void;
 }) {
@@ -151,7 +164,7 @@ export default function IdeasPanel({
             </p>
           ) : (
             <div className="space-y-2">
-              {newIdeas.map((idea) => (
+              {newIdeas.map((idea, idx) => (
                 <div
                   key={idea.id}
                   className={`rounded-xl border p-4 space-y-2 ${
@@ -166,7 +179,16 @@ export default function IdeasPanel({
                       {idea.note && (
                         <p className="text-[11px] text-[var(--admin-text-secondary)] mt-0.5">{idea.note}</p>
                       )}
-                      <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        {idx === 0 && (
+                          <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500">
+                            Latest
+                          </span>
+                        )}
+                        <span className="inline-flex items-center gap-1 text-[10px] text-[var(--admin-text-muted)]">
+                          <FiClock size={9} />
+                          {timeAgo(idea.created_at)}
+                        </span>
                         {idea.source && (
                           <span className="text-[9px] font-mono uppercase tracking-widest px-2 py-0.5 rounded-full bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-[var(--admin-text-muted)]">
                             {idea.source}
@@ -181,7 +203,7 @@ export default function IdeasPanel({
                       <button
                         type="button"
                         onClick={() => {
-                          onDraft(idea.topic);
+                          onDraft(idea.topic, idea.note);
                           act("status", idea, "drafted");
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20"

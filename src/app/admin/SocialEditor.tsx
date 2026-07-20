@@ -151,11 +151,13 @@ export default function SocialEditor({
   onSuccess,
   onError,
   seedTopic,
+  seedNote,
   seedNonce,
 }: {
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
   seedTopic?: string;
+  seedNote?: string;
   seedNonce?: number;
 }) {
   const [topic, setTopic] = useState("");
@@ -209,12 +211,19 @@ export default function SocialEditor({
   const [openImage, setOpenImage] = useState(false);
   const [openPosts, setOpenPosts] = useState(true);
 
-  // Seed the topic from an Idea ("Draft in Composer"). seedNonce bumps each
-  // time so re-drafting the same topic still fires.
+  // Seed from an Idea ("Draft in Composer"). seedNonce bumps each time so
+  // re-drafting the same topic still fires. We set the fields AND immediately
+  // run the AI compose (passing the values directly, since setState hasn't
+  // flushed yet) so the Composer opens with the posts already drafted instead
+  // of blank.
   useEffect(() => {
     if (seedTopic && seedTopic.trim()) {
+      const noteHint = (seedNote ?? "").trim();
       setTopic(seedTopic);
+      setHint(noteHint);
       setOpenCompose(true);
+      setOpenPosts(true);
+      void compose(seedTopic, noteHint);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedNonce]);
@@ -407,17 +416,22 @@ export default function SocialEditor({
     setImagePrompt(next);
   }, [imageProvider, composition]);
 
-  async function compose() {
-    if (!topic.trim()) {
+  // Overrides let the "Draft in Composer" seed trigger a compose with the fresh
+  // topic/note immediately, without waiting for setState to flush (which would
+  // otherwise read a stale empty topic).
+  async function compose(topicArg?: string, hintArg?: string) {
+    const t = (topicArg ?? topic).trim();
+    if (!t) {
       onError("Add a topic first");
       return;
     }
+    const h = hintArg ?? hint;
     setComposing(true);
     try {
       const res = await fetch("/api/admin/compose-post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, hint, model: writeModel, tone: tone !== "default" ? tone : undefined }),
+        body: JSON.stringify({ topic: t, hint: h, model: writeModel, tone: tone !== "default" ? tone : undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -714,7 +728,7 @@ export default function SocialEditor({
           </div>
           <button
             type="button"
-            onClick={compose}
+            onClick={() => compose()}
             disabled={composing}
             className="shrink-0 inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60"
           >

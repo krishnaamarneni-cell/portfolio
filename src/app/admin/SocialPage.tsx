@@ -15,6 +15,7 @@ export default function SocialPage({
 }) {
   const [view, setView] = useState<"editor" | "analytics" | "ideas">("editor");
   const [seedTopic, setSeedTopic] = useState("");
+  const [seedNote, setSeedNote] = useState("");
   const [seedNonce, setSeedNonce] = useState(0);
   const [newIdeas, setNewIdeas] = useState(0);
 
@@ -26,11 +27,12 @@ export default function SocialPage({
       .catch(() => {});
   }, [view]);
 
-  function draftFromIdea(topic: string) {
+  function draftFromIdea(topic: string, note?: string | null) {
     setSeedTopic(topic);
+    setSeedNote(note ?? "");
     setSeedNonce((n) => n + 1);
     setView("editor");
-    onSuccess("Topic sent to the Composer — hit AI compose");
+    onSuccess("Drafting posts from this idea…");
   }
 
   return (
@@ -48,7 +50,7 @@ export default function SocialPage({
       </div>
 
       {view === "editor" ? (
-        <SocialEditor onSuccess={onSuccess} onError={onError} seedTopic={seedTopic} seedNonce={seedNonce} />
+        <SocialEditor onSuccess={onSuccess} onError={onError} seedTopic={seedTopic} seedNote={seedNote} seedNonce={seedNonce} />
       ) : view === "analytics" ? (
         <SocialAnalytics onSuccess={onSuccess} onError={onError} />
       ) : (
