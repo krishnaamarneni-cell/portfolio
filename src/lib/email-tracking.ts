@@ -335,6 +335,20 @@ export async function scanBulkResponses(opts?: {
   };
 }
 
+/** replied = wrote back · awaiting = emailed, no reply yet · bounced = address doesn't exist */
+export type RecipientStatus = "replied" | "awaiting" | "bounced";
+
+export type RecipientRow = {
+  email: string;
+  name: string | null;
+  status: RecipientStatus;
+  replies: number;
+  lastRepliedAt: string | null;
+  bounceReason: string | null;
+  contactId: string | null;
+  lastSentAt: string | null;
+};
+
 export type TrackingStats = {
   totalSent: number;
   uniqueContacts: number;
@@ -342,8 +356,8 @@ export type TrackingStats = {
   replyRate: number;
   bounced: number;
   awaiting: number;
-  topResponders: Array<{ email: string; name: string | null; replies: number; lastRepliedAt: string | null }>;
-  deadAddresses: Array<{ email: string; name: string | null; reason: string | null; contactId: string | null }>;
+  /** Every recipient with its outcome — the UI filters this to drill into a stat. */
+  recipients: RecipientRow[];
   error?: string;
 };
 
@@ -363,13 +377,12 @@ export async function getEmailTrackingStats(opts?: { lookbackDays?: number }): P
     replyRate: 0,
     bounced: 0,
     awaiting: 0,
-    topResponders: [],
-    deadAddresses: [],
+    recipients: [],
   };
 
   const { data: sendRows, error: sendsErr } = await db
     .from("bulk_sends")
-    .select("contact_id, email, name, replied, replied_at, reply_count, bounced, bounce_reason")
+    .select("contact_id, email, name, sent_at, replied, replied_at, reply_count, bounced, bounce_reason")
     .gte("sent_at", since)
     .limit(5000);
 
@@ -387,6 +400,7 @@ export async function getEmailTrackingStats(opts?: { lookbackDays?: number }): P
     .from("recruiter_contacts")
     .select("id, name, email, emailed_at, replied_count, last_replied_at, bounced, bounce_reason")
     .not("emailed_at", "is", null)
+    .gte("emailed_at", since)
     .limit(5000);
 
   const sends = (sendRows ?? []) as Array<Partial<BulkSendRow> & { contact_id: string | null }>;
@@ -401,66 +415,82 @@ export async function getEmailTrackingStats(opts?: { lookbackDays?: number }): P
     bounce_reason: string | null;
   }>;
 
-  const sentSet = new Set<string>();
-  for (const r of sends) if (r.email) sentSet.add(r.email.toLowerCase());
-  for (const c of contacts) if (c.email) sentSet.add(c.email.toLowerCase());
+  // One row per unique address, merged from both sources.
+  const map = new Map<string, RecipientRow>();
+  const touch = (email: string): RecipientRow => {
+    const key = email.toLowerCase();
+    let row = map.get(key);
+    if (!row) {
+      row = {
+        email: key,
+        name: null,
+        status: "awaiting",
+        replies: 0,
+        lastRepliedAt: null,
+        bounceReason: null,
+        contactId: null,
+        lastSentAt: null,
+      };
+      map.set(key, row);
+    }
+    return row;
+  };
 
-  const responders = new Map<string, { name: string | null; replies: number; lastRepliedAt: string | null }>();
   for (const r of sends) {
-    if (!r.replied || !r.email) continue;
-    const key = r.email.toLowerCase();
-    const prev = responders.get(key);
-    responders.set(key, {
-      name: r.name ?? prev?.name ?? null,
-      replies: (prev?.replies ?? 0) + (r.reply_count || 1),
-      lastRepliedAt:
-        toTime(r.replied_at) > toTime(prev?.lastRepliedAt) ? r.replied_at ?? null : prev?.lastRepliedAt ?? null,
-    });
-  }
-  for (const c of contacts) {
-    if (!c.replied_count || !c.email) continue;
-    const key = c.email.toLowerCase();
-    const prev = responders.get(key);
-    if (prev) continue; // bulk_sends data is more precise
-    responders.set(key, {
-      name: c.name,
-      replies: c.replied_count,
-      lastRepliedAt: c.last_replied_at,
-    });
-  }
-
-  const dead = new Map<string, { name: string | null; reason: string | null; contactId: string | null }>();
-  for (const r of sends) {
-    if (!r.bounced || !r.email) continue;
-    dead.set(r.email.toLowerCase(), {
-      name: r.name ?? null,
-      reason: r.bounce_reason ?? null,
-      contactId: r.contact_id ?? null,
-    });
-  }
-  for (const c of contacts) {
-    if (!c.bounced || !c.email) continue;
-    const key = c.email.toLowerCase();
-    if (!dead.has(key)) {
-      dead.set(key, { name: c.name, reason: c.bounce_reason, contactId: c.id });
+    if (!r.email) continue;
+    const row = touch(r.email);
+    row.name = row.name ?? r.name ?? null;
+    row.contactId = row.contactId ?? r.contact_id ?? null;
+    if (toTime(r.sent_at) > toTime(row.lastSentAt)) row.lastSentAt = r.sent_at ?? null;
+    if (r.replied) {
+      row.replies += r.reply_count || 1;
+      if (toTime(r.replied_at) > toTime(row.lastRepliedAt)) row.lastRepliedAt = r.replied_at ?? null;
+    }
+    if (r.bounced) {
+      row.bounceReason = row.bounceReason ?? r.bounce_reason ?? null;
+      row.status = "bounced";
     }
   }
 
-  const totalSent = sentSet.size;
-  const replied = responders.size;
-  const bounced = dead.size;
+  for (const c of contacts) {
+    if (!c.email) continue;
+    const row = touch(c.email);
+    row.name = row.name ?? c.name ?? null;
+    row.contactId = row.contactId ?? c.id ?? null;
+    if (toTime(c.emailed_at) > toTime(row.lastSentAt)) row.lastSentAt = c.emailed_at ?? null;
+    // bulk_sends numbers are more precise; only fall back to the contact record.
+    if (c.replied_count && row.replies === 0) {
+      row.replies = c.replied_count;
+      row.lastRepliedAt = row.lastRepliedAt ?? c.last_replied_at ?? null;
+    }
+    if (c.bounced) {
+      row.bounceReason = row.bounceReason ?? c.bounce_reason ?? null;
+      row.status = "bounced";
+    }
+  }
+
+  // A bounce always wins — a dead address can't meaningfully be "awaiting".
+  for (const row of map.values()) {
+    if (row.status !== "bounced") {
+      row.status = row.replies > 0 ? "replied" : "awaiting";
+    }
+  }
+
+  const recipients = [...map.values()].sort(
+    (a, b) => b.replies - a.replies || toTime(b.lastSentAt) - toTime(a.lastSentAt)
+  );
+
+  const totalSent = recipients.length;
+  const replied = recipients.filter((r) => r.status === "replied").length;
+  const bounced = recipients.filter((r) => r.status === "bounced").length;
 
   return {
     totalSent,
-    uniqueContacts: sentSet.size,
+    uniqueContacts: totalSent,
     replied,
     replyRate: totalSent > 0 ? Math.round((replied / totalSent) * 1000) / 10 : 0,
     bounced,
-    awaiting: Math.max(0, totalSent - replied - bounced),
-    topResponders: [...responders.entries()]
-      .map(([email, v]) => ({ email, ...v }))
-      .sort((a, b) => b.replies - a.replies)
-      .slice(0, 100),
-    deadAddresses: [...dead.entries()].map(([email, v]) => ({ email, ...v })).slice(0, 300),
+    awaiting: totalSent - replied - bounced,
+    recipients,
   };
 }

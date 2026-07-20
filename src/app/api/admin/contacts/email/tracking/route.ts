@@ -12,9 +12,9 @@ export async function GET(request: Request) {
   if (!(await getSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const days = Number(new URL(request.url).searchParams.get("days") ?? 90);
+  const days = Number(new URL(request.url).searchParams.get("days") ?? 365);
   try {
-    const stats = await getEmailTrackingStats({ lookbackDays: Number.isFinite(days) ? days : 90 });
+    const stats = await getEmailTrackingStats({ lookbackDays: Number.isFinite(days) ? days : 365 });
     return NextResponse.json(stats);
   } catch (err) {
     return NextResponse.json(
