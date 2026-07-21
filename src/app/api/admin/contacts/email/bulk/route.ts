@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 import { sendEmailUnified } from "@/lib/resend";
@@ -225,7 +225,21 @@ Rules:
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL || "https://krishnaamarneni.com";
 
-  // Load the resume file once so we can ATTACH it (not just link it).
+  // Captured as consts so their validated (non-undefined) types — narrowed by
+  // the guard above — survive into the background closure, where TS otherwise
+  // re-widens property access back to string | undefined.
+  const subject = body.subject;
+  const message = body.message;
+
+  // Fire the actual sending in the BACKGROUND. after() runs once the HTTP
+  // response has been flushed, so the client gets an instant reply and can
+  // close the modal instead of blocking for minutes on 400+ emails.
+  after(async () => {
+    const sendStartedAt = Date.now();
+    // Stop before the 300s function ceiling so the last records still flush.
+    const TIME_BUDGET_MS = 280_000;
+
+    // Load the resume file once so we can ATTACH it (not just link it).
   let resumeAttachment: { filename: string; content: Buffer; contentType: string } | null = null;
   if (body.attachResume) {
     try {
@@ -266,13 +280,17 @@ Rules:
   const sentRecords: Parameters<typeof recordBulkSend>[0] = [];
 
   for (let i = 0; i < eligible.length; i++) {
+    // Ran out of time budget — stop cleanly so the flush below still records
+    // everything that already went out. Remaining contacts are simply not sent
+    // this run (their emailed_at stays null, so a re-run picks them up).
+    if (Date.now() - sendStartedAt > TIME_BUDGET_MS) break;
     const c = eligible[i];
     try {
       const firstName = c.name?.split(" ")[0] || "";
       const greeting = firstName ? `Hi ${firstName},` : "Hi,";
 
       const htmlBody = `<p>${greeting}</p>
-<p>${body.message.replace(/\n/g, "<br>")}</p>
+<p>${message.replace(/\n/g, "<br>")}</p>
 ${SIGNATURE_HTML}`;
 
       let html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
@@ -296,7 +314,7 @@ ${htmlBody}
 
       const r = await sendEmailUnified({
         to: c.email,
-        subject: body.subject,
+        subject,
         html,
         text: plainText,
         attachments: resumeAttachment ? [resumeAttachment] : undefined,
@@ -317,10 +335,16 @@ ${htmlBody}
           contactId: c.id,
           email: c.email,
           name: c.name ?? null,
-          subject: body.subject,
+          subject,
           providerMessageId: r.id ?? null,
           campaign: body.roleSeeking || null,
         });
+        // Flush in batches so a timeout can't erase the whole run's tracking
+        // (previously recorded only once, after the loop).
+        if (sentRecords.length >= 25) {
+          await recordBulkSend(sentRecords);
+          sentRecords.length = 0;
+        }
       } else {
         results.push({
           id: c.id,
@@ -331,7 +355,7 @@ ${htmlBody}
       }
 
       if (i < eligible.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 300));
       }
     } catch (err) {
       results.push({
@@ -343,13 +367,17 @@ ${htmlBody}
     }
   }
 
-  await recordBulkSend(sentRecords);
+    // Flush whatever's left (final partial batch).
+    await recordBulkSend(sentRecords);
+    void results; // kept for potential logging; not returned in background mode
+  });
 
+  // Return immediately — the send runs in the background (above). The client
+  // closes the modal and shows progress via the Responses tab.
   return NextResponse.json({
-    sent: results.filter((r) => r.status === "sent").length,
-    errors: results.filter((r) => r.status === "error").length,
+    started: true,
+    total: eligible.length,
     skipped: skipped.length,
     skippedDetails: skipped,
-    results,
   });
 }

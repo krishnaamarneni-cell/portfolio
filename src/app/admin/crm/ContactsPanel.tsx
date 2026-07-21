@@ -754,9 +754,20 @@ function BulkComposeModal({
         }),
       });
       const d = await r.json();
-      setResult(d);
-      if (d.sent > 0) onSuccess(`Sent ${d.sent} emails successfully`);
-      if (d.errors > 0) onError(`${d.errors} emails failed to send`);
+      if (d.started) {
+        // Sending runs in the background now — close and let the Responses tab
+        // show progress, instead of blocking the modal for minutes.
+        const skipMsg = d.skipped ? ` (${d.skipped} skipped)` : "";
+        onSuccess(
+          `Sending to ${d.total} contact${d.total !== 1 ? "s" : ""} in the background${skipMsg}. Track replies in the Responses tab.`
+        );
+        onClose();
+      } else if (d.error) {
+        onError(d.error);
+      } else {
+        // Nothing to send (everyone was excluded), or a legacy response shape.
+        setResult(d);
+      }
     } catch {
       onError("Network error — please try again");
     }
