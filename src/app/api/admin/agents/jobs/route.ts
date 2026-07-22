@@ -11,6 +11,7 @@ import {
 import { buildFactsContext } from "@/lib/facts";
 import { fetchJobRss, rssItemsToSearchResult } from "@/lib/rss";
 import { fetchJobDivaListings, jobDivaToContext } from "@/lib/jobdiva";
+import { fetchWorkdayJobs, type SourcedJob } from "@/lib/job-sources";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -138,7 +139,19 @@ export async function POST(request: Request) {
     ? ["software engineer", "AI engineer", "full stack"]
     : ["SAP", "AI engineer", "software"];
 
-  const [indeedJobs, jobDivaJobs, ...webResults] = await Promise.all([
+  // Live Workday postings are now the primary source: Indeed's public RSS was
+  // retired (404s) and the JobDiva API returns 401, so both were yielding
+  // nothing / stale fallbacks.
+  // NB: read body.targetRole directly — the `targetRole` const is declared
+  // further down, so referencing it here would hit the temporal dead zone.
+  const workdayKeyword = (
+    body.targetRole?.trim() || (profile === "software" ? "software engineer" : "SAP")
+  ).trim();
+
+  const [workdayJobs, indeedJobs, jobDivaJobs, ...webResults] = await Promise.all([
+    fetchWorkdayJobs({ keyword: workdayKeyword, companies, perTenant: 6 }).catch(
+      (): SourcedJob[] => []
+    ),
     fetchJobRss(indeedQueries, location || "remote"),
     fetchJobDivaListings(jobDivaKeywords).catch(() => []),
     ...(whichSearchProvider()
@@ -159,17 +172,30 @@ export async function POST(request: Request) {
   // JobDiva listings as a separate context block (not SearchResult shape).
   const jobDivaBlock = jobDivaToContext(jobDivaJobs.slice(0, 15));
 
+  // Live Workday postings as their own context block.
+  const workdayBlock = workdayJobs.length
+    ? workdayJobs
+        .slice(0, 40)
+        .map((j, i) => {
+          const loc = j.location ? ` — ${j.location}` : "";
+          const posted = j.postedOn ? `\n    ${j.postedOn}` : "";
+          return `[${i + 1}] ${j.title} — ${j.company}${loc}${posted}\n    Link: ${j.url}`;
+        })
+        .join("\n\n")
+    : "";
+
   let searchResults: SearchResult[] = [indeedResult, ...webResults];
   searchResults = searchResults.map((r) => ({
     ...r,
     hits: r.hits.filter((h) => h.url && /^https?:\/\//i.test(h.url)),
   }));
 
-  const totalHits = searchResults.reduce((n, r) => n + r.hits.length, 0);
+  const totalHits =
+    searchResults.reduce((n, r) => n + r.hits.length, 0) + workdayJobs.length;
   if (totalHits === 0) {
     return NextResponse.json({
       markdown:
-        "No job listings found. Indeed RSS and web search both returned empty. Try a different profile or remove the location filter.",
+        "No job listings found. Try a different profile, a broader role keyword, or remove the location filter.",
       context: { companies, profile, location, model: body.model },
     });
   }
@@ -247,6 +273,7 @@ Skills: ${skills.join(", ") || "(none)"}
 JOB LISTINGS (from Indeed RSS + web search):
 ${searchBlock}
 
+${workdayBlock ? `LIVE WORKDAY POSTINGS (${workdayJobs.length} openings, fetched just now — these are CURRENT, prefer them):\n${workdayBlock}\n` : ""}
 ${jobDivaBlock ? `JOBDIVA PORTAL (Abacus Service Corp — ${jobDivaJobs.length} listings):\n${jobDivaBlock}` : ""}`;
 
   const model = resolveAgentModel(body.model);
@@ -266,6 +293,16 @@ ${jobDivaBlock ? `JOBDIVA PORTAL (Abacus Service Corp — ${jobDivaJobs.length} 
   // feeds returned and can't be mangled or invented by the LLM. The UI uses
   // these to offer "Prepare kit" per job.
   const listings = [
+    // Live Workday postings first — these are current and have real apply URLs.
+    ...workdayJobs.slice(0, 40).map((j) => ({
+      title: j.title,
+      company: j.company as string | null,
+      location: j.location,
+      url: j.url,
+      description: j.description,
+      source: j.source,
+      cached: false,
+    })),
     ...indeedJobs.slice(0, 20).map((j) => ({
       title: j.title,
       company: null as string | null,
@@ -295,12 +332,13 @@ ${jobDivaBlock ? `JOBDIVA PORTAL (Abacus Service Corp — ${jobDivaJobs.length} 
       profile,
       location: location || null,
       resumeJobs: jobs.length,
+      workdayJobsFound: workdayJobs.length,
       indeedJobsFound: indeedJobs.length,
       jobDivaFound: jobDivaJobs.length,
       webSearchHits: webResults.reduce((n, r) => n + r.hits.length, 0),
       model: result.modelUsed ?? model,
       modelRequested: model,
-      provider: `indeed-rss + jobdiva${whichSearchProvider() ? ` + ${whichSearchProvider()}` : ""}`,
+      provider: `workday + indeed-rss + jobdiva${whichSearchProvider() ? ` + ${whichSearchProvider()}` : ""}`,
     },
   });
 }
