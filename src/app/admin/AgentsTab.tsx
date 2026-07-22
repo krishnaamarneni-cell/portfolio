@@ -443,104 +443,6 @@ export default function AgentsTab({
   }
 
   /* ── Reusable collapsible agent card wrapper ── */
-  function AgentCard({
-    id,
-    title,
-    subtitle,
-    icon: Icon,
-    iconBg,
-    iconColor,
-    accentColor,
-    busy,
-    hasResults,
-    lastRunAt,
-    runLabel,
-    busyLabel,
-    reRunLabel,
-    buttonGradient,
-    buttonTextColor,
-    buttonShadow,
-    onRun,
-    children,
-  }: {
-    id: string;
-    title: string;
-    subtitle: string;
-    icon: React.ComponentType<{ size?: number }>;
-    iconBg: string;
-    iconColor: string;
-    accentColor: string;
-    busy: boolean;
-    hasResults: boolean;
-    lastRunAt?: number;
-    runLabel: string;
-    busyLabel: string;
-    reRunLabel: string;
-    buttonGradient: string;
-    buttonTextColor: string;
-    buttonShadow: string;
-    onRun: () => void;
-    children: React.ReactNode;
-  }) {
-    const open = !isCollapsed(id);
-    return (
-      <div
-        className={`rounded-2xl border bg-[#1a1a1a] overflow-hidden transition-all duration-200 border-l-2 ${accentColor} ${
-          busy
-            ? "border-white/[0.15] animate-pulse"
-            : "border-white/[0.06]"
-        }`}
-      >
-        {/* Header — always visible */}
-        <div
-          className="flex items-center gap-3 px-5 py-3.5 cursor-pointer select-none"
-          onClick={() => toggleCollapsed(id)}
-        >
-          <div className={`w-8 h-8 rounded-lg ${iconBg} ${iconColor} flex items-center justify-center shrink-0`}>
-            <Icon size={15} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-white text-sm leading-tight">{title}</h3>
-              {!open && (
-                <span className="text-[11px] text-[#555] truncate hidden sm:inline">{subtitle}</span>
-              )}
-            </div>
-          </div>
-          {lastRunAt && (
-            <span className="text-[10px] font-mono text-[#555] flex items-center gap-1 shrink-0">
-              <FiClock size={10} />
-              {relTime(lastRunAt)}
-            </span>
-          )}
-          <span className={`w-2 h-2 rounded-full shrink-0 ${hasResults ? "bg-emerald-400" : "bg-[#333]"}`} />
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onRun(); }}
-            disabled={busy}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full ${buttonGradient} ${buttonTextColor} font-bold text-[11px] ${buttonShadow} hover:scale-[1.03] disabled:opacity-60 shrink-0 transition-transform`}
-          >
-            <FiZap size={11} />
-            {busy ? busyLabel : hasResults ? reRunLabel : runLabel}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); toggleCollapsed(id); }}
-            className="text-[#555] hover:text-white transition-colors shrink-0 p-0.5"
-          >
-            {open ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
-          </button>
-        </div>
-        {/* Expanded content */}
-        {open && (
-          <div className="px-5 pb-5 space-y-4 border-t border-white/[0.04]">
-            <p className="text-[11px] text-[#666] pt-3">{subtitle}</p>
-            {children}
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return (
     <section className="space-y-4">
@@ -566,6 +468,8 @@ export default function AgentsTab({
       {/* ── News scout ── */}
       <AgentCard
         id="news"
+        open={!isCollapsed("news")}
+        onToggle={() => toggleCollapsed("news")}
         title="News scout"
         subtitle="Stocks in your portfolio, job-market trends, new AI tools — last 7 days."
         icon={FiTrendingUp}
@@ -610,6 +514,8 @@ export default function AgentsTab({
       {/* ── Email Intelligence ── */}
       <AgentCard
         id="inbox"
+        open={!isCollapsed("inbox")}
+        onToggle={() => toggleCollapsed("inbox")}
         title="Email Intelligence"
         subtitle="Reads your inbox, categorizes every email, and flags job matches >70% against your resume."
         icon={FiMail}
@@ -970,6 +876,8 @@ export default function AgentsTab({
       {/* ── Jobs scout ── */}
       <AgentCard
         id="jobs"
+        open={!isCollapsed("jobs")}
+        onToggle={() => toggleCollapsed("jobs")}
         title="Jobs scout"
         subtitle="Active openings at target companies that match your experience."
         icon={FiBriefcase}
@@ -1077,6 +985,8 @@ export default function AgentsTab({
       {/* ── Atlas Opportunities ── */}
       <AgentCard
         id="opportunities"
+        open={!isCollapsed("opportunities")}
+        onToggle={() => toggleCollapsed("opportunities")}
         title="Atlas — Opportunities"
         subtitle="Buffett-scored picks that fill your portfolio gaps. HIGH / WATCH / MAYBE tiering, sector-gap analysis."
         icon={FiTarget}
@@ -1114,6 +1024,8 @@ export default function AgentsTab({
       {/* ── Stock Screener ── */}
       <AgentCard
         id="screener"
+        open={!isCollapsed("screener")}
+        onToggle={() => toggleCollapsed("screener")}
         title="Stock Screener"
         subtitle="Set your risk tolerance, scan the whole market, find opportunities that match."
         icon={FiBarChart2}
@@ -1207,6 +1119,8 @@ export default function AgentsTab({
       {/* ── Social Observer ── */}
       <AgentCard
         id="observer"
+        open={!isCollapsed("observer")}
+        onToggle={() => toggleCollapsed("observer")}
         title="Social Observer"
         subtitle="Remembers what you post, learns your voice, and suggests post ideas in your style — save the good ones to Social → Ideas."
         icon={FiEye}
@@ -1842,6 +1756,118 @@ function PrepareKitList({
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Collapsible agent panel.
+ *
+ * MUST stay at module scope. It used to be declared inside AgentsTab, which
+ * gave it a new function identity on every render — React then treated it as
+ * a different component type, unmounted the subtree and rebuilt the DOM, so
+ * any focused <input> inside lost focus after each keystroke.
+ */
+function AgentCard({
+  id,
+  title,
+  subtitle,
+  icon: Icon,
+  iconBg,
+  iconColor,
+  accentColor,
+  busy,
+  hasResults,
+  lastRunAt,
+  runLabel,
+  busyLabel,
+  reRunLabel,
+  buttonGradient,
+  buttonTextColor,
+  buttonShadow,
+  onRun,
+  children,
+  open,
+  onToggle,
+}: {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: React.ComponentType<{ size?: number }>;
+  iconBg: string;
+  iconColor: string;
+  accentColor: string;
+  busy: boolean;
+  hasResults: boolean;
+  lastRunAt?: number;
+  runLabel: string;
+  busyLabel: string;
+  reRunLabel: string;
+  buttonGradient: string;
+  buttonTextColor: string;
+  buttonShadow: string;
+  onRun: () => void;
+  children: React.ReactNode;
+  /** Hoisted out of the parent: passing these in (rather than closing over
+   *  parent state) keeps this component's identity stable across renders. */
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border bg-[#1a1a1a] overflow-hidden transition-all duration-200 border-l-2 ${accentColor} ${
+        busy
+          ? "border-white/[0.15] animate-pulse"
+          : "border-white/[0.06]"
+      }`}
+    >
+      {/* Header — always visible */}
+      <div
+        className="flex items-center gap-3 px-5 py-3.5 cursor-pointer select-none"
+        onClick={onToggle}
+      >
+        <div className={`w-8 h-8 rounded-lg ${iconBg} ${iconColor} flex items-center justify-center shrink-0`}>
+          <Icon size={15} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-white text-sm leading-tight">{title}</h3>
+            {!open && (
+              <span className="text-[11px] text-[#555] truncate hidden sm:inline">{subtitle}</span>
+            )}
+          </div>
+        </div>
+        {lastRunAt && (
+          <span className="text-[10px] font-mono text-[#555] flex items-center gap-1 shrink-0">
+            <FiClock size={10} />
+            {relTime(lastRunAt)}
+          </span>
+        )}
+        <span className={`w-2 h-2 rounded-full shrink-0 ${hasResults ? "bg-emerald-400" : "bg-[#333]"}`} />
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRun(); }}
+          disabled={busy}
+          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full ${buttonGradient} ${buttonTextColor} font-bold text-[11px] ${buttonShadow} hover:scale-[1.03] disabled:opacity-60 shrink-0 transition-transform`}
+        >
+          <FiZap size={11} />
+          {busy ? busyLabel : hasResults ? reRunLabel : runLabel}
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          className="text-[#555] hover:text-white transition-colors shrink-0 p-0.5"
+        >
+          {open ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
+        </button>
+      </div>
+      {/* Expanded content */}
+      {open && (
+        <div className="px-5 pb-5 space-y-4 border-t border-white/[0.04]">
+          <p className="text-[11px] text-[#666] pt-3">{subtitle}</p>
+          {children}
         </div>
       )}
     </div>
