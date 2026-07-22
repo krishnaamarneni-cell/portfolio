@@ -12,7 +12,10 @@ import {
   FiAlertTriangle,
   FiChevronDown,
   FiChevronRight,
+  FiSearch,
+  FiGlobe,
 } from "react-icons/fi";
+import { CAREER_SITES } from "@/lib/company-careers";
 
 type ScreeningAnswer = { question: string; answer: string };
 
@@ -64,6 +67,10 @@ export default function ApplicationsTab({
   const [company, setCompany] = useState("");
   const [jobUrl, setJobUrl] = useState("");
   const [jobDescription, setJobDescription] = useState("");
+
+  // Career-site directory
+  const [showSites, setShowSites] = useState(false);
+  const [siteQuery, setSiteQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,6 +164,14 @@ export default function ApplicationsTab({
     [apps, filter]
   );
 
+  const sites = useMemo(() => {
+    const q = siteQuery.trim().toLowerCase();
+    if (!q) return CAREER_SITES;
+    return CAREER_SITES.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.ats.toLowerCase().includes(q)
+    );
+  }, [siteQuery]);
+
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: apps.length };
     for (const s of STATUSES) c[s] = apps.filter((a) => a.status === s).length;
@@ -236,6 +251,100 @@ export default function ApplicationsTab({
           <FiZap size={12} className={preparing ? "animate-pulse" : ""} />
           {preparing ? "Preparing kit…" : "Prepare application kit"}
         </button>
+      </div>
+
+      {/* Career-site directory */}
+      <div className="rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)] overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowSites((s) => !s)}
+          className="w-full px-4 py-3 flex items-center justify-between gap-3 hover:bg-[var(--admin-surface-hover)]"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium text-[var(--admin-text)]">
+            <FiGlobe size={14} className="text-indigo-400" />
+            Company career pages
+            <span className="text-[10px] text-[var(--admin-text-muted)] font-normal">
+              {CAREER_SITES.length} verified · jump straight to their SAP roles
+            </span>
+          </span>
+          {showSites ? <FiChevronDown size={14} /> : <FiChevronRight size={14} />}
+        </button>
+
+        {showSites && (
+          <div className="border-t border-[var(--admin-border)] p-4 space-y-3">
+            <div className="relative">
+              <FiSearch
+                size={13}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--admin-text-muted)]"
+              />
+              <input
+                value={siteQuery}
+                onChange={(e) => setSiteQuery(e.target.value)}
+                placeholder="Filter by company or ATS (Workday, SuccessFactors…)"
+                className="w-full pl-8 pr-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] focus:border-indigo-500 focus:outline-none text-xs text-[var(--admin-text)] placeholder:text-[var(--admin-text-muted)]"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 max-h-[460px] overflow-y-auto">
+              {sites.map((s) => (
+                <div
+                  key={s.name}
+                  className="rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-semibold text-[var(--admin-text)] truncate">
+                        {s.name}
+                      </p>
+                      <p className="text-[10px] text-[var(--admin-text-muted)] mt-0.5">
+                        {s.ats}
+                        {s.accountRequired ? " · account required" : " · no account needed"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {s.sapSearchUrl && (
+                        <a
+                          href={s.sapSearchUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-1 rounded-lg bg-indigo-500/15 text-indigo-400 text-[10px] font-semibold hover:bg-indigo-500/25"
+                          title="Open this company's SAP roles"
+                        >
+                          SAP roles
+                        </a>
+                      )}
+                      <a
+                        href={s.careersUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg text-[var(--admin-text-muted)] hover:text-indigo-400"
+                        title="All openings"
+                      >
+                        <FiExternalLink size={11} />
+                      </a>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-[var(--admin-text-secondary)] mt-2 line-clamp-3">
+                    {s.applySteps}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompany(s.name);
+                      setJobUrl(s.sapSearchUrl || s.careersUrl);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className="mt-2 text-[10px] text-indigo-400 hover:text-indigo-300 font-medium"
+                  >
+                    Use for a kit →
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Status filter */}
