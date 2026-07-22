@@ -203,7 +203,12 @@ TODAY'S DATE: ${todayStr}
 
 RULES:
 - Use [Apply](url) markdown links — the URL from the listing data. NEVER invent URLs.
-- For JobDiva jobs, use [View on JobDiva](portal_url) with the portal URL provided
+- For JobDiva jobs, use [View on JobDiva](url) with that listing's OWN Link value — do not reuse one link for several jobs.
+- RECENCY IS STRICT, computed against TODAY'S DATE above: "Posted Today" = today only;
+  "This Week" = within the last 7 days; "Last Week" = 8-14 days; anything older = "Older".
+  A posting dated more than 14 days before today MUST go under "Older" — never "This Week".
+- If a listing is marked [CACHED], say so on that line (e.g. "cached — verify it's still open")
+  and never place it in "Posted Today" or "This Week".
 - Each job = one line with title, company, location, date posted, match %, fit reason, link
 - Max 10 jobs total across all groups
 - If a listing is clearly not a job (article, blog) — skip it

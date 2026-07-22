@@ -15,6 +15,9 @@ export type JobDivaListing = {
   jobId: string;
   location: string;
   url: string;
+  /** True when served from the hardcoded fallback (the live API is failing),
+   *  so the UI can warn the posting may already be filled. */
+  cached?: boolean;
 };
 
 const PORTAL_BASE = "https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0";
@@ -164,21 +167,30 @@ export async function fetchJobDivaListings(
     });
   }
 
-  // API failed — use known listings filtered by keywords
+  // API failed — fall back to the known listings, flagged as cached so the
+  // agent can say so instead of presenting stale jobs as fresh openings.
   const kwLower = keywords.map((k) => k.toLowerCase());
   return KNOWN_SAP_JOBS.filter((j) => {
     const hay = `${j.title} ${j.description}`.toLowerCase();
     return kwLower.some((k) => hay.includes(k));
-  });
+  }).map((j) => ({
+    ...j,
+    cached: true,
+    // Deep-link to the specific posting rather than the portal home.
+    url: j.jobId ? `${PORTAL_BASE}#/${encodeURIComponent(j.jobId)}` : j.url,
+  }));
 }
 
 /** Format JobDiva listings for the LLM context. */
 export function jobDivaToContext(listings: JobDivaListing[]): string {
   if (listings.length === 0) return "";
-  const portalUrl = "https://www1.jobdiva.com/portal/?a=xxjdnwqdu3m8bnvye2snjqpwe7p08z0159aciy1qq0tk3bbaekq4rat1kf6pd5k7&compid=0";
   return listings
     .map((j, i) => {
-      return `[${i + 1}] ${j.title}${j.location ? " — " + j.location : ""}\n    Posted: ${j.date} | Job ID: ${j.jobId}\n    ${j.description.slice(0, 300)}\n    Link: ${portalUrl}`;
+      // Use the listing's OWN url (deep-links to the job) — previously every
+      // job shared one hardcoded portal-home URL, so "View on JobDiva" always
+      // opened the portal instead of the posting.
+      const cached = j.cached ? " [CACHED — may already be filled; verify before applying]" : "";
+      return `[${i + 1}] ${j.title}${j.location ? " — " + j.location : ""}${cached}\n    Posted: ${j.date} | Job ID: ${j.jobId}\n    ${j.description.slice(0, 300)}\n    Link: ${j.url}`;
     })
     .join("\n\n");
 }
