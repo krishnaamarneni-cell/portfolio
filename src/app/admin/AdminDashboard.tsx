@@ -48,6 +48,7 @@ import CRMWorkspace from "./crm/CRMWorkspace";
 import ThemeToggle from "@/components/ThemeToggle";
 import PersonalTab from "./PersonalTab";
 import ResumeCreatorTab from "./ResumeCreatorTab";
+import ApplicationsTab from "./ApplicationsTab";
 
 type Tab =
   | "dashboard"
@@ -61,7 +62,8 @@ type Tab =
   | "personal"
   | "connectors"
   | "chat"
-  | "resume";
+  | "resume"
+  | "applications";
 
 type Props = {
   session: { email: string };
@@ -82,6 +84,7 @@ const NAV_ITEMS: Array<{
   { id: "social", label: "Social", icon: FiShare2, section: "Content" },
   { id: "agents", label: "Agents", icon: FiCpu },
   { id: "resume", label: "Resume", icon: FiFileText },
+  { id: "applications", label: "Applications", icon: FiBriefcase },
   { id: "contacts", label: "CRM", icon: FiUsers },
   { id: "jobs", label: "Jobs", icon: FiBriefcase, section: "Data" },
   { id: "projects", label: "Projects", icon: FiFolder },
@@ -372,6 +375,8 @@ export default function AdminDashboard({
             <PersonalTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "resume" ? (
             <ResumeCreatorTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          ) : tab === "applications" ? (
+            <ApplicationsTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "connectors" ? (
             <ConnectorsEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} sessionEmail={session.email} />
           ) : tab === "chat" ? (
