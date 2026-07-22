@@ -21,10 +21,23 @@ import {
 } from "react-icons/fi";
 import { AGENT_MODELS, DEFAULT_AGENT_MODEL } from "@/lib/agents";
 
+/** A job exactly as the source feed returned it — never parsed out of the
+ *  model's markdown, so the apply URL is always the real one. */
+export type JobListing = {
+  title: string;
+  company: string | null;
+  location: string | null;
+  url: string;
+  description: string;
+  source: string;
+  cached: boolean;
+};
+
 type AgentState = {
   markdown: string;
   runAt: number;
   context?: Record<string, unknown>;
+  listings?: JobListing[];
 };
 
 type AgentKey = "news" | "jobs" | "opportunities" | "inbox" | "screener";
@@ -267,6 +280,7 @@ export default function AgentsTab({
           markdown: data.markdown || "",
           runAt: Date.now(),
           context: data.context,
+          listings: Array.isArray(data.listings) ? (data.listings as JobListing[]) : [],
         };
         setJobsState(next);
         persistCached("jobs", next);
@@ -1049,6 +1063,11 @@ export default function AgentsTab({
           <div className="mt-2 rounded-xl bg-[#0a0a0a] border border-white/[0.05] p-5">
             <ContextChips context={jobsState.context} />
             <Markdown text={jobsState.markdown} />
+            <PrepareKitList
+              listings={jobsState.listings ?? []}
+              onSuccess={onSuccess}
+              onError={onError}
+            />
           </div>
         ) : !jobsState && !jobsBusy && !jobsError ? (
           <EmptyHint icon={FiBriefcase} text="No run yet — set companies and hit Run." />
@@ -1714,4 +1733,117 @@ function renderInline(s: string): React.ReactNode {
     }
   }
   return <>{nodes}</>;
+}
+
+/**
+ * Per-job "Prepare kit" actions under the Jobs scout results.
+ *
+ * Uses the structured listings the route returned (straight from the feeds),
+ * NOT the model's markdown — so the URL sent to the kit is always the real
+ * posting link.
+ */
+function PrepareKitList({
+  listings,
+  onSuccess,
+  onError,
+}: {
+  listings: JobListing[];
+  onSuccess: (m: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [done, setDone] = useState<Record<string, number>>({});
+  const [open, setOpen] = useState(false);
+
+  if (listings.length === 0) return null;
+
+  async function prepare(j: JobListing) {
+    const key = j.url;
+    setBusy(key);
+    try {
+      const r = await fetch("/api/admin/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "prepare",
+          job: {
+            jobTitle: j.title,
+            company: j.company,
+            location: j.location,
+            jobUrl: j.url,
+            jobDescription: j.description,
+            source: j.source,
+          },
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "Could not prepare the kit");
+      setDone((m) => ({ ...m, [key]: d.kit?.matchPct ?? 0 }));
+      onSuccess(`Kit ready (${d.kit?.matchPct ?? 0}% match) — open the Applications tab to review.`);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not prepare the kit");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-white/[0.06]">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 text-[11px] font-semibold text-[#999] hover:text-white"
+      >
+        {open ? <FiChevronUp size={12} /> : <FiChevronDown size={12} />}
+        Prepare an application kit ({listings.length} listings)
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-1.5 max-h-[360px] overflow-y-auto">
+          {listings.map((j) => {
+            const pct = done[j.url];
+            return (
+              <div
+                key={j.url}
+                className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.02] border border-white/[0.05] px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-[12px] text-white truncate">{j.title}</p>
+                  <p className="text-[10px] text-[#777] truncate">
+                    {[j.company, j.location, j.source].filter(Boolean).join(" · ")}
+                    {j.cached && " · cached, may be filled"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href={j.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-[#777] hover:text-[#ff6b00]"
+                  >
+                    Open
+                  </a>
+                  {pct != null ? (
+                    <span className="text-[10px] font-bold text-emerald-400 px-2 py-1">
+                      {pct}% · in Applications
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => prepare(j)}
+                      disabled={busy === j.url}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-500/15 text-indigo-300 text-[10px] font-semibold hover:bg-indigo-500/25 disabled:opacity-50"
+                    >
+                      <FiZap size={10} />
+                      {busy === j.url ? "Preparing…" : "Prepare kit"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }

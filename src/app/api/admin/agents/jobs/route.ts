@@ -261,8 +261,34 @@ ${jobDivaBlock ? `JOBDIVA PORTAL (Abacus Service Corp — ${jobDivaJobs.length} 
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
 
+  // Structured listings straight from the sources — deliberately NOT parsed
+  // back out of the model's markdown, so the apply URLs are exactly what the
+  // feeds returned and can't be mangled or invented by the LLM. The UI uses
+  // these to offer "Prepare kit" per job.
+  const listings = [
+    ...indeedJobs.slice(0, 20).map((j) => ({
+      title: j.title,
+      company: null as string | null,
+      location: null as string | null,
+      url: j.link,
+      description: j.description,
+      source: j.source || "indeed",
+      cached: false,
+    })),
+    ...jobDivaJobs.slice(0, 15).map((j) => ({
+      title: j.title,
+      company: "Abacus Service Corp (JobDiva)" as string | null,
+      location: (j.location || null) as string | null,
+      url: j.url,
+      description: j.description,
+      source: "jobdiva",
+      cached: j.cached === true,
+    })),
+  ].filter((l) => l.title && l.url);
+
   return NextResponse.json({
     markdown: result.content,
+    listings,
     context: {
       mode: isBroadMarket ? "broad-market" : "per-company",
       companies,
