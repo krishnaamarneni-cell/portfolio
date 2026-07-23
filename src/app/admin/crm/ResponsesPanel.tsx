@@ -41,6 +41,15 @@ type Stats = {
   error?: string;
 };
 
+const EMPTY_STATS: Stats = {
+  totalSent: 0,
+  replied: 0,
+  replyRate: 0,
+  bounced: 0,
+  awaiting: 0,
+  recipients: [],
+};
+
 /** Which segment the detail list is showing. "all" = every recipient. */
 type Segment = "all" | RecipientStatus;
 
@@ -53,19 +62,35 @@ export default function ResponsesPanel({ onSuccess, onError }: Props) {
   const [segment, setSegment] = useState<Segment>("all");
   const [query, setQuery] = useState("");
 
+  // Stable ([] deps): an error here must never feed back into the mount effect
+  // and cause an infinite refetch loop. Load errors surface as an inline
+  // stats.error banner rather than the (unstable) onError toast.
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const r = await fetch("/api/admin/contacts/email/tracking", { cache: "no-store" });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "Failed to load");
-      setStats(j as Stats);
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "Failed to load response stats");
+      const text = await r.text();
+      let j: Stats;
+      try {
+        j = (text ? JSON.parse(text) : {}) as Stats;
+      } catch {
+        setStats({
+          ...EMPTY_STATS,
+          error:
+            r.status === 404
+              ? "The tracking API isn't live yet — give the deploy a minute, then hit Scan/Refresh."
+              : `Unexpected server response (HTTP ${r.status}). Sign out and back in if it persists.`,
+        });
+        return;
+      }
+      if (!r.ok && !j.error) j = { ...EMPTY_STATS, error: "Failed to load response stats." };
+      setStats(j);
+    } catch {
+      setStats({ ...EMPTY_STATS, error: "Couldn't reach the server. Check your connection and retry." });
     } finally {
       setLoading(false);
     }
-  }, [onError]);
+  }, []);
 
   useEffect(() => {
     void load();

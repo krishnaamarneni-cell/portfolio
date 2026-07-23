@@ -72,20 +72,45 @@ export default function ApplicationsTab({
   const [showSites, setShowSites] = useState(false);
   const [siteQuery, setSiteQuery] = useState("");
 
+  // Stable identity ([] deps) so an error in load() can never feed back into
+  // the mount effect and cause an infinite refetch loop. Errors are shown in
+  // the banner, not via the (unstable) onError toast callback.
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const r = await fetch("/api/admin/applications", { cache: "no-store" });
-      const j = await r.json();
-      if (j.needsMigration || (j.error && !r.ok)) setNeedsMigration(j.error);
-      else setNeedsMigration(null);
+      const text = await r.text();
+      let j: {
+        applications?: Application[];
+        needsMigration?: boolean;
+        error?: string;
+      } = {};
+      try {
+        j = text ? JSON.parse(text) : {};
+      } catch {
+        // Non-JSON response — deploy still propagating (404), or an auth / bot
+        // challenge page. Surface it once; do NOT throw into a refetch loop.
+        setNeedsMigration(
+          r.status === 404
+            ? "The applications API isn't live yet — give the deploy a minute, then hit Refresh."
+            : `Unexpected server response (HTTP ${r.status}). Hit Refresh; if it persists, sign out and back in.`
+        );
+        setApps([]);
+        return;
+      }
+      if (j.needsMigration || (j.error && !r.ok)) {
+        setNeedsMigration(j.error || "Could not load applications.");
+      } else {
+        setNeedsMigration(null);
+      }
       setApps(Array.isArray(j.applications) ? j.applications : []);
     } catch {
-      onError("Could not load applications");
+      setNeedsMigration("Couldn't reach the server. Check your connection, then hit Refresh.");
+      setApps([]);
     } finally {
       setLoading(false);
     }
-  }, [onError]);
+  }, []);
 
   useEffect(() => {
     void load();
