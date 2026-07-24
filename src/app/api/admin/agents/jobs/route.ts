@@ -149,7 +149,7 @@ export async function POST(request: Request) {
   ).trim();
 
   const [workdayJobs, indeedJobs, jobDivaJobs, ...webResults] = await Promise.all([
-    fetchWorkdayJobs({ keyword: workdayKeyword, companies, perTenant: 6 }).catch(
+    fetchWorkdayJobs({ keyword: workdayKeyword, companies, location, perTenant: 6 }).catch(
       (): SourcedJob[] => []
     ),
     fetchJobRss(indeedQueries, location || "remote"),

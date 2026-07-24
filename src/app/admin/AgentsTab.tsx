@@ -942,14 +942,35 @@ export default function AgentsTab({
             </div>
             <div>
               <label className="block text-[10px] font-mono uppercase tracking-widest text-[#666] mb-1.5">
-                Location (Remote, NJ, Chicago...)
+                Location / country
               </label>
               <input
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="leave blank for anywhere"
+                placeholder="USA, India, Netherlands, Remote, NJ… (blank = anywhere)"
                 className="w-full px-4 py-2 rounded-xl bg-[#0f0f0f] border border-white/[0.08] focus:border-[#ff6b00]/60 focus:outline-none text-xs text-white placeholder:text-[#555]"
               />
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {["USA", "India", "Netherlands", "Remote", "Anywhere"].map((c) => {
+                  const active =
+                    location.trim().toLowerCase() === c.toLowerCase() ||
+                    (c === "Anywhere" && !location.trim());
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setLocation(c === "Anywhere" ? "" : c)}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-colors ${
+                        active
+                          ? "bg-[#ff6b00] text-black"
+                          : "bg-white/[0.05] text-[#999] hover:text-white"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
           <input

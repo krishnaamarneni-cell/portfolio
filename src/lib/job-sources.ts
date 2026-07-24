@@ -48,20 +48,70 @@ type WorkdayPosting = {
   title?: string;
   externalPath?: string;
   postedOn?: string;
+  locationsText?: string;
   bulletFields?: string[];
 };
 
-/** bulletFields is usually [reqId, location]; drop anything that looks like a req id. */
-function locationFrom(bullets?: string[]): string | null {
-  if (!bullets?.length) return null;
-  const parts = bullets.filter((b) => b && !/^[A-Z]{0,3}[-_]?\d{4,}/.test(b.trim()));
+/**
+ * Location string for a posting. Prefer `locationsText` (present on most
+ * tenants, and prefixed with a country code like "US - GA - Atlanta" /
+ * "IND - Telangana - Hyderabad"); fall back to bulletFields, dropping the
+ * req-id entry.
+ */
+function locationFrom(p: WorkdayPosting): string | null {
+  if (p.locationsText && p.locationsText.trim()) {
+    return p.locationsText.replace(/\s*\(Inactive\)\s*$/i, "").trim();
+  }
+  const parts = (p.bulletFields ?? []).filter(
+    (b) => b && !/^[A-Z]{0,3}[-_]?\d{4,}/.test(b.trim())
+  );
   return parts.length ? parts.join(", ") : null;
+}
+
+/**
+ * Does a posting's location satisfy the user's location/country filter?
+ *
+ * Countries are matched on the leading ISO-ish code Workday emits ("US -",
+ * "IND -", "NLD -") as well as the full name, so "usa" reliably keeps US roles
+ * and drops the India-heavy defaults. Anything not recognised as a country is
+ * treated as a free-text city/state/remote match.
+ */
+const COUNTRY_RULES: Array<{ aliases: RegExp; match: RegExp }> = [
+  {
+    aliases: /^(us|usa|u\.s\.?|united states|america)$/i,
+    match: /(^|[^a-z])(us|usa)\s*-|united states|u\.s\.a?\.?\b/i,
+  },
+  { aliases: /^(india|ind|bharat)$/i, match: /(^|[^a-z])ind\s*-|\bindia\b/i },
+  {
+    aliases: /^(netherlands|nl|nld|holland|nederland)$/i,
+    match: /(^|[^a-z])nld\s*-|\bnetherlands\b|\bnederland\b/i,
+  },
+  { aliases: /^(uk|gb|gbr|united kingdom|england|britain)$/i, match: /(^|[^a-z])(gbr|gb)\s*-|united kingdom|\bengland\b/i },
+  { aliases: /^(canada|can)$/i, match: /(^|[^a-z])can\s*-|\bcanada\b/i },
+  { aliases: /^(germany|deu|ger|deutschland)$/i, match: /(^|[^a-z])deu\s*-|\bgermany\b/i },
+];
+
+export function matchesLocation(jobLocation: string | null, filter: string): boolean {
+  const q = filter.trim().toLowerCase();
+  if (!q || q === "anywhere") return true;
+  const loc = (jobLocation ?? "").toLowerCase();
+
+  if (q === "remote") return /remote|anywhere|work from home|virtual/.test(loc);
+  if (!loc) return false;
+
+  const country = COUNTRY_RULES.find((r) => r.aliases.test(q));
+  if (country) return country.match.test(jobLocation ?? "");
+
+  // Free text: city / state / abbrev — substring match either way.
+  return loc.includes(q) || q.includes(loc);
 }
 
 async function fetchOneTenant(
   t: WorkdayTenant,
   keyword: string,
-  perTenant: number
+  perTenant: number,
+  locationFilter: string,
+  fetchLimit: number
 ): Promise<SourcedJob[]> {
   const base = `https://${t.tenant}.${t.wd}.myworkdayjobs.com`;
   try {
@@ -70,7 +120,7 @@ async function fetchOneTenant(
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
         appliedFacets: {},
-        limit: Math.min(20, perTenant),
+        limit: Math.min(20, fetchLimit),
         offset: 0,
         searchText: keyword,
       }),
@@ -81,19 +131,21 @@ async function fetchOneTenant(
     const j = (await r.json()) as { jobPostings?: WorkdayPosting[] };
     return (j.jobPostings ?? [])
       .filter((p) => p.title && p.externalPath)
-      .slice(0, perTenant)
-      .map((p) => ({
-        title: String(p.title),
-        company: t.company,
-        location: locationFrom(p.bulletFields),
-        // Public posting URL — the CXS path maps onto the external site.
-        url: `${base}/${t.site}${p.externalPath}`,
-        description: [p.title, t.company, locationFrom(p.bulletFields)]
-          .filter(Boolean)
-          .join(" — "),
-        source: "workday",
-        postedOn: p.postedOn ?? null,
-      }));
+      .map((p) => {
+        const location = locationFrom(p);
+        return {
+          title: String(p.title),
+          company: t.company,
+          location,
+          // Public posting URL — the CXS path maps onto the external site.
+          url: `${base}/${t.site}${p.externalPath}`,
+          description: [p.title, t.company, location].filter(Boolean).join(" — "),
+          source: "workday",
+          postedOn: p.postedOn ?? null,
+        };
+      })
+      .filter((job) => matchesLocation(job.location, locationFilter))
+      .slice(0, perTenant);
   } catch {
     return [];
   }
@@ -109,11 +161,16 @@ async function fetchOneTenant(
 export async function fetchWorkdayJobs(opts: {
   keyword: string;
   companies?: string[];
+  location?: string;
   perTenant?: number;
   maxTenants?: number;
 }): Promise<SourcedJob[]> {
   const keyword = opts.keyword?.trim() || "SAP";
   const perTenant = Math.max(1, Math.min(20, opts.perTenant ?? 6));
+  const locationFilter = (opts.location ?? "").trim();
+  // When filtering by location, pull a bigger page per tenant so there's enough
+  // to filter down from (Workday sorts by relevance, not location).
+  const fetchLimit = locationFilter && locationFilter.toLowerCase() !== "anywhere" ? 20 : perTenant;
 
   let tenants = WORKDAY_TENANTS;
   const wanted = (opts.companies ?? []).map((c) => c.trim().toLowerCase()).filter(Boolean);
@@ -125,7 +182,9 @@ export async function fetchWorkdayJobs(opts: {
   }
   tenants = tenants.slice(0, Math.max(1, opts.maxTenants ?? WORKDAY_TENANTS.length));
 
-  const results = await Promise.all(tenants.map((t) => fetchOneTenant(t, keyword, perTenant)));
+  const results = await Promise.all(
+    tenants.map((t) => fetchOneTenant(t, keyword, perTenant, locationFilter, fetchLimit))
+  );
   const seen = new Set<string>();
   return results.flat().filter((j) => {
     if (seen.has(j.url)) return false;
