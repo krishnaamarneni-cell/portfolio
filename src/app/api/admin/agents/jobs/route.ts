@@ -238,7 +238,11 @@ RULES:
 - Each job = one line with title, company, location, date posted, match %, fit reason, link
 - Max 10 jobs total across all groups
 - If a listing is clearly not a job (article, blog) — skip it
-- Below 70% match — skip
+- Below 70% match — skip${
+    location
+      ? `\n- LOCATION FILTER (STRICT): Krishna only wants jobs in "${location}". DISCARD any posting whose location is not in ${location} — never show it, even at a high match %. Always print each job's location so it's clear it is in ${location}. If a location is ambiguous ("Multiple Locations", "Location Negotiable"), only keep it if it explicitly names ${location}.`
+      : ""
+  }
 
 FORMAT:
 
