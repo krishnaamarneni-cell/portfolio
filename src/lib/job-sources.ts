@@ -44,6 +44,32 @@ export const WORKDAY_TENANTS: WorkdayTenant[] = [
   { company: "Pfizer", tenant: "pfizer", wd: "wd1", site: "PfizerCareers" },
 ];
 
+/**
+ * Split requested company names into ones we can fetch live (Workday tenants)
+ * and ones we can't ("off-platform" — e.g. Pepsi runs iCIMS). The route uses
+ * offPlatform to tell the user rather than silently searching everyone.
+ */
+export function splitLiveCompanies(companies: string[]): {
+  live: WorkdayTenant[];
+  offPlatform: string[];
+} {
+  const live: WorkdayTenant[] = [];
+  const offPlatform: string[] = [];
+  for (const raw of companies) {
+    const w = raw.trim().toLowerCase();
+    if (!w) continue;
+    const t = WORKDAY_TENANTS.find(
+      (t) => t.company.toLowerCase().includes(w) || w.includes(t.tenant)
+    );
+    if (t) {
+      if (!live.includes(t)) live.push(t);
+    } else if (!offPlatform.some((o) => o.toLowerCase() === w)) {
+      offPlatform.push(raw.trim());
+    }
+  }
+  return { live, offPlatform };
+}
+
 type WorkdayPosting = {
   title?: string;
   externalPath?: string;
@@ -172,15 +198,13 @@ export async function fetchWorkdayJobs(opts: {
   // to filter down from (Workday sorts by relevance, not location).
   const fetchLimit = locationFilter && locationFilter.toLowerCase() !== "anywhere" ? 20 : perTenant;
 
-  let tenants = WORKDAY_TENANTS;
-  const wanted = (opts.companies ?? []).map((c) => c.trim().toLowerCase()).filter(Boolean);
-  if (wanted.length) {
-    const matched = WORKDAY_TENANTS.filter((t) =>
-      wanted.some((w) => t.company.toLowerCase().includes(w) || w.includes(t.tenant))
-    );
-    if (matched.length) tenants = matched;
-  }
+  // When companies are named, search ONLY the ones in the live pool. Previously
+  // an unmatched name (e.g. "Pepsi", which isn't on Workday) silently fell back
+  // to searching every tenant, so the user saw other companies' jobs.
+  const named = (opts.companies ?? []).map((c) => c.trim()).filter(Boolean);
+  let tenants = named.length ? splitLiveCompanies(named).live : WORKDAY_TENANTS;
   tenants = tenants.slice(0, Math.max(1, opts.maxTenants ?? WORKDAY_TENANTS.length));
+  if (tenants.length === 0) return [];
 
   const results = await Promise.all(
     tenants.map((t) => fetchOneTenant(t, keyword, perTenant, locationFilter, fetchLimit))

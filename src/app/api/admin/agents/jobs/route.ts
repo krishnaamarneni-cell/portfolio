@@ -11,7 +11,8 @@ import {
 import { buildFactsContext } from "@/lib/facts";
 import { fetchJobRss, rssItemsToSearchResult } from "@/lib/rss";
 import { fetchJobDivaListings, jobDivaToContext } from "@/lib/jobdiva";
-import { fetchWorkdayJobs, type SourcedJob } from "@/lib/job-sources";
+import { fetchWorkdayJobs, splitLiveCompanies, type SourcedJob } from "@/lib/job-sources";
+import { CAREER_SITES } from "@/lib/company-careers";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -148,6 +149,22 @@ export async function POST(request: Request) {
     body.targetRole?.trim() || (profile === "software" ? "software engineer" : "SAP")
   ).trim();
 
+  // Companies the user named that we CAN'T fetch live (not on Workday). Pair
+  // each with its verified career page so we point the user somewhere useful
+  // instead of silently searching other companies.
+  const offPlatform = companies.length ? splitLiveCompanies(companies).offPlatform : [];
+  const offPlatformSites = offPlatform.map((name) => {
+    const nl = name.toLowerCase();
+    const site = CAREER_SITES.find(
+      (s) => s.name.toLowerCase().includes(nl) || nl.includes(s.name.toLowerCase().split(" ")[0])
+    );
+    return {
+      name,
+      careersUrl: site ? site.sapSearchUrl || site.careersUrl : null,
+      ats: site?.ats ?? null,
+    };
+  });
+
   const [workdayJobs, indeedJobs, jobDivaJobs, ...webResults] = await Promise.all([
     fetchWorkdayJobs({ keyword: workdayKeyword, companies, location, perTenant: 6 }).catch(
       (): SourcedJob[] => []
@@ -193,10 +210,19 @@ export async function POST(request: Request) {
   const totalHits =
     searchResults.reduce((n, r) => n + r.hits.length, 0) + workdayJobs.length;
   if (totalHits === 0) {
+    const offPlatformNote = offPlatformSites.length
+      ? `\n\n**Note:** ${offPlatformSites
+          .map((c) => (c.careersUrl ? `[${c.name}](${c.careersUrl})` : c.name))
+          .join(", ")} ${offPlatformSites.length === 1 ? "isn't" : "aren't"} in the live-fetch pool — open the linked career page${offPlatformSites.length === 1 ? "" : "s"} to search directly.`
+      : "";
     return NextResponse.json({
       markdown:
-        "No job listings found. Try a different profile, a broader role keyword, or remove the location filter.",
-      context: { companies, profile, location, model: body.model },
+        (location
+          ? `No live openings matched **${location}** for this search. Try **Anywhere**, a broader role keyword, or a different company.`
+          : "No job listings found. Try a different profile or a broader role keyword.") +
+        offPlatformNote,
+      listings: [],
+      context: { companies, profile, location, unavailableCompanies: offPlatformSites, model: body.model },
     });
   }
 
@@ -278,7 +304,14 @@ JOB LISTINGS (from Indeed RSS + web search):
 ${searchBlock}
 
 ${workdayBlock ? `LIVE WORKDAY POSTINGS (${workdayJobs.length} openings, fetched just now — these are CURRENT, prefer them):\n${workdayBlock}\n` : ""}
-${jobDivaBlock ? `JOBDIVA PORTAL (Abacus Service Corp — ${jobDivaJobs.length} listings):\n${jobDivaBlock}` : ""}`;
+${jobDivaBlock ? `JOBDIVA PORTAL (Abacus Service Corp — ${jobDivaJobs.length} listings):\n${jobDivaBlock}` : ""}
+${
+  offPlatformSites.length
+    ? `\nNOT IN THE LIVE-FETCH POOL: ${offPlatformSites
+        .map((c) => `${c.name}${c.careersUrl ? ` (search their jobs directly: ${c.careersUrl})` : ""}`)
+        .join("; ")}. At the very TOP of your answer, add a short line telling Krishna these companies can't be auto-fetched and to use the linked career page(s). Do NOT invent jobs for them.`
+    : ""
+}`;
 
   const model = resolveAgentModel(body.model);
   const result = await runAgent({
@@ -336,6 +369,7 @@ ${jobDivaBlock ? `JOBDIVA PORTAL (Abacus Service Corp — ${jobDivaJobs.length} 
       profile,
       location: location || null,
       resumeJobs: jobs.length,
+      unavailableCompanies: offPlatformSites,
       workdayJobsFound: workdayJobs.length,
       indeedJobsFound: indeedJobs.length,
       jobDivaFound: jobDivaJobs.length,
