@@ -14,7 +14,7 @@ import { fetchPortfolioSnapshot } from "@/lib/agents";
 import { search, whichSearchProvider } from "@/lib/search";
 
 /** Default "meaningful move" threshold (%). Override with PORTFOLIO_MOVE_THRESHOLD. */
-export const DEFAULT_MOVE_THRESHOLD = Number(process.env.PORTFOLIO_MOVE_THRESHOLD) || 3;
+export const DEFAULT_MOVE_THRESHOLD = Number(process.env.PORTFOLIO_MOVE_THRESHOLD) || 2;
 
 type ParsedHolding = { symbol: string; marketValue: number | null; shares: number | null };
 

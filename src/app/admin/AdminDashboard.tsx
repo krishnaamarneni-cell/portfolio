@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -28,6 +28,10 @@ import {
   FiMenu,
   FiHome,
   FiChevronRight,
+  FiTrendingUp,
+  FiTrendingDown,
+  FiRefreshCw,
+  FiAlertTriangle,
 } from "react-icons/fi";
 import {
   EMPTY_JOB,
@@ -504,6 +508,9 @@ function DashboardOverview({
         <StatCard label="Status" value="LIVE" icon={FiActivity} highlight />
       </div>
 
+      {/* Today's portfolio move */}
+      <TodaysMoveCard />
+
       {/* Quick actions */}
       <div>
         <h3 className="text-sm font-semibold text-[var(--admin-text-muted)] uppercase tracking-wider mb-4">Quick Actions</h3>
@@ -576,6 +583,157 @@ function StatCard({
       <Icon size={18} className={highlight ? "text-emerald-500" : "text-[#bbb]"} />
       <p className={`text-2xl font-bold mt-2 ${highlight ? "text-emerald-600" : "text-[var(--admin-text)]"}`}>{value}</p>
       <p className="text-xs text-[var(--admin-text-muted)] mt-0.5">{label}</p>
+    </div>
+  );
+}
+
+/* ──────────────────── Today's portfolio move ──────────────────── */
+
+type Mover = {
+  symbol: string;
+  marketValue: number | null;
+  changePct: number;
+  dayChangeUsd: number | null;
+};
+type Movement = {
+  available: boolean;
+  reason?: string;
+  pricedCount: number;
+  dayChangeUsd: number;
+  dayChangePct: number;
+  threshold: number;
+  movers: Mover[];
+};
+type MoverNews = { symbol: string; headline: string; url: string | null };
+
+function money(n: number): string {
+  return `${n < 0 ? "-" : "+"}$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function TodaysMoveCard() {
+  const [data, setData] = useState<{ movement: Movement; news: MoverNews[] } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Self-contained load (stable [] deps) — never feeds errors back into an effect.
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/admin/portfolio/movement", { cache: "no-store" });
+      const text = await r.text();
+      let j: { movement?: Movement; news?: MoverNews[]; error?: string } = {};
+      try {
+        j = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(r.status === 404 ? "Endpoint deploying — refresh shortly." : `HTTP ${r.status}`);
+      }
+      if (j.error || !j.movement) throw new Error(j.error || "No data");
+      setData({ movement: j.movement, news: j.news ?? [] });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const m = data?.movement;
+  const up = (m?.dayChangeUsd ?? 0) >= 0;
+  const newsBy = new Map((data?.news ?? []).map((n) => [n.symbol, n]));
+
+  return (
+    <div className="bg-[var(--admin-surface)] rounded-2xl border border-[var(--admin-border)] p-5">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 ring-1 ring-emerald-500/20 flex items-center justify-center">
+            {up ? <FiTrendingUp size={16} className="text-emerald-500" /> : <FiTrendingDown size={16} className="text-red-400" />}
+          </div>
+          <div>
+            <h3 className="font-bold text-[var(--admin-text)] text-sm leading-tight">Today&apos;s Move</h3>
+            <p className="text-[10px] text-[var(--admin-text-muted)]">Live from WealthClaude · news only for movers</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="p-1.5 rounded-lg text-[var(--admin-text-muted)] hover:text-emerald-500 disabled:opacity-50"
+          title="Refresh"
+        >
+          <FiRefreshCw size={13} className={loading ? "animate-spin" : ""} />
+        </button>
+      </div>
+
+      {loading && !data ? (
+        <p className="text-xs text-[var(--admin-text-muted)] py-3">Checking the market…</p>
+      ) : err || !m?.available ? (
+        <div className="flex items-start gap-2 text-xs text-amber-500 py-2">
+          <FiAlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>{err || m?.reason || "Portfolio data unavailable — check the WealthClaude connector."}</span>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-baseline gap-2">
+            <span className={`text-3xl font-bold tabular-nums ${up ? "text-emerald-500" : "text-red-400"}`}>
+              {money(m.dayChangeUsd)}
+            </span>
+            <span className={`text-sm font-semibold ${up ? "text-emerald-500" : "text-red-400"}`}>
+              {m.dayChangePct >= 0 ? "+" : ""}
+              {m.dayChangePct.toFixed(2)}%
+            </span>
+            <span className="text-[10px] text-[var(--admin-text-muted)] ml-1">across {m.pricedCount} holdings</span>
+          </div>
+
+          {m.movers.length === 0 ? (
+            <p className="text-xs text-[var(--admin-text-muted)] mt-3">
+              Nothing moved more than {m.threshold}% today — quiet day, no news to check.
+            </p>
+          ) : (
+            <div className="mt-3 space-y-1.5">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--admin-text-muted)]">
+                Moved &gt;{m.threshold}%
+              </p>
+              {m.movers.slice(0, 8).map((mv) => {
+                const n = newsBy.get(mv.symbol);
+                const mvUp = mv.changePct >= 0;
+                return (
+                  <div key={mv.symbol} className="flex items-start justify-between gap-3 py-1 border-t border-[var(--admin-border)] first:border-t-0">
+                    <div className="min-w-0">
+                      <span className="text-sm font-semibold text-[var(--admin-text)]">{mv.symbol}</span>
+                      {n?.headline && (
+                        <p className="text-[11px] text-[var(--admin-text-muted)] truncate">
+                          {n.url ? (
+                            <a href={n.url} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-500">
+                              {n.headline}
+                            </a>
+                          ) : (
+                            n.headline
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`text-sm font-semibold tabular-nums ${mvUp ? "text-emerald-500" : "text-red-400"}`}>
+                        {mvUp ? "+" : ""}
+                        {mv.changePct.toFixed(1)}%
+                      </span>
+                      {mv.dayChangeUsd != null && (
+                        <span className="block text-[10px] text-[var(--admin-text-muted)] tabular-nums">
+                          {money(mv.dayChangeUsd)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
