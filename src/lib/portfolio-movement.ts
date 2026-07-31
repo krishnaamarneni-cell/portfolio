@@ -13,10 +13,14 @@ import "server-only";
 import { fetchPortfolioSnapshot } from "@/lib/agents";
 import { fetchConnectors } from "@/lib/content";
 import { resolveConnectorCall } from "@/lib/connector-url";
-import { looksLikeMcp } from "@/lib/mcp";
+import { looksLikeMcp, mcpInitialize, mcpListTools } from "@/lib/mcp";
 import { search, whichSearchProvider } from "@/lib/search";
 
-/** Actionable reason when the portfolio snapshot comes back empty. */
+/**
+ * Actionable reason when the snapshot comes back empty. Probes the connector so
+ * the message names the EXACT failing stage (bad token vs missing tool vs empty
+ * response) instead of guessing.
+ */
 async function diagnoseNoHoldings(): Promise<string> {
   const connectors = await fetchConnectors().catch(() => []);
   const mcp = connectors.filter(
@@ -28,7 +32,27 @@ async function diagnoseNoHoldings(): Promise<string> {
       ? "The WealthClaude connector in this admin is disabled or missing its token. Settings → Connectors → enable it and paste a read-only token (WealthClaude → AI Access → New token)."
       : "No WealthClaude connector in this admin yet. Settings → Connectors → add WealthClaude (URL https://www.wealthclaude.com/api/mcp) with a read-only token. (This is a separate project from your Personal OS Finance page.)";
   }
-  return "The WealthClaude connector is set but returned no holdings — the token is likely expired. Re-issue it (WealthClaude → AI Access) and update it in Settings → Connectors. Run /api/admin/agents/portfolio-debug for details.";
+
+  // Probe the first enabled MCP connector to pinpoint the failure.
+  const c = mcp[0];
+  const url = resolveConnectorCall(c).url!;
+  const token = c.bearer_token!;
+  await mcpInitialize(url, token).catch(() => undefined);
+  let tools;
+  try {
+    tools = await mcpListTools(url, token);
+  } catch (e) {
+    return `Couldn't reach the WealthClaude MCP: ${String(e instanceof Error ? e.message : e).slice(0, 90)}. Check the URL/token in Settings → Connectors.`;
+  }
+  if (!tools || tools.length === 0) {
+    return "WealthClaude returned an empty tools list — the token is expired or lacks read scope. Re-issue it (WealthClaude → AI Access → New token) and update it in Settings → Connectors.";
+  }
+  const names = tools.map((t) => t.name);
+  const holdingsTool = names.find((n) => /holding|portfolio|position/i.test(n));
+  if (!holdingsTool) {
+    return `Connected to WealthClaude (${tools.length} tools: ${names.slice(0, 6).join(", ")}) but none look like a holdings tool. Tell me the correct tool name and I'll map it.`;
+  }
+  return `Connected and found the '${holdingsTool}' tool, but it returned no holdings. See /api/admin/agents/portfolio-debug for the raw response.`;
 }
 
 /** Default "meaningful move" threshold (%). Override with PORTFOLIO_MOVE_THRESHOLD. */
