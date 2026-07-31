@@ -7,6 +7,12 @@ import {
   type PersonalNote,
 } from "@/lib/personal";
 import { fetchHoldingSymbols, fetchPortfolioSnapshot, runAgent } from "@/lib/agents";
+import {
+  computePortfolioMovement,
+  fetchMoverNews,
+  type PortfolioMovement,
+  type MoverNews,
+} from "@/lib/portfolio-movement";
 import { search, searchResultsToContext, whichSearchProvider, type SearchResult } from "@/lib/search";
 import { fetchTickerNews, FINANCE_FEEDS, TECH_FEEDS, INDIA_FEEDS, GEOPOLITICS_FEEDS, JOB_MARKET_FEEDS, fetchManyFeeds, filterByQuery, type RssItem } from "@/lib/rss";
 import { sendEmailUnified } from "@/lib/resend";
@@ -367,11 +373,40 @@ ${searchBlock ? `Web search results:\n${searchBlock}` : ""}`;
 
 /* ─────────────── Wealth / Net Worth Agent ─────────────── */
 
+/** Deterministic "Today's Move" markdown — real numbers, never LLM-guessed. */
+function renderMovementMarkdown(m: PortfolioMovement, news: MoverNews[]): string {
+  if (!m.available) return "";
+  const money = (n: number) =>
+    `${n < 0 ? "-" : "+"}$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const newsBy = new Map(news.map((n) => [n.symbol, n]));
+
+  const head = `## Today's Move\n**${money(m.dayChangeUsd)}** (${m.dayChangePct >= 0 ? "+" : ""}${m.dayChangePct.toFixed(2)}%) across ${m.pricedCount} holdings.`;
+
+  if (m.movers.length === 0) {
+    return `${head}\n\nNo holding moved more than ${m.threshold}% — nothing needed a news check.`;
+  }
+  const lines = m.movers.map((mv) => {
+    const n = newsBy.get(mv.symbol);
+    const why = n?.headline ? ` — ${n.headline}${n.url ? ` [↗](${n.url})` : ""}` : "";
+    return `- **${mv.symbol}** ${mv.changePct >= 0 ? "+" : ""}${mv.changePct.toFixed(1)}% (${money(mv.dayChangeUsd ?? 0)})${why}`;
+  });
+  return `${head}\n\nMoved more than ${m.threshold}% (only these were news-checked):\n${lines.join("\n")}`;
+}
+
 async function runWealthAgent(apiKey: string): Promise<string> {
   const snapshot = await fetchPortfolioSnapshot();
   if (!snapshot.holdings && !snapshot.assetsDebts) {
     return "## Net Worth\n\nNo WealthClaude connector found. Connect it in Settings to get portfolio data.";
   }
+
+  // Deterministic day-movement + news ONLY for holdings that moved past the
+  // threshold. Computed here (not by the LLM) so the numbers are exact.
+  const movement = await computePortfolioMovement().catch(() => null);
+  const moverNews =
+    movement?.available && movement.movers.length
+      ? await fetchMoverNews(movement.movers).catch((): MoverNews[] => [])
+      : [];
+  const movementMd = movement ? renderMovementMarkdown(movement, moverNews) : "";
 
   // Also pull ticker-specific RSS for good/bad news about holdings
   const { symbols } = await fetchHoldingSymbols();
@@ -388,12 +423,10 @@ async function runWealthAgent(apiKey: string): Promise<string> {
   const indianBlock = indianNews.map((i) => `- ${i.title}: ${i.description} (${i.link})`).join("\n");
 
   const system = `Phone-screen wealth briefing. Use EXACT numbers from portfolio data — never round or invent.
+A "## Today's Move" section (net worth change + the stocks that moved) is added ABOVE your output separately — do NOT produce your own movers/change section or repeat it. Start at "## Net Worth".
 
 ## Net Worth
-Total: $X (assets $Y - debts $Z). Change: [from data or "not available"].
-
-## Holdings (top movers only, max 8)
-**AAPL** $12,500 +2.3% | **BTC** $8,200 -1.1% | **RELIANCE.NS** Rs 45,000 +0.5%
+Total: $X (assets $Y - debts $Z).
 
 ## Good News (max 3, only from news data below)
 **AAPL** — Earnings beat, stock up 5%. [Source](url)
@@ -424,7 +457,8 @@ ${indianBlock || "(no Indian market news)"}`;
     userPrompt,
     maxTokens: 1200,
   });
-  return result.content || "## Net Worth\n\n(agent returned nothing)";
+  const body = result.content || "## Net Worth\n\n(agent returned nothing)";
+  return movementMd ? `${movementMd}\n\n${body}` : body;
 }
 
 /* ─────────────── Search helper ─────────────── */
