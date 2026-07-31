@@ -509,7 +509,7 @@ function DashboardOverview({
       </div>
 
       {/* Today's portfolio move */}
-      <TodaysMoveCard />
+      <TodaysMoveCard onNavigate={onNavigate} />
 
       {/* Quick actions */}
       <div>
@@ -610,7 +610,7 @@ function money(n: number): string {
   return `${n < 0 ? "-" : "+"}$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-function TodaysMoveCard() {
+function TodaysMoveCard({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const [data, setData] = useState<{ movement: Movement; news: MoverNews[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -671,9 +671,19 @@ function TodaysMoveCard() {
       {loading && !data ? (
         <p className="text-xs text-[var(--admin-text-muted)] py-3">Checking the market…</p>
       ) : err || !m?.available ? (
-        <div className="flex items-start gap-2 text-xs text-amber-500 py-2">
-          <FiAlertTriangle size={13} className="mt-0.5 shrink-0" />
-          <span>{err || m?.reason || "Portfolio data unavailable — check the WealthClaude connector."}</span>
+        <div className="py-2">
+          <div className="flex items-start gap-2 text-xs text-amber-500">
+            <FiAlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span>{err || m?.reason || "Portfolio data unavailable — check the WealthClaude connector."}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate("connectors")}
+            className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-[11px] font-medium text-[var(--admin-text-secondary)] hover:border-[#ff6b00]/40 hover:text-[var(--admin-text)]"
+          >
+            <FiLink size={11} />
+            Fix in Settings → Connectors
+          </button>
         </div>
       ) : (
         <>

@@ -11,7 +11,25 @@
  */
 import "server-only";
 import { fetchPortfolioSnapshot } from "@/lib/agents";
+import { fetchConnectors } from "@/lib/content";
+import { resolveConnectorCall } from "@/lib/connector-url";
+import { looksLikeMcp } from "@/lib/mcp";
 import { search, whichSearchProvider } from "@/lib/search";
+
+/** Actionable reason when the portfolio snapshot comes back empty. */
+async function diagnoseNoHoldings(): Promise<string> {
+  const connectors = await fetchConnectors().catch(() => []);
+  const mcp = connectors.filter(
+    (c) => c.enabled && c.bearer_token && looksLikeMcp(resolveConnectorCall(c).url || "")
+  );
+  if (mcp.length === 0) {
+    const disabled = connectors.find((c) => /wealth/i.test(c.label));
+    return disabled
+      ? "The WealthClaude connector in this admin is disabled or missing its token. Settings → Connectors → enable it and paste a read-only token (WealthClaude → AI Access → New token)."
+      : "No WealthClaude connector in this admin yet. Settings → Connectors → add WealthClaude (URL https://www.wealthclaude.com/api/mcp) with a read-only token. (This is a separate project from your Personal OS Finance page.)";
+  }
+  return "The WealthClaude connector is set but returned no holdings — the token is likely expired. Re-issue it (WealthClaude → AI Access) and update it in Settings → Connectors. Run /api/admin/agents/portfolio-debug for details.";
+}
 
 /** Default "meaningful move" threshold (%). Override with PORTFOLIO_MOVE_THRESHOLD. */
 export const DEFAULT_MOVE_THRESHOLD = Number(process.env.PORTFOLIO_MOVE_THRESHOLD) || 2;
@@ -123,10 +141,14 @@ export async function computePortfolioMovement(
   });
 
   const snap = await fetchPortfolioSnapshot().catch(() => null);
-  if (!snap?.holdings) return empty("No WealthClaude connector / holdings available.");
+  if (!snap?.holdings) return empty(await diagnoseNoHoldings());
 
   const holdings = parseHoldings(snap.holdings);
-  if (holdings.length === 0) return empty("Couldn't parse any holdings from the connector.");
+  if (holdings.length === 0) {
+    return empty(
+      "The connector responded but no holdings could be parsed from it — the WealthClaude 'holdings' tool may have changed shape. Run /api/admin/agents/portfolio-debug to see the raw response."
+    );
+  }
 
   // Fetch day-changes in bounded parallel batches (Yahoo is fine with this).
   const changes: Array<Awaited<ReturnType<typeof fetchDayChange>>> = [];
