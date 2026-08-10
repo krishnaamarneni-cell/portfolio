@@ -71,14 +71,21 @@ const GENERIC_TERM_BLOCKLIST = new Set([
 const BROWSE_HINT =
   "Click \"Browse materials\" above to browse them.";
 
-/**
- * Answers "how many materials do we have" with the real counts rather than
- * declining. Deterministic — the numbers come from the same cached SAP fetches
- * that back the Browse panel, never from the LLM. Returns undefined if either
- * fetch fails, so the caller falls back to the normal decline instead of
- * inventing a number.
+/* ════════════════════ Catalog-level (meta) queries ════════════════════
+ *
+ * Questions ABOUT the dataset rather than about one material — "how many
+ * materials are there", "how many open POs", "list a few materials". The
+ * per-material tools can't serve these, but the answers are cheap and exact,
+ * so they're handled by dedicated deterministic functions.
+ *
+ * Every figure below comes from a real SAP call ($count or the cached
+ * fetches) and is formatted in code — no LLM ever produces these numbers.
  */
-async function buildCatalogCountAnswer(apiKey: string): Promise<string | undefined> {
+
+type MetaQueryKind = "materialCount" | "poCount" | "listMaterials";
+
+/** "How many materials do we have" — master data vs. actually-queryable. */
+async function answerMaterialCount(apiKey: string): Promise<string | undefined> {
   const [descriptions, stockMaterials] = await Promise.all([
     fetchAllProductDescriptions(apiKey),
     fetchMaterialsWithStock(apiKey),
@@ -92,21 +99,97 @@ async function buildCatalogCountAnswer(apiKey: string): Promise<string | undefin
 }
 
 /**
- * Detects a "how many / list all materials" meta-question. Deliberately
- * pattern-based rather than an extra LLM call: this runs before the router
- * and only needs to catch the obvious phrasings, and a false positive here
- * would wrongly hijack a real material lookup.
+ * "How many open POs do we have" — sandbox-wide.
+ *
+ * VERIFIED LIVE 2026-08-10 via $count: 61,640 open (not completely delivered)
+ * line items out of 1,071,059 total, across 207,662 PO documents. Uses $count
+ * rather than fetching rows, so it stays a single cheap request.
  */
-function isCatalogCountQuestion(message: string): boolean {
+async function fetchOpenPoCount(apiKey: string): Promise<number | undefined> {
+  const params = new URLSearchParams({ $filter: "IsCompletelyDelivered eq false" });
+  const url = `${SAP_BASE}/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV/A_PurchaseOrderItem/$count?${params}`;
+  try {
+    const res = await fetch(url, {
+      headers: { APIKey: apiKey, Accept: "text/plain" },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error(`[SAP PO count] HTTP ${res.status}`);
+      return undefined;
+    }
+    const text = (await res.text()).trim();
+    const n = parseInt(text, 10);
+    return Number.isFinite(n) ? n : undefined;
+  } catch (err) {
+    console.error("[SAP PO count] Fetch failed:", err instanceof Error ? err.message : err);
+    return undefined;
+  }
+}
+
+async function answerPoCount(apiKey: string): Promise<string | undefined> {
+  const open = await fetchOpenPoCount(apiKey);
+  if (open === undefined) return undefined;
+  return `There are ${open.toLocaleString()} open purchase order line items across the whole sandbox — these are items not yet completely delivered. Bear in mind this is SAP's shared public sandbox, so that figure covers every user's accumulated demo data, not one company's. Ask about a specific material (e.g. "open POs for TG10") to see the actual orders.`;
+}
+
+/** "List me any 5 materials" — a real sample, drawn from ones that have data. */
+async function answerListMaterials(
+  apiKey: string,
+  limit: number,
+): Promise<string | undefined> {
+  const [descriptions, stockMaterials] = await Promise.all([
+    fetchAllProductDescriptions(apiKey),
+    fetchMaterialsWithStock(apiKey),
+  ]);
+  if (descriptions.error || stockMaterials.error) return undefined;
+
+  // Only materials with live stock data — listing master-data-only entries
+  // would hand the user material numbers that return nothing when queried.
+  const withStock = descriptions.rows.filter((r) => stockMaterials.materials.has(r.material));
+  if (withStock.length === 0) return undefined;
+
+  const n = Math.min(Math.max(limit, 1), 25);
+  const sample = withStock.slice(0, n);
+  const list = sample.map((r) => `${r.material} — ${r.description || "(no description)"}`).join("\n");
+
+  return `Here are ${sample.length} materials that have live stock data (out of ${withStock.length.toLocaleString()}):\n\n${list}\n\nAsk about any of them — e.g. "What's the stock for ${sample[0].material}?"`;
+}
+
+async function answerMetaQuery(
+  kind: MetaQueryKind,
+  apiKey: string,
+  limit?: number,
+): Promise<string | undefined> {
+  switch (kind) {
+    case "materialCount":
+      return answerMaterialCount(apiKey);
+    case "poCount":
+      return answerPoCount(apiKey);
+    case "listMaterials":
+      return answerListMaterials(apiKey, limit ?? 5);
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Fast-path detector for the most common catalog-count phrasings, so the
+ * obvious cases skip both LLM calls. The router (which tolerates typos and
+ * paraphrases far better than a regex — real messages included "materail"
+ * and "materails") is the general path; this is just an optimisation, so it
+ * stays deliberately conservative.
+ */
+function detectMetaQueryFast(message: string): MetaQueryKind | undefined {
   const m = message.toLowerCase();
-  const asksQuantityOrList =
-    /\b(how many|how much|number of|count of|total|all|every|list( of)?|show( me)?|what)\b/.test(m);
-  // Singular forms included — real users type "how many material do we have".
-  const aboutCatalog = /\b(materials?|products?|items?|skus?)\b/.test(m);
-  // "how many materials" yes; "how much stock for TG10" no — a specific
-  // material code in the message means they want that material, not a count.
-  const hasSpecificCode = /\b[A-Z0-9][A-Z0-9_-]*\d[A-Z0-9_-]*\b/.test(message);
-  return asksQuantityOrList && aboutCatalog && !hasSpecificCode;
+  // A specific material code means they want THAT material, not a catalog stat.
+  if (/\b[A-Z0-9][A-Z0-9_-]*\d[A-Z0-9_-]*\b/.test(message)) return undefined;
+
+  const asksQuantity = /\b(how many|how much|number of|count of|total)\b/.test(m);
+  if (!asksQuantity) return undefined;
+
+  if (/\b(po|pos|purchase orders?)\b/.test(m)) return "poCount";
+  if (/\b(materials?|products?|items?|skus?)\b/.test(m)) return "materialCount";
+  return undefined;
 }
 
 /**
@@ -418,20 +501,24 @@ A) A material NUMBER — a short SAP code, typically alphanumeric with no spaces
 B) A material NAME or description — SPECIFIC everyday words naming a real product, e.g. "pineapple", "trading goods", "the water pump", "plastic parts". Put it in "materialName". Use this whenever the text is NOT a short code — i.e. it has spaces, or reads like a product description rather than an identifier.
 Never fill both "material" and "materialName" for the same request.
 
-CRITICAL — do NOT extract a materialName from a META-question that has no specific product in it:
-- "list of materials" / "what materials do we have" / "how many materials exist" / "show me all products" / "list everything in stock" — these are asking for an inventory-wide listing, which no tool supports. Leave BOTH "material" and "materialName" empty and use the error response below.
-- Only put something in "materialName" when the user names an actual, specific product (a real word like "pineapple", "pump", "trading goods" — not a bare category noun like "material", "materials", "product", "item", "stock", "inventory", or "goods" used alone).
+CRITICAL — a META-question is about the DATASET, not about one product. These are answered separately, so set "metaQuery" and leave BOTH "material" and "materialName" empty:
+- "how many materials do we have" / "list of materials" / "total materials in sap" / "what materials exist" → metaQuery: "materialCount"
+- "how many open POs do we have" / "total purchase orders" / "how many POs are there" (with NO specific material named) → metaQuery: "poCount"
+- "list me any 5 materials" / "give me the top 5 material numbers" / "show me some materials" / "give me examples" → metaQuery: "listMaterials", and put the requested count in "limit" (default 5 if unstated)
+Users often misspell these ("materail", "materails", "meterials") — match on intent, not exact spelling.
+Only put something in "materialName" when the user names an actual, specific product (a real word like "pineapple", "pump", "trading goods" — not a bare category noun like "material", "materials", "product", "item", "stock", "inventory", or "goods" used alone).
 
 Rules:
-1. Identify the material per (A) or (B) above, respecting the CRITICAL rule.
-2. If the question asks about shortage, shortfall, "am I short", or compares stock vs orders, call BOTH tools.
-3. If the question is only about stock/inventory, call only getStock.
-4. If the question is only about purchase orders/deliveries, call only getOpenPOs.
-5. Return ONLY a JSON object — no other text, no markdown fences.
+1. If the question is a META-question per the CRITICAL rule, set "metaQuery" (and "limit" for listMaterials), leave "tools" empty, and stop.
+2. Otherwise identify the material per (A) or (B) above.
+3. If the question asks about shortage, shortfall, "am I short", or compares stock vs orders, call BOTH tools.
+4. If the question is only about stock/inventory, call only getStock.
+5. If the question is only about purchase orders/deliveries for a SPECIFIC material, call only getOpenPOs.
+6. Return ONLY a JSON object — no other text, no markdown fences.
 
-Schema: { "tools": ["getStock"] | ["getOpenPOs"] | ["getStock", "getOpenPOs"], "material": "<material number or empty string>", "materialName": "<material name/description or empty string>" }
+Schema: { "tools": ["getStock"] | ["getOpenPOs"] | ["getStock", "getOpenPOs"] | [], "material": "<material number or empty string>", "materialName": "<material name/description or empty string>", "metaQuery": "materialCount" | "poCount" | "listMaterials" | "", "limit": <number, only for listMaterials> }
 
-If you cannot identify a specific material number OR material name (including meta-questions per the CRITICAL rule above): { "tools": [], "material": "", "materialName": "", "error": "I couldn't identify a specific material in your question — there's no chat tool to list every material in SAP. Please include a specific material number (like TG10) or a product name (like \\"trading goods\\"). ${BROWSE_HINT}" }`;
+If you cannot identify a specific material AND it isn't a meta-question: { "tools": [], "material": "", "materialName": "", "metaQuery": "", "error": "I couldn't identify a specific material in your question. Please include a specific material number (like TG10) or a product name (like \\"trading goods\\"). ${BROWSE_HINT}" }`;
 
 const SYNTHESIS_PROMPT = `You are an SAP data analyst. Answer the user's question using ONLY the data below.
 
@@ -475,16 +562,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    /* ── Step 0: CATALOG COUNT — "how many materials do we have" is answerable
-     *  from the same cached fetches that back the Browse panel, so answer it
-     *  with real numbers instead of routing it to a per-material tool that
-     *  can't serve it. Runs before the Groq key check because it needs neither
-     *  LLM call. ── */
-    if (isCatalogCountQuestion(message)) {
-      const countAnswer = await buildCatalogCountAnswer(sapKey);
-      if (countAnswer) {
-        console.log("[SAP Chat] Answered catalog-count question:", countAnswer);
-        return NextResponse.json({ answer: countAnswer, data: {} });
+    /* ── Step 0: META QUERY (fast path) — the obvious "how many …" phrasings
+     *  are answerable from cheap $count / cached fetches, so short-circuit
+     *  before either LLM call. Runs before the Groq key check because it needs
+     *  neither. Anything this conservative detector misses (typos, "list me 5")
+     *  still gets caught by the router's metaQuery field below. ── */
+    const fastMeta = detectMetaQueryFast(message);
+    if (fastMeta) {
+      const metaAnswer = await answerMetaQuery(fastMeta, sapKey);
+      if (metaAnswer) {
+        console.log(`[SAP Chat] Answered meta query (fast: ${fastMeta})`);
+        return NextResponse.json({ answer: metaAnswer, data: {} });
       }
       // Fetch failed — fall through to the normal flow rather than guess.
     }
@@ -519,7 +607,14 @@ export async function POST(request: Request) {
     const routerRaw = routerCompletion.choices[0]?.message?.content ?? "{}";
     console.log("[SAP Router] Output:", routerRaw);
 
-    let routing: { tools?: string[]; material?: string; materialName?: string; error?: string };
+    let routing: {
+      tools?: string[];
+      material?: string;
+      materialName?: string;
+      metaQuery?: string;
+      limit?: number;
+      error?: string;
+    };
     try {
       routing = JSON.parse(routerRaw);
     } catch {
@@ -529,6 +624,27 @@ export async function POST(request: Request) {
         materialName: "",
         error: `I had trouble understanding that. Could you rephrase your question with a specific material number or name? ${BROWSE_HINT}`,
       };
+    }
+
+    /* ── Step 1a: META QUERY (router path) — catches the phrasings the fast
+     *  detector deliberately doesn't, e.g. "list me any 5 materails". The LLM
+     *  only classifies intent; every number in the answer still comes from a
+     *  deterministic SAP call. ── */
+    const routedMeta = routing.metaQuery?.trim();
+    if (
+      routedMeta === "materialCount" ||
+      routedMeta === "poCount" ||
+      routedMeta === "listMaterials"
+    ) {
+      const metaAnswer = await answerMetaQuery(routedMeta, sapKey, routing.limit);
+      if (metaAnswer) {
+        console.log(`[SAP Chat] Answered meta query (router: ${routedMeta})`);
+        return NextResponse.json({ answer: metaAnswer, data: {} });
+      }
+      return NextResponse.json({
+        answer: `I couldn't reach SAP to answer that just now — please try again. ${BROWSE_HINT}`,
+        data: {},
+      });
     }
 
     const hasMaterial = !!routing.material?.trim();
