@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   SAP_BASE,
   fetchAllProductDescriptions,
+  fetchMaterialsWithStock,
   type ToolOutcome,
   type ProductDescriptionRow,
 } from "@/lib/sap-product-cache";
@@ -68,7 +69,45 @@ const GENERIC_TERM_BLOCKLIST = new Set([
 // place that actually answers that — the Browse materials panel — instead
 // of just being told no.
 const BROWSE_HINT =
-  "Click \"Browse materials\" above to see which materials actually have live stock data.";
+  "Click \"Browse materials\" above to browse them.";
+
+/**
+ * Answers "how many materials do we have" with the real counts rather than
+ * declining. Deterministic — the numbers come from the same cached SAP fetches
+ * that back the Browse panel, never from the LLM. Returns undefined if either
+ * fetch fails, so the caller falls back to the normal decline instead of
+ * inventing a number.
+ */
+async function buildCatalogCountAnswer(apiKey: string): Promise<string | undefined> {
+  const [descriptions, stockMaterials] = await Promise.all([
+    fetchAllProductDescriptions(apiKey),
+    fetchMaterialsWithStock(apiKey),
+  ]);
+  if (descriptions.error || stockMaterials.error) return undefined;
+
+  const withStock = descriptions.rows.filter((r) => stockMaterials.materials.has(r.material)).length;
+  const total = descriptions.rows.length;
+
+  return `The sandbox has ${total.toLocaleString()} materials in its master data, and ${withStock.toLocaleString()} of those have live stock records you can actually query. (The rest are master-data-only entries with no stock or purchase-order transactions posted against them.) ${BROWSE_HINT}`;
+}
+
+/**
+ * Detects a "how many / list all materials" meta-question. Deliberately
+ * pattern-based rather than an extra LLM call: this runs before the router
+ * and only needs to catch the obvious phrasings, and a false positive here
+ * would wrongly hijack a real material lookup.
+ */
+function isCatalogCountQuestion(message: string): boolean {
+  const m = message.toLowerCase();
+  const asksQuantityOrList =
+    /\b(how many|how much|number of|count of|total|all|every|list( of)?|show( me)?|what)\b/.test(m);
+  // Singular forms included — real users type "how many material do we have".
+  const aboutCatalog = /\b(materials?|products?|items?|skus?)\b/.test(m);
+  // "how many materials" yes; "how much stock for TG10" no — a specific
+  // material code in the message means they want that material, not a count.
+  const hasSpecificCode = /\b[A-Z0-9][A-Z0-9_-]*\d[A-Z0-9_-]*\b/.test(message);
+  return asksQuantityOrList && aboutCatalog && !hasSpecificCode;
+}
 
 /**
  * getStock — Material Stock API (OData V2)
@@ -434,14 +473,29 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
-  if (!groqKey) {
-    return NextResponse.json(
-      { error: "GROQ_API_KEY is not configured." },
-      { status: 503 },
-    );
-  }
 
   try {
+    /* ── Step 0: CATALOG COUNT — "how many materials do we have" is answerable
+     *  from the same cached fetches that back the Browse panel, so answer it
+     *  with real numbers instead of routing it to a per-material tool that
+     *  can't serve it. Runs before the Groq key check because it needs neither
+     *  LLM call. ── */
+    if (isCatalogCountQuestion(message)) {
+      const countAnswer = await buildCatalogCountAnswer(sapKey);
+      if (countAnswer) {
+        console.log("[SAP Chat] Answered catalog-count question:", countAnswer);
+        return NextResponse.json({ answer: countAnswer, data: {} });
+      }
+      // Fetch failed — fall through to the normal flow rather than guess.
+    }
+
+    if (!groqKey) {
+      return NextResponse.json(
+        { error: "GROQ_API_KEY is not configured." },
+        { status: 503 },
+      );
+    }
+
     const { default: Groq } = await import("groq-sdk");
     const groq = new Groq({ apiKey: groqKey });
 
