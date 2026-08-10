@@ -63,6 +63,12 @@ const GENERIC_TERM_BLOCKLIST = new Set([
   "all",
 ]);
 
+// Appended to every "couldn't identify a material" decline so users asking
+// meta-questions ("how many materials do we have") get pointed at the one
+// place that actually answers that — the Browse materials panel — instead
+// of just being told no.
+const BROWSE_HINT = "Click \"Browse materials\" above to see the full catalog.";
+
 /**
  * getStock — Material Stock API (OData V2)
  *
@@ -385,7 +391,7 @@ Rules:
 
 Schema: { "tools": ["getStock"] | ["getOpenPOs"] | ["getStock", "getOpenPOs"], "material": "<material number or empty string>", "materialName": "<material name/description or empty string>" }
 
-If you cannot identify a specific material number OR material name (including meta-questions per the CRITICAL rule above): { "tools": [], "material": "", "materialName": "", "error": "I couldn't identify a specific material in your question — there's no tool to list every material in SAP. Please include a specific material number (like TG10) or a product name (like \\"trading goods\\")." }`;
+If you cannot identify a specific material number OR material name (including meta-questions per the CRITICAL rule above): { "tools": [], "material": "", "materialName": "", "error": "I couldn't identify a specific material in your question — there's no chat tool to list every material in SAP. Please include a specific material number (like TG10) or a product name (like \\"trading goods\\"). ${BROWSE_HINT}" }`;
 
 const SYNTHESIS_PROMPT = `You are an SAP data analyst. Answer the user's question using ONLY the data below.
 
@@ -466,7 +472,7 @@ export async function POST(request: Request) {
         tools: [],
         material: "",
         materialName: "",
-        error: "I had trouble understanding that. Could you rephrase your question with a specific material number or name?",
+        error: `I had trouble understanding that. Could you rephrase your question with a specific material number or name? ${BROWSE_HINT}`,
       };
     }
 
@@ -477,7 +483,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         answer:
           routing.error ||
-          "Please include a material number or product name in your question — for example, 'What's the stock for TG10?'",
+          `Please include a material number or product name in your question — for example, "What's the stock for TG10?" ${BROWSE_HINT}`,
         data: {},
       });
     }
@@ -503,7 +509,7 @@ export async function POST(request: Request) {
       // router LLM misclassifies it.
       if (GENERIC_TERM_BLOCKLIST.has(nameQuery.toLowerCase())) {
         return NextResponse.json({
-          answer: `"${nameQuery}" is too generic to search for — there's no tool to list every material in SAP. Try a specific product name (e.g. "trading goods") or the exact material number (e.g. TG10).`,
+          answer: `"${nameQuery}" is too generic to search for — there's no chat tool to list every material in SAP. Try a specific product name (e.g. "trading goods") or the exact material number (e.g. TG10). ${BROWSE_HINT}`,
           data: {},
         });
       }
