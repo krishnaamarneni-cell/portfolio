@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect, type FormEvent } from "react";
-import { FiSend, FiBox, FiTruck, FiActivity, FiArrowLeft, FiAlertTriangle } from "react-icons/fi";
+import { FiSend, FiBox, FiTruck, FiActivity, FiArrowLeft, FiAlertTriangle, FiList } from "react-icons/fi";
 import Link from "next/link";
+import MaterialBrowser from "./MaterialBrowser";
 
 /* ════════════════════ Types ════════════════════ */
 
@@ -314,6 +315,7 @@ export default function SapChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -392,21 +394,31 @@ export default function SapChat() {
       <div className="flex flex-col h-[100dvh]">
         {/* ── Header ── */}
         <header className="shrink-0 px-4 sm:px-6 pt-6 pb-4 border-b border-[var(--border)]">
-          <div className="max-w-3xl mx-auto">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors mb-3"
+          <div className="max-w-3xl mx-auto flex items-start justify-between gap-3">
+            <div>
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors mb-3"
+              >
+                <FiArrowLeft size={14} /> Back
+              </Link>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+                <span className="text-gradient">SAP</span>{" "}
+                <span className="text-[var(--text-primary)]">AI Assistant</span>
+              </h1>
+              <p className="text-sm text-[var(--text-muted)] mt-1">
+                One agent, multiple tools — ask questions about SAP data in plain
+                English
+              </p>
+            </div>
+            <button
+              onClick={() => setBrowserOpen(true)}
+              className="shrink-0 flex items-center gap-1.5 text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)]/40 transition-colors whitespace-nowrap"
             >
-              <FiArrowLeft size={14} /> Back
-            </Link>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              <span className="text-gradient">SAP</span>{" "}
-              <span className="text-[var(--text-primary)]">AI Assistant</span>
-            </h1>
-            <p className="text-sm text-[var(--text-muted)] mt-1">
-              One agent, multiple tools — ask questions about SAP data in plain
-              English
-            </p>
+              <FiList size={14} />
+              <span className="hidden sm:inline">Browse materials</span>
+              <span className="sm:hidden">Browse</span>
+            </button>
           </div>
         </header>
 
@@ -536,6 +548,16 @@ export default function SapChat() {
           </div>
         </div>
       </div>
+
+      {browserOpen && (
+        <MaterialBrowser
+          onClose={() => setBrowserOpen(false)}
+          onSelect={(material) => {
+            setBrowserOpen(false);
+            send(`What's the stock for ${material}?`);
+          }}
+        />
+      )}
     </>
   );
 }
