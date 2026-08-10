@@ -292,6 +292,96 @@ async function getOpenPOs(material: string, apiKey: string): Promise<ToolOutcome
   return { rows: [] };
 }
 
+/**
+ * resolveMaterialByName — Product Description search (OData V2, API_PRODUCT_SRV)
+ *
+ * Endpoint: /sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductDescription
+ * VERIFIED LIVE 2026-08-10:
+ *   - Entity fields: Product (key), Language (key), ProductDescription — all confirmed
+ *     against the live sandbox $metadata.
+ *   - `substringof(...)` is case-SENSITIVE on this gateway, and `tolower()` is
+ *     explicitly rejected server-side ("Function tolower is not supported").
+ *     So server-side case-insensitive filtering isn't possible.
+ *   - There are only 2,711 English-language (Language eq 'EN') description rows
+ *     total, and they all come back in a single request (no server-side paging
+ *     kicks in below that count) — small enough to cache in memory and filter
+ *     case-insensitively in JS instead of guessing case variants against SAP.
+ *
+ * Used when the router extracts a product NAME instead of a material NUMBER
+ * (e.g. "pineapple", "trading goods") — resolves it to real material number(s)
+ * before getStock/getOpenPOs can run. Ambiguous matches are surfaced to the
+ * user rather than guessed.
+ */
+type ProductDescriptionRow = { material: string; description: string };
+
+let descriptionCache: { rows: ProductDescriptionRow[]; fetchedAt: number } | null = null;
+const DESCRIPTION_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+async function fetchAllProductDescriptions(
+  apiKey: string,
+): Promise<ToolOutcome<ProductDescriptionRow>> {
+  if (descriptionCache && Date.now() - descriptionCache.fetchedAt < DESCRIPTION_CACHE_TTL_MS) {
+    return { rows: descriptionCache.rows };
+  }
+
+  const params = new URLSearchParams({
+    $filter: "Language eq 'EN'",
+    $select: "Product,ProductDescription",
+    $format: "json",
+    $top: "5000",
+  });
+  const url = `${SAP_BASE}/sap/opu/odata/sap/API_PRODUCT_SRV/A_ProductDescription?${params}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { APIKey: apiKey, Accept: "application/json" },
+      cache: "no-store",
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "network error";
+    console.error("[SAP ProductDescription] Fetch failed:", msg);
+    return { rows: [], error: `Network error: ${msg}` };
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(`[SAP ProductDescription] HTTP ${res.status}:`, body.slice(0, 500));
+    return {
+      rows: [],
+      error: `HTTP ${res.status}${res.status === 403 ? " (blocked by SAP gateway — UCON)" : ""}`,
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const json: any = await res.json();
+  const results: Record<string, unknown>[] = json?.d?.results ?? [];
+  const rows: ProductDescriptionRow[] = results.map((r) => ({
+    material: String(r.Product ?? "").trim(),
+    description: String(r.ProductDescription ?? "").trim(),
+  }));
+
+  console.log(`[SAP ProductDescription] Cached ${rows.length} EN descriptions`);
+  descriptionCache = { rows, fetchedAt: Date.now() };
+  return { rows };
+}
+
+async function resolveMaterialByName(
+  name: string,
+  apiKey: string,
+): Promise<ToolOutcome<ProductDescriptionRow>> {
+  const all = await fetchAllProductDescriptions(apiKey);
+  if (all.error) return all;
+
+  const needle = name.trim().toLowerCase();
+  const matches = all.rows
+    .filter((r) => r.description.toLowerCase().includes(needle))
+    .slice(0, 15); // cap so a broad term doesn't dump hundreds of candidates
+
+  console.log(`[SAP ProductDescription] "${name}" matched ${matches.length} materials`);
+  return { rows: matches };
+}
+
 /* ════════════════════ Programmatic Summary ════════════════════ */
 
 function computeSummary(results: ToolResults): SapSummary | undefined {
@@ -322,22 +412,27 @@ function computeSummary(results: ToolResults): SapSummary | undefined {
 
 /* ════════════════════ LLM Prompts ════════════════════ */
 
-const ROUTER_PROMPT = `You are a routing engine for an SAP data assistant. Given a user question, determine which tool(s) to call and extract the material number.
+const ROUTER_PROMPT = `You are a routing engine for an SAP data assistant. Given a user question, determine which tool(s) to call and identify the material being asked about.
 
 Available tools:
 - getStock: Query material stock levels by plant and storage location. Use when the question is about inventory, stock, quantity on hand, or material availability.
 - getOpenPOs: Query open purchase orders. Use when the question is about purchase orders, pending orders, inbound materials, or expected deliveries.
 
+The material can be identified TWO ways — pick whichever applies:
+A) A material NUMBER — a short SAP code, typically alphanumeric with no spaces, e.g. TG10, FG126, MZ-FG-R100, RM101, SG23. Put it in "material".
+B) A material NAME or description — everyday words describing the product, e.g. "pineapple", "trading goods", "the water pump", "plastic parts". Put it in "materialName". Use this whenever the text is NOT a short code — i.e. it has spaces, or reads like a product description rather than an identifier.
+Never fill both "material" and "materialName" for the same request.
+
 Rules:
-1. Extract the material number from the question. SAP material numbers are alphanumeric (examples: TG10, FG126, MZ-FG-R100, RM101, SG23).
+1. Identify the material per (A) or (B) above.
 2. If the question asks about shortage, shortfall, "am I short", or compares stock vs orders, call BOTH tools.
 3. If the question is only about stock/inventory, call only getStock.
 4. If the question is only about purchase orders/deliveries, call only getOpenPOs.
 5. Return ONLY a JSON object — no other text, no markdown fences.
 
-Schema: { "tools": ["getStock"] | ["getOpenPOs"] | ["getStock", "getOpenPOs"], "material": "<material number>" }
+Schema: { "tools": ["getStock"] | ["getOpenPOs"] | ["getStock", "getOpenPOs"], "material": "<material number or empty string>", "materialName": "<material name/description or empty string>" }
 
-If you cannot determine a material number: { "tools": [], "material": "", "error": "I couldn't identify a material number in your question. Please include a specific SAP material number like TG10 or FG126." }`;
+If you cannot identify a material number OR a material name at all: { "tools": [], "material": "", "materialName": "", "error": "I couldn't identify a material in your question. Please include a specific SAP material number (like TG10) or the product's name." }`;
 
 const SYNTHESIS_PROMPT = `You are an SAP data analyst. Answer the user's question using ONLY the data below.
 
@@ -350,7 +445,8 @@ STRICT RULES — follow these exactly:
 6. If both stock and PO data are present, compare them and give a clear assessment.
 7. Do NOT repeat the raw JSON. The data tables are shown separately in the UI.
 8. Keep your response to 2-4 sentences maximum.
-9. If a tool's data includes an "error" field, that means the live SAP API call itself failed (network issue, permission block, etc.) — this is DIFFERENT from "no records found." You MUST say the API request failed and the result could not be confirmed. NEVER say "there are no purchase orders" or "there is no stock" when an error field is present — that would misrepresent an API failure as a real business answer.`;
+9. If a tool's data includes an "error" field, that means the live SAP API call itself failed (network issue, permission block, etc.) — this is DIFFERENT from "no records found." You MUST say the API request failed and the result could not be confirmed. NEVER say "there are no purchase orders" or "there is no stock" when an error field is present — that would misrepresent an API failure as a real business answer.
+10. If "resolvedMaterial" is present in the data, the user searched by product name/description rather than material number — briefly mention which material number and description it resolved to (e.g. "TG10 (Trad.Good 10,PD,Third Party)") before answering their question.`;
 
 /* ════════════════════ Route Handler ════════════════════ */
 
@@ -409,28 +505,71 @@ export async function POST(request: Request) {
     const routerRaw = routerCompletion.choices[0]?.message?.content ?? "{}";
     console.log("[SAP Router] Output:", routerRaw);
 
-    let routing: { tools?: string[]; material?: string; error?: string };
+    let routing: { tools?: string[]; material?: string; materialName?: string; error?: string };
     try {
       routing = JSON.parse(routerRaw);
     } catch {
       routing = {
         tools: [],
         material: "",
-        error: "I had trouble understanding that. Could you rephrase your question with a specific material number?",
+        materialName: "",
+        error: "I had trouble understanding that. Could you rephrase your question with a specific material number or name?",
       };
     }
 
-    if (!routing.tools?.length || !routing.material?.trim()) {
+    const hasMaterial = !!routing.material?.trim();
+    const hasMaterialName = !!routing.materialName?.trim();
+
+    if (!routing.tools?.length || (!hasMaterial && !hasMaterialName)) {
       return NextResponse.json({
         answer:
           routing.error ||
-          "Please include a material number in your question — for example, 'What's the stock for TG10?'",
+          "Please include a material number or product name in your question — for example, 'What's the stock for TG10?'",
         data: {},
       });
     }
 
+    /* ── Step 1b: NAME RESOLUTION — only runs when the router found a name,
+     *  not a number. Deterministic, no LLM: exactly one match resolves and
+     *  the normal flow continues; zero or multiple matches short-circuit
+     *  with a direct answer, never guessing which material was meant. ── */
+    let mat: string;
+    let resolvedFrom: { name: string; description: string } | undefined;
+
+    if (hasMaterial) {
+      mat = routing.material!.trim();
+    } else {
+      const nameQuery = routing.materialName!.trim();
+      const resolution = await resolveMaterialByName(nameQuery, sapKey);
+
+      if (resolution.error) {
+        return NextResponse.json({
+          answer: `I couldn't look up "${nameQuery}" — the SAP Product API request failed: ${resolution.error}`,
+          data: {},
+        });
+      }
+      if (resolution.rows.length === 0) {
+        return NextResponse.json({
+          answer: `I couldn't find any material matching "${nameQuery}" in the sandbox. Try a different word, or use the exact material number if you know it (e.g. TG10).`,
+          data: {},
+        });
+      }
+      if (resolution.rows.length > 1) {
+        const list = resolution.rows
+          .map((r) => `${r.material} — ${r.description}`)
+          .join("\n");
+        return NextResponse.json({
+          answer: `"${nameQuery}" matches ${resolution.rows.length} materials. Which one did you mean?\n\n${list}\n\nAsk again with the material number, e.g. "What's the stock for ${resolution.rows[0].material}?"`,
+          data: {},
+        });
+      }
+
+      mat = resolution.rows[0].material;
+      resolvedFrom = { name: nameQuery, description: resolution.rows[0].description };
+      console.log(`[SAP Chat] Resolved "${nameQuery}" -> ${mat} (${resolvedFrom.description})`);
+    }
+
     /* ── Step 2: CALL SAP TOOLS (in parallel) ── */
-    const mat = routing.material.trim();
     const results: ToolResults = {};
     const toolPromises: Promise<void>[] = [];
 
@@ -455,6 +594,9 @@ export async function POST(request: Request) {
     const summary = computeSummary(results);
 
     /* ── Step 4: SYNTHESIS — ground answer in raw data (LLM call #2) ── */
+    const synthesisData = resolvedFrom
+      ? { resolvedMaterial: resolvedFrom, ...results }
+      : results;
     const synthCompletion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       temperature: 0.2,
@@ -463,7 +605,7 @@ export async function POST(request: Request) {
         { role: "system", content: SYNTHESIS_PROMPT },
         {
           role: "user",
-          content: `Question: ${message}\n\nRAW DATA FROM SAP APIS:\n${JSON.stringify(results, null, 2)}`,
+          content: `Question: ${message}\n\nRAW DATA FROM SAP APIS:\n${JSON.stringify(synthesisData, null, 2)}`,
         },
       ],
     });
@@ -481,6 +623,7 @@ export async function POST(request: Request) {
         pos: results.pos?.rows,
         posError: results.pos?.error,
         summary,
+        resolvedFrom,
       },
     });
   } catch (err) {

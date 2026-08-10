@@ -40,6 +40,7 @@ type MessageData = {
   pos?: PORow[];
   posError?: string;
   summary?: SapSummary;
+  resolvedFrom?: { name: string; description: string };
 };
 
 type ChatMessage = {
@@ -441,6 +442,18 @@ export default function SapChat() {
                       : "max-w-[90%] sm:max-w-[80%] rounded-2xl rounded-bl-md bg-[var(--bg-card)] border border-[var(--border)] px-4 py-3"
                   }`}
                 >
+                  {/* Name-search resolution — shown when the question used a
+                      product name/description instead of a material number */}
+                  {msg.data?.resolvedFrom && (
+                    <div className="mb-3 text-[11px] font-mono text-[var(--text-muted)]">
+                      &ldquo;{msg.data.resolvedFrom.name}&rdquo; →{" "}
+                      <span className="text-[var(--accent)]">
+                        {msg.data.stock?.[0]?.material || msg.data.pos?.[0]?.material}
+                      </span>{" "}
+                      — {msg.data.resolvedFrom.description}
+                    </div>
+                  )}
+
                   {/* Summary cards */}
                   {msg.data?.summary && (
                     <SummaryCards summary={msg.data.summary} />
