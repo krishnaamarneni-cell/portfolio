@@ -51,6 +51,23 @@ type ToolResults = {
 
 const SAP_BASE = "https://sandbox.api.sap.com/s4hanacloud";
 
+// Bare ERP category nouns — never valid as a specific product-name search.
+// Someone asking "list of materials" or "how many items do we have" is asking
+// a meta-question with no matching tool, not naming a product.
+const GENERIC_TERM_BLOCKLIST = new Set([
+  "material",
+  "materials",
+  "product",
+  "products",
+  "item",
+  "items",
+  "stock",
+  "inventory",
+  "goods",
+  "everything",
+  "all",
+]);
+
 /**
  * getStock — Material Stock API (OData V2)
  *
@@ -420,11 +437,15 @@ Available tools:
 
 The material can be identified TWO ways — pick whichever applies:
 A) A material NUMBER — a short SAP code, typically alphanumeric with no spaces, e.g. TG10, FG126, MZ-FG-R100, RM101, SG23. Put it in "material".
-B) A material NAME or description — everyday words describing the product, e.g. "pineapple", "trading goods", "the water pump", "plastic parts". Put it in "materialName". Use this whenever the text is NOT a short code — i.e. it has spaces, or reads like a product description rather than an identifier.
+B) A material NAME or description — SPECIFIC everyday words naming a real product, e.g. "pineapple", "trading goods", "the water pump", "plastic parts". Put it in "materialName". Use this whenever the text is NOT a short code — i.e. it has spaces, or reads like a product description rather than an identifier.
 Never fill both "material" and "materialName" for the same request.
 
+CRITICAL — do NOT extract a materialName from a META-question that has no specific product in it:
+- "list of materials" / "what materials do we have" / "how many materials exist" / "show me all products" / "list everything in stock" — these are asking for an inventory-wide listing, which no tool supports. Leave BOTH "material" and "materialName" empty and use the error response below.
+- Only put something in "materialName" when the user names an actual, specific product (a real word like "pineapple", "pump", "trading goods" — not a bare category noun like "material", "materials", "product", "item", "stock", "inventory", or "goods" used alone).
+
 Rules:
-1. Identify the material per (A) or (B) above.
+1. Identify the material per (A) or (B) above, respecting the CRITICAL rule.
 2. If the question asks about shortage, shortfall, "am I short", or compares stock vs orders, call BOTH tools.
 3. If the question is only about stock/inventory, call only getStock.
 4. If the question is only about purchase orders/deliveries, call only getOpenPOs.
@@ -432,7 +453,7 @@ Rules:
 
 Schema: { "tools": ["getStock"] | ["getOpenPOs"] | ["getStock", "getOpenPOs"], "material": "<material number or empty string>", "materialName": "<material name/description or empty string>" }
 
-If you cannot identify a material number OR a material name at all: { "tools": [], "material": "", "materialName": "", "error": "I couldn't identify a material in your question. Please include a specific SAP material number (like TG10) or the product's name." }`;
+If you cannot identify a specific material number OR material name (including meta-questions per the CRITICAL rule above): { "tools": [], "material": "", "materialName": "", "error": "I couldn't identify a specific material in your question — there's no tool to list every material in SAP. Please include a specific material number (like TG10) or a product name (like \\"trading goods\\")." }`;
 
 const SYNTHESIS_PROMPT = `You are an SAP data analyst. Answer the user's question using ONLY the data below.
 
@@ -540,6 +561,21 @@ export async function POST(request: Request) {
       mat = routing.material!.trim();
     } else {
       const nameQuery = routing.materialName!.trim();
+
+      // Defense-in-depth against the router misreading a meta-question
+      // ("list of materials", "how many materials do we have") as a product
+      // name search — a bare category word will coincidentally substring-match
+      // some real description (verified live: "materials" alone matched "Oil
+      // contaminated operating materials", a false single-match resolution).
+      // Caught here deterministically so it can't slip through even if the
+      // router LLM misclassifies it.
+      if (GENERIC_TERM_BLOCKLIST.has(nameQuery.toLowerCase())) {
+        return NextResponse.json({
+          answer: `"${nameQuery}" is too generic to search for — there's no tool to list every material in SAP. Try a specific product name (e.g. "trading goods") or the exact material number (e.g. TG10).`,
+          data: {},
+        });
+      }
+
       const resolution = await resolveMaterialByName(nameQuery, sapKey);
 
       if (resolution.error) {
