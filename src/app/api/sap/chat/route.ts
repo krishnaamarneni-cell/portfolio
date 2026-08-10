@@ -173,6 +173,32 @@ async function answerMetaQuery(
 }
 
 /**
+ * Finds a token that looks like a material code — any word containing a digit
+ * alongside letters/underscores/hyphens (TG10, CH_C_107, chc107, FG126).
+ *
+ * CASE-INSENSITIVE deliberately: a case-sensitive version silently missed
+ * "chc107" in "HOW MANY OPEN pos we have for chc107", so the message was
+ * treated as a sandbox-wide count question instead of a lookup for that
+ * material. A bare number ("top 5") needs 2+ chars to match, so counts and
+ * limits aren't mistaken for codes.
+ */
+function extractMaterialCodeCandidate(message: string): string | undefined {
+  const match = message.match(/\b[a-z0-9][a-z0-9_-]*\d[a-z0-9_-]*\b/i);
+  return match?.[0];
+}
+
+/** Infers which tools a message wants, used when a meta-classification is
+ *  overridden because the message actually names a material. */
+function inferToolsFromMessage(message: string): string[] {
+  const m = message.toLowerCase();
+  const wantsPo = /\b(po|pos|purchase order|purchase orders|delivery|deliveries|inbound|ordered)\b/.test(m);
+  const wantsStock = /\b(stock|inventory|on hand|available|quantity|qty)\b/.test(m);
+  if (wantsPo && !wantsStock) return ["getOpenPOs"];
+  if (wantsStock && !wantsPo) return ["getStock"];
+  return ["getStock", "getOpenPOs"];
+}
+
+/**
  * Fast-path detector for the most common catalog-count phrasings, so the
  * obvious cases skip both LLM calls. The router (which tolerates typos and
  * paraphrases far better than a regex — real messages included "materail"
@@ -182,7 +208,7 @@ async function answerMetaQuery(
 function detectMetaQueryFast(message: string): MetaQueryKind | undefined {
   const m = message.toLowerCase();
   // A specific material code means they want THAT material, not a catalog stat.
-  if (/\b[A-Z0-9][A-Z0-9_-]*\d[A-Z0-9_-]*\b/.test(message)) return undefined;
+  if (extractMaterialCodeCandidate(message)) return undefined;
 
   const asksQuantity = /\b(how many|how much|number of|count of|total)\b/.test(m);
   if (!asksQuantity) return undefined;
@@ -434,6 +460,39 @@ async function getOpenPOs(material: string, apiKey: string): Promise<ToolOutcome
 }
 
 /**
+ * canonicaliseMaterialCode — maps a user-typed code onto the real SAP one.
+ *
+ * SAP material numbers are exact strings, but people type them without
+ * punctuation or in the wrong case ("chc107" for "CH_C_107"), which would
+ * otherwise query a material that doesn't exist and honestly-but-uselessly
+ * report no data. Compares on a normalised form (strip non-alphanumerics,
+ * uppercase) against the cached catalog and returns SAP's canonical spelling.
+ *
+ * Returns the input unchanged if the catalog can't be reached or nothing
+ * matches — callers then query it as typed rather than silently substituting
+ * some other material.
+ */
+async function canonicaliseMaterialCode(input: string, apiKey: string): Promise<string> {
+  const normalise = (s: string) => s.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  const target = normalise(input);
+  if (!target) return input;
+
+  const catalog = await fetchAllProductDescriptions(apiKey);
+  if (catalog.error || catalog.rows.length === 0) return input;
+
+  // Exact match wins outright — never rewrite a code SAP already knows.
+  if (catalog.rows.some((r) => r.material === input)) return input;
+
+  const matches = catalog.rows.filter((r) => normalise(r.material) === target);
+  // Only rewrite when it's unambiguous; multiple hits means we'd be guessing.
+  if (matches.length === 1) {
+    console.log(`[SAP Chat] Canonicalised material "${input}" -> "${matches[0].material}"`);
+    return matches[0].material;
+  }
+  return input;
+}
+
+/**
  * resolveMaterialByName — case-insensitive search over the cached product
  * description list (see src/lib/sap-product-cache.ts for the SAP API details:
  * `substringof(...)` is case-sensitive on this gateway and `tolower()` is
@@ -503,7 +562,7 @@ Never fill both "material" and "materialName" for the same request.
 
 CRITICAL — a META-question is about the DATASET, not about one product. These are answered separately, so set "metaQuery" and leave BOTH "material" and "materialName" empty:
 - "how many materials do we have" / "list of materials" / "total materials in sap" / "what materials exist" → metaQuery: "materialCount"
-- "how many open POs do we have" / "total purchase orders" / "how many POs are there" (with NO specific material named) → metaQuery: "poCount"
+- "how many open POs do we have" / "total purchase orders" / "how many POs are there" → metaQuery: "poCount". BUT ONLY if the question names NO material at all. "How many open POs do we have for CH_C_107" names a material, so it is NOT a meta-question — it is a normal getOpenPOs lookup for CH_C_107. If ANY material code appears anywhere in the message (e.g. TG10, CH_C_107, chc107, FG126), NEVER use metaQuery — always treat it as a lookup for that material.
 - "list me any 5 materials" / "give me the top 5 material numbers" / "show me some materials" / "give me examples" → metaQuery: "listMaterials", and put the requested count in "limit" (default 5 if unstated)
 Users often misspell these ("materail", "materails", "meterials") — match on intent, not exact spelling.
 Only put something in "materialName" when the user names an actual, specific product (a real word like "pineapple", "pump", "trading goods" — not a bare category noun like "material", "materials", "product", "item", "stock", "inventory", or "goods" used alone).
@@ -630,7 +689,25 @@ export async function POST(request: Request) {
      *  detector deliberately doesn't, e.g. "list me any 5 materails". The LLM
      *  only classifies intent; every number in the answer still comes from a
      *  deterministic SAP call. ── */
-    const routedMeta = routing.metaQuery?.trim();
+    let routedMeta = routing.metaQuery?.trim();
+
+    // Guard: the small router model classifies "how many open POs we have
+    // CH_C_107" as a sandbox-wide poCount, ignoring the named material — which
+    // answers a question the user didn't ask with a much bigger number. If the
+    // message names a material, a whole-dataset count is never what they meant,
+    // so override the classification and look that material up instead.
+    if (routedMeta === "materialCount" || routedMeta === "poCount") {
+      const codeInMessage = extractMaterialCodeCandidate(message);
+      if (codeInMessage) {
+        console.log(
+          `[SAP Chat] Overriding metaQuery "${routedMeta}" — message names material "${codeInMessage}"`,
+        );
+        routedMeta = "";
+        if (!routing.material?.trim()) routing.material = codeInMessage;
+        if (!routing.tools?.length) routing.tools = inferToolsFromMessage(message);
+      }
+    }
+
     if (
       routedMeta === "materialCount" ||
       routedMeta === "poCount" ||
@@ -667,7 +744,9 @@ export async function POST(request: Request) {
     let resolvedFrom: { name: string; description: string } | undefined;
 
     if (hasMaterial) {
-      mat = routing.material!.trim();
+      // Canonicalise first — users type "chc107" for "CH_C_107", and querying
+      // the typed form would report "no data" for a material that does exist.
+      mat = await canonicaliseMaterialCode(routing.material!.trim(), sapKey);
     } else {
       const nameQuery = routing.materialName!.trim();
 
