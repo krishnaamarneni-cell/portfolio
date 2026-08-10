@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, type FormEvent } from "react";
-import { FiSend, FiBox, FiTruck, FiActivity, FiArrowLeft } from "react-icons/fi";
+import { FiSend, FiBox, FiTruck, FiActivity, FiArrowLeft, FiAlertTriangle } from "react-icons/fi";
 import Link from "next/link";
 
 /* ════════════════════ Types ════════════════════ */
@@ -36,7 +36,9 @@ type SapSummary = {
 
 type MessageData = {
   stock?: StockRow[];
+  stockError?: string;
   pos?: PORow[];
+  posError?: string;
   summary?: SapSummary;
 };
 
@@ -265,6 +267,22 @@ function POTable({ rows }: { rows: PORow[] }) {
   );
 }
 
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div
+      className="flex items-start gap-2 rounded-lg px-3 py-2.5 mb-3 text-xs"
+      style={{
+        background: "rgba(245,158,11,0.1)",
+        border: "1px solid rgba(245,158,11,0.25)",
+        color: "#f59e0b",
+      }}
+    >
+      <FiAlertTriangle size={14} className="shrink-0 mt-0.5" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
 function TypingIndicator() {
   return (
     <div className="flex items-start gap-3 mb-4">
@@ -426,6 +444,14 @@ export default function SapChat() {
                   {/* Summary cards */}
                   {msg.data?.summary && (
                     <SummaryCards summary={msg.data.summary} />
+                  )}
+
+                  {/* API error banners — a failed live call, distinct from a genuinely empty result */}
+                  {msg.data?.stockError && (
+                    <ErrorBanner message={`Stock lookup failed: ${msg.data.stockError}`} />
+                  )}
+                  {msg.data?.posError && (
+                    <ErrorBanner message={`Purchase order lookup failed: ${msg.data.posError}`} />
                   )}
 
                   {/* Answer text */}

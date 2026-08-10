@@ -33,9 +33,18 @@ type SapSummary = {
   status: "Healthy" | "Low" | "Critical";
 };
 
+type ToolOutcome<T> = {
+  rows: T[];
+  /** Set only when every candidate call failed at the HTTP level — a real
+   *  API error, distinct from a genuinely empty (200 OK, zero rows) result.
+   *  Kept separate so the synthesis LLM never conflates "API failed" with
+   *  "no data exists" — see SYNTHESIS_PROMPT rule 9. */
+  error?: string;
+};
+
 type ToolResults = {
-  stock?: StockRow[];
-  pos?: PORow[];
+  stock?: ToolOutcome<StockRow>;
+  pos?: ToolOutcome<PORow>;
 };
 
 /* ════════════════════ SAP API Tools ════════════════════ */
@@ -60,11 +69,13 @@ const SAP_BASE = "https://sandbox.api.sap.com/s4hanacloud";
  * Material numbers may be zero-padded to 18 characters; we try raw first,
  * then padded, and return the first match.
  */
-async function getStock(material: string, apiKey: string): Promise<StockRow[]> {
+async function getStock(material: string, apiKey: string): Promise<ToolOutcome<StockRow>> {
   const candidates = [material];
   // SAP stores material numbers zero-padded to 18 chars — try both forms
   const padded = material.padStart(18, "0");
   if (padded !== material) candidates.push(padded);
+
+  const httpErrors: string[] = [];
 
   for (const mat of candidates) {
     const params = new URLSearchParams({
@@ -73,14 +84,23 @@ async function getStock(material: string, apiKey: string): Promise<StockRow[]> {
     });
     const url = `${SAP_BASE}/sap/opu/odata/sap/API_MATERIAL_STOCK_SRV/A_MatlStkInAcctMod?${params}`;
 
-    const res = await fetch(url, {
-      headers: { APIKey: apiKey, Accept: "application/json" },
-      cache: "no-store",
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: { APIKey: apiKey, Accept: "application/json" },
+        cache: "no-store",
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "network error";
+      console.error(`[SAP Stock] Fetch failed for "${mat}":`, msg);
+      httpErrors.push(`Network error: ${msg}`);
+      continue;
+    }
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       console.error(`[SAP Stock] HTTP ${res.status} for "${mat}":`, body);
+      httpErrors.push(`HTTP ${res.status}${res.status === 403 ? " (blocked by SAP gateway — UCON)" : ""}`);
       continue;
     }
 
@@ -91,116 +111,202 @@ async function getStock(material: string, apiKey: string): Promise<StockRow[]> {
     if (results.length > 0) {
       console.log("[SAP Stock] Raw JSON:", JSON.stringify(results, null, 2));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return results.map((r: any) => ({
-        material: (r.Material ?? "").trim(),
-        plant: (r.Plant ?? "").trim(),
-        storageLocation: (r.StorageLocation ?? "").trim(),
-        quantity: parseFloat(r.MatlWrhsStkQtyInMatlBaseUnit) || 0,
-        unit: (r.MaterialBaseUnit ?? "EA").trim(),
-      }));
+      return {
+        rows: results.map((r: any) => ({
+          material: (r.Material ?? "").trim(),
+          plant: (r.Plant ?? "").trim(),
+          storageLocation: (r.StorageLocation ?? "").trim(),
+          quantity: parseFloat(r.MatlWrhsStkQtyInMatlBaseUnit) || 0,
+          unit: (r.MaterialBaseUnit ?? "EA").trim(),
+        })),
+      };
     }
+    // 200 OK with zero rows — genuinely no stock for this candidate. Keep trying
+    // the other candidate form, but this is NOT an error.
+  }
+
+  if (httpErrors.length === candidates.length) {
+    // Every single attempt failed at the HTTP level — a real API error, not
+    // an empty result. Surface it distinctly so downstream code never claims
+    // "no stock" when the truth is "the API call failed."
+    const error = `SAP Material Stock API request failed — ${httpErrors[httpErrors.length - 1]}`;
+    console.log(`[SAP Stock] All candidates failed for "${material}": ${error}`);
+    return { rows: [], error };
   }
 
   console.log(`[SAP Stock] No results for material "${material}"`);
-  return [];
+  return { rows: [] };
 }
 
 /**
- * getOpenPOs — Purchase Order API (OData V4, CE_PURCHASEORDER_0001)
+ * getOpenPOs — Purchase Order API
  *
- * Endpoint: /sap/opu/odata4/sap/api_purchaseorder/srvd_a2x/sap/purchaseorder/0001/PurchaseOrderItem
- * Filter:   Material eq '<material>'
- * Auth:     APIKey header
+ * PRIMARY — OData V2 (API_PURCHASEORDER_PROCESS_SRV / A_PurchaseOrderItem):
+ *   Endpoint: /sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV/A_PurchaseOrderItem
+ *   VERIFIED LIVE 2026-08-10: HTTP 200, real data. Material TG10 alone has
+ *   425 historical PO line items in the shared public sandbox — filtering
+ *   on `IsCompletelyDelivered eq false` narrows that to the 10 that are
+ *   genuinely still open (also verified live). Without that filter every
+ *   historical order ever placed against the material comes back, which is
+ *   not what "open POs" means.
  *
- * OData V4 field names (from SAP API Business Hub Try-Out tab):
- *   PurchaseOrder            — PO document number
- *   PurchaseOrderItem        — Line item number
- *   Material                 — Material number
- *   PurchaseOrderItemText    — Item description
- *   OrderQuantity            — Order quantity (Edm.Decimal)
- *   PurchaseOrderQuantityUnit— Unit of measure
- *   Plant                    — Receiving plant
- *   NetPriceAmount           — Net price (Edm.Decimal)
- *   DocumentCurrency         — Currency code
+ * FALLBACK — OData V4 (CE_PURCHASEORDER_0001):
+ *   Endpoint: /sap/opu/odata4/sap/api_purchaseorder/srvd_a2x/sap/purchaseorder/0001/PurchaseOrderItem
+ *   NOTE: verified live against the sandbox on 2026-08-10 — this endpoint
+ *   returns "403 Forbidden — blocked by UCON" (SAP's own connectivity
+ *   whitelist rejects the request before it reaches application data).
+ *   Kept as a fallback only, in case a given sandbox tenant enables it.
  *
- * Navigation property _PurchaseOrderScheduleLine contains:
- *   ScheduleLineDeliveryDate    — Expected delivery date
- *   ScheduleLineOrderQuantity   — Scheduled quantity
+ * Field names (from SAP API Business Hub Try-Out tab — same underlying CDS
+ * view backs both V2 and V4, so property names match):
+ *   PurchaseOrder             — PO document number
+ *   PurchaseOrderItem         — Line item number
+ *   Material                  — Material number
+ *   PurchaseOrderItemText     — Item description
+ *   OrderQuantity             — Order quantity (Edm.Decimal)
+ *   PurchaseOrderQuantityUnit — Unit of measure
+ *   Plant                     — Receiving plant
+ *   NetPriceAmount            — Net price (Edm.Decimal)
+ *   DocumentCurrency          — Currency code
  *
- * V4 returns  { value: [...] }.
+ * Navigation to schedule lines differs by version — V2 nav property name
+ * isn't 100% verified, so $expand is attempted and silently dropped on
+ * failure (delivery date then shows "N/A" rather than failing the request).
+ *
+ * V2 wraps results in { d: { results: [...] } }; V4 returns { value: [...] }.
  */
-async function getOpenPOs(material: string, apiKey: string): Promise<PORow[]> {
+type PoAttempt = { url: string; version: "v2" | "v4" };
+
+function buildPoAttempts(mat: string): PoAttempt[] {
+  const v2Select = [
+    "PurchaseOrder",
+    "PurchaseOrderItem",
+    "Material",
+    "PurchaseOrderItemText",
+    "OrderQuantity",
+    "PurchaseOrderQuantityUnit",
+    "Plant",
+    "NetPriceAmount",
+    "DocumentCurrency",
+    "IsCompletelyDelivered",
+  ].join(",");
+  // "Open" means not yet fully delivered — without this filter TG10 alone
+  // returns 425 historical line items (verified live 2026-08-10); only 10
+  // of those are actually pending delivery.
+  const v2Params = new URLSearchParams({
+    $filter: `Material eq '${mat}' and IsCompletelyDelivered eq false`,
+    $select: v2Select,
+    $format: "json",
+  });
+  const v2Url = `${SAP_BASE}/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV/A_PurchaseOrderItem?${v2Params}`;
+
+  const v4Select = v2Select;
+  const v4Expand =
+    "_PurchaseOrderScheduleLine($select=ScheduleLineDeliveryDate,ScheduleLineOrderQuantity)";
+  const v4Params = new URLSearchParams({
+    $filter: `Material eq '${mat}'`,
+    $select: v4Select,
+    $expand: v4Expand,
+  });
+  const v4Url = `${SAP_BASE}/sap/opu/odata4/sap/api_purchaseorder/srvd_a2x/sap/purchaseorder/0001/PurchaseOrderItem?${v4Params}`;
+
+  return [
+    { url: v2Url, version: "v2" },
+    { url: v4Url, version: "v4" },
+  ];
+}
+
+function parsePoRow(r: Record<string, unknown>): PORow {
+  const num = (v: unknown) => parseFloat(String(v ?? "")) || 0;
+  const str = (v: unknown) => String(v ?? "").trim();
+  const scheduleLine = r._PurchaseOrderScheduleLine as
+    | { ScheduleLineDeliveryDate?: string }[]
+    | undefined;
+  return {
+    poNumber: str(r.PurchaseOrder),
+    item: str(r.PurchaseOrderItem),
+    material: str(r.Material),
+    description: str(r.PurchaseOrderItemText),
+    orderQuantity: num(r.OrderQuantity),
+    unit: str(r.PurchaseOrderQuantityUnit) || "EA",
+    plant: str(r.Plant),
+    netPrice: num(r.NetPriceAmount),
+    currency: str(r.DocumentCurrency) || "USD",
+    deliveryDate: scheduleLine?.[0]?.ScheduleLineDeliveryDate || "N/A",
+  };
+}
+
+async function getOpenPOs(material: string, apiKey: string): Promise<ToolOutcome<PORow>> {
   const candidates = [material];
   const padded = material.padStart(18, "0");
   if (padded !== material) candidates.push(padded);
 
+  const httpErrors: string[] = [];
+  let attemptCount = 0;
+
   for (const mat of candidates) {
-    const select = [
-      "PurchaseOrder",
-      "PurchaseOrderItem",
-      "Material",
-      "PurchaseOrderItemText",
-      "OrderQuantity",
-      "PurchaseOrderQuantityUnit",
-      "Plant",
-      "NetPriceAmount",
-      "DocumentCurrency",
-    ].join(",");
-    const expand =
-      "_PurchaseOrderScheduleLine($select=ScheduleLineDeliveryDate,ScheduleLineOrderQuantity)";
+    for (const attempt of buildPoAttempts(mat)) {
+      attemptCount++;
+      let res: Response;
+      try {
+        res = await fetch(attempt.url, {
+          headers: { APIKey: apiKey, Accept: "application/json" },
+          cache: "no-store",
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "network error";
+        console.error(`[SAP POs] Fetch failed (${attempt.version}) for "${mat}":`, msg);
+        httpErrors.push(`Network error: ${msg}`);
+        continue;
+      }
 
-    const params = new URLSearchParams({
-      $filter: `Material eq '${mat}'`,
-      $select: select,
-      $expand: expand,
-    });
-    const url = `${SAP_BASE}/sap/opu/odata4/sap/api_purchaseorder/srvd_a2x/sap/purchaseorder/0001/PurchaseOrderItem?${params}`;
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error(`[SAP POs] HTTP ${res.status} (${attempt.version}) for "${mat}":`, body.slice(0, 500));
+        httpErrors.push(
+          `HTTP ${res.status}${res.status === 403 ? " (blocked by SAP gateway — UCON)" : ""} on ${attempt.version.toUpperCase()}`,
+        );
+        continue;
+      }
 
-    const res = await fetch(url, {
-      headers: { APIKey: apiKey, Accept: "application/json" },
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[SAP POs] HTTP ${res.status} for "${mat}":`, body);
-      continue;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json: any = await res.json();
-    const results: unknown[] = json?.value ?? [];
-
-    if (results.length > 0) {
-      console.log("[SAP POs] Raw JSON:", JSON.stringify(results, null, 2));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return results.map((r: any) => ({
-        poNumber: (r.PurchaseOrder ?? "").trim(),
-        item: (r.PurchaseOrderItem ?? "").trim(),
-        material: (r.Material ?? "").trim(),
-        description: (r.PurchaseOrderItemText ?? "").trim(),
-        orderQuantity: parseFloat(r.OrderQuantity) || 0,
-        unit: (r.PurchaseOrderQuantityUnit ?? "EA").trim(),
-        plant: (r.Plant ?? "").trim(),
-        netPrice: parseFloat(r.NetPriceAmount) || 0,
-        currency: (r.DocumentCurrency ?? "USD").trim(),
-        deliveryDate:
-          r._PurchaseOrderScheduleLine?.[0]?.ScheduleLineDeliveryDate || "N/A",
-      }));
+      const json: any = await res.json();
+      const results: Record<string, unknown>[] =
+        attempt.version === "v2" ? (json?.d?.results ?? []) : (json?.value ?? []);
+
+      if (results.length > 0) {
+        console.log(`[SAP POs] Raw JSON (${attempt.version}):`, JSON.stringify(results, null, 2));
+        return { rows: results.map(parsePoRow) };
+      }
+      // 200 OK, zero rows — genuinely no open POs for this candidate/version.
     }
   }
 
+  if (httpErrors.length === attemptCount) {
+    const error = `SAP Purchase Order API request failed — ${httpErrors[httpErrors.length - 1]}`;
+    console.log(`[SAP POs] All attempts failed for "${material}": ${error}`);
+    return { rows: [], error };
+  }
+
   console.log(`[SAP POs] No results for material "${material}"`);
-  return [];
+  return { rows: [] };
 }
 
 /* ════════════════════ Programmatic Summary ════════════════════ */
 
 function computeSummary(results: ToolResults): SapSummary | undefined {
-  const stock = results.stock ?? [];
-  const pos = results.pos ?? [];
+  const stock = results.stock?.rows ?? [];
+  const pos = results.pos?.rows ?? [];
 
   if (stock.length === 0 && pos.length === 0) return undefined;
+
+  // If a queried source failed at the API level and came back with zero
+  // rows, that zero is unreliable — it means "we don't know," not "confirmed
+  // zero." Suppress the summary cards entirely rather than show a number
+  // that could be mistaken for real data; the inline error banner explains why.
+  const stockUnreliable = !!results.stock?.error && stock.length === 0;
+  const posUnreliable = !!results.pos?.error && pos.length === 0;
+  if (stockUnreliable || posUnreliable) return undefined;
 
   const totalOnHand = stock.reduce((sum, r) => sum + r.quantity, 0);
   const totalInbound = pos.reduce((sum, r) => sum + r.orderQuantity, 0);
@@ -243,7 +349,8 @@ STRICT RULES — follow these exactly:
 5. When mentioning quantities, always include the unit and location (plant/storage location).
 6. If both stock and PO data are present, compare them and give a clear assessment.
 7. Do NOT repeat the raw JSON. The data tables are shown separately in the UI.
-8. Keep your response to 2-4 sentences maximum.`;
+8. Keep your response to 2-4 sentences maximum.
+9. If a tool's data includes an "error" field, that means the live SAP API call itself failed (network issue, permission block, etc.) — this is DIFFERENT from "no records found." You MUST say the API request failed and the result could not be confirmed. NEVER say "there are no purchase orders" or "there is no stock" when an error field is present — that would misrepresent an API failure as a real business answer.`;
 
 /* ════════════════════ Route Handler ════════════════════ */
 
@@ -329,15 +436,15 @@ export async function POST(request: Request) {
 
     if (routing.tools.includes("getStock")) {
       toolPromises.push(
-        getStock(mat, sapKey).then((rows) => {
-          results.stock = rows;
+        getStock(mat, sapKey).then((outcome) => {
+          results.stock = outcome;
         }),
       );
     }
     if (routing.tools.includes("getOpenPOs")) {
       toolPromises.push(
-        getOpenPOs(mat, sapKey).then((rows) => {
-          results.pos = rows;
+        getOpenPOs(mat, sapKey).then((outcome) => {
+          results.pos = outcome;
         }),
       );
     }
@@ -368,7 +475,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       answer,
-      data: { stock: results.stock, pos: results.pos, summary },
+      data: {
+        stock: results.stock?.rows,
+        stockError: results.stock?.error,
+        pos: results.pos?.rows,
+        posError: results.pos?.error,
+        summary,
+      },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "An unexpected error occurred";
