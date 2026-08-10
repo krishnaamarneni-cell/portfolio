@@ -15,6 +15,7 @@ export default function MaterialBrowser({
   onClose: () => void;
 }) {
   const [materials, setMaterials] = useState<MaterialRow[] | null>(null);
+  const [totalInCatalog, setTotalInCatalog] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -31,6 +32,7 @@ export default function MaterialBrowser({
           setError(json.error);
         } else {
           setMaterials(json.materials ?? []);
+          setTotalInCatalog(json.totalInCatalog ?? null);
         }
       })
       .catch(() => {
@@ -76,7 +78,11 @@ export default function MaterialBrowser({
             </h2>
             <p className="text-xs text-[var(--text-muted)] mt-0.5">
               {materials
-                ? `${materials.length.toLocaleString()} materials in the sandbox catalog`
+                ? `${materials.length.toLocaleString()} materials with live stock data${
+                    totalInCatalog
+                      ? ` (of ${totalInCatalog.toLocaleString()} in the sandbox's master data)`
+                      : ""
+                  }`
                 : "Loading catalog…"}
             </p>
           </div>

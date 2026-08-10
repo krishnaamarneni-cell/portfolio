@@ -67,7 +67,8 @@ const GENERIC_TERM_BLOCKLIST = new Set([
 // meta-questions ("how many materials do we have") get pointed at the one
 // place that actually answers that — the Browse materials panel — instead
 // of just being told no.
-const BROWSE_HINT = "Click \"Browse materials\" above to see the full catalog.";
+const BROWSE_HINT =
+  "Click \"Browse materials\" above to see which materials actually have live stock data.";
 
 /**
  * getStock — Material Stock API (OData V2)
