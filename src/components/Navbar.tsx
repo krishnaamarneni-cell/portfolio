@@ -12,6 +12,7 @@ const navLinks = [
   { name: "Skills", href: "/#skills", id: "skills" },
   { name: "Projects", href: "/#projects", id: "projects" },
   { name: "Systems", href: "/systems", id: "systems" },
+  { name: "SAP", href: "/sap", id: "sap" },
   { name: "Book", href: "/#book", id: "book" },
   { name: "Notes", href: "/notes", id: "notes" },
 ];
@@ -65,6 +66,11 @@ export default function Navbar() {
     }
     if (pathname?.startsWith("/systems")) {
       setActive("systems");
+      setVisible(true);
+      return;
+    }
+    if (pathname?.startsWith("/sap")) {
+      setActive("sap");
       setVisible(true);
       return;
     }
