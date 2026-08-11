@@ -62,6 +62,18 @@ type SapSummary = {
   statusReason: string;
 };
 
+type PoDetail = {
+  poNumber: string;
+  poType: string;
+  supplier: string;
+  orderDate: string;
+  currency: string;
+  purchasingOrg: string;
+  purchasingGroup: string;
+  companyCode: string;
+  items: PORow[];
+};
+
 type MessageData = {
   stock?: StockRow[];
   stockError?: string;
@@ -71,8 +83,16 @@ type MessageData = {
   salesOrdersError?: string;
   bom?: BomRow[];
   bomError?: string;
+  poDetail?: PoDetail;
+  poDetailError?: string;
   summary?: SapSummary;
   resolvedFrom?: { name: string; description: string };
+};
+
+/** Drill-down handlers threaded into every table so any identifier is clickable. */
+type Drill = {
+  material: (m: string) => void;
+  po: (po: string) => void;
 };
 
 type ChatMessage = {
@@ -124,10 +144,29 @@ const STATUS_COLORS: Record<
 /* ════════════════════ Helpers ════════════════════ */
 
 function fmt(n: number): string {
-  return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (n === 0) return "0";
+  // BOM component quantities are often small ratios (CH_C_207 sugar is
+  // 0.001 KG per assembly). Rounding to 2dp rendered those as "0" — a real
+  // component shown as nothing — so sub-1 values keep their precision.
+  const digits = Math.abs(n) < 1 ? 6 : 2;
+  return n.toLocaleString("en-US", { maximumFractionDigits: digits });
 }
 
 /* ════════════════════ Sub-components ════════════════════ */
+
+/** A clickable identifier (material or PO number) that drills into it. */
+function DrillLink({ id, onClick, title }: { id: string; onClick: () => void; title: string }) {
+  if (!id) return <>—</>;
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="font-mono text-xs text-[var(--accent)] underline decoration-dotted underline-offset-2 hover:decoration-solid hover:brightness-125 transition-all cursor-pointer"
+    >
+      {id}
+    </button>
+  );
+}
 
 function SummaryCards({ summary }: { summary: SapSummary }) {
   const sc = STATUS_COLORS[summary.status];
@@ -197,7 +236,7 @@ function SummaryCards({ summary }: { summary: SapSummary }) {
   );
 }
 
-function StockTable({ rows }: { rows: StockRow[] }) {
+function StockTable({ rows, drill }: { rows: StockRow[]; drill: Drill }) {
   if (rows.length === 0) return null;
   const total = rows.reduce((s, r) => s + r.quantity, 0);
   const unit = rows[0]?.unit ?? "EA";
@@ -241,7 +280,13 @@ function StockTable({ rows }: { rows: StockRow[] }) {
                 key={i}
                 className="border-t border-[var(--border)] hover:bg-[var(--bg-secondary)]/50 transition-colors"
               >
-                <td className="py-2 px-3 font-mono text-xs">{r.material}</td>
+                <td className="py-2 px-3">
+                  <DrillLink
+                    id={r.material}
+                    onClick={() => drill.material(r.material)}
+                    title={`Open the full picture for ${r.material}`}
+                  />
+                </td>
                 <td className="py-2 px-3">{r.plant}</td>
                 <td className="py-2 px-3">{r.storageLocation || "—"}</td>
                 {showBatch && (
@@ -276,7 +321,7 @@ function StockTable({ rows }: { rows: StockRow[] }) {
   );
 }
 
-function POTable({ rows }: { rows: PORow[] }) {
+function POTable({ rows, drill }: { rows: PORow[]; drill: Drill }) {
   if (rows.length === 0) return null;
   return (
     <div className="mt-4">
@@ -313,8 +358,20 @@ function POTable({ rows }: { rows: PORow[] }) {
                 key={i}
                 className="border-t border-[var(--border)] hover:bg-[var(--bg-secondary)]/50 transition-colors"
               >
-                <td className="py-2 px-3 font-mono text-xs">{r.poNumber}</td>
-                <td className="py-2 px-3 font-mono text-xs">{r.material}</td>
+                <td className="py-2 px-3">
+                  <DrillLink
+                    id={r.poNumber}
+                    onClick={() => drill.po(r.poNumber)}
+                    title={`Open purchase order ${r.poNumber}`}
+                  />
+                </td>
+                <td className="py-2 px-3">
+                  <DrillLink
+                    id={r.material}
+                    onClick={() => drill.material(r.material)}
+                    title={`Open the full picture for ${r.material}`}
+                  />
+                </td>
                 <td className="py-2 px-3 text-right font-mono tabular-nums">
                   {fmt(r.orderQuantity)}
                 </td>
@@ -338,7 +395,7 @@ const TH_RIGHT =
   "text-right text-[10px] font-mono uppercase tracking-wider text-[var(--accent)] py-2.5 px-3";
 
 /** Open sales orders — outbound demand, the counterpart to the PO table. */
-function SalesOrderTable({ rows }: { rows: SalesOrderRow[] }) {
+function SalesOrderTable({ rows, drill }: { rows: SalesOrderRow[]; drill: Drill }) {
   if (rows.length === 0) return null;
   const total = rows.reduce((s, r) => s + r.requestedQuantity, 0);
   const unit = rows[0]?.unit ?? "EA";
@@ -366,7 +423,13 @@ function SalesOrderTable({ rows }: { rows: SalesOrderRow[] }) {
                 className="border-t border-[var(--border)] hover:bg-[var(--bg-secondary)]/50 transition-colors"
               >
                 <td className="py-2 px-3 font-mono text-xs">{r.salesOrder}</td>
-                <td className="py-2 px-3 font-mono text-xs">{r.material}</td>
+                <td className="py-2 px-3">
+                  <DrillLink
+                    id={r.material}
+                    onClick={() => drill.material(r.material)}
+                    title={`Open the full picture for ${r.material}`}
+                  />
+                </td>
                 <td className="py-2 px-3 text-right font-mono tabular-nums">
                   {fmt(r.requestedQuantity)}
                 </td>
@@ -400,7 +463,7 @@ function SalesOrderTable({ rows }: { rows: SalesOrderRow[] }) {
 }
 
 /** Bill of materials — the components needed to build one finished good. */
-function BomTable({ rows }: { rows: BomRow[] }) {
+function BomTable({ rows, drill }: { rows: BomRow[]; drill: Drill }) {
   if (rows.length === 0) return null;
   return (
     <div className="mt-4">
@@ -426,8 +489,12 @@ function BomTable({ rows }: { rows: BomRow[] }) {
                 className="border-t border-[var(--border)] hover:bg-[var(--bg-secondary)]/50 transition-colors"
               >
                 <td className="py-2 px-3 font-mono text-xs">{r.itemNumber || "—"}</td>
-                <td className="py-2 px-3 font-mono text-xs text-[var(--accent)]">
-                  {r.component}
+                <td className="py-2 px-3">
+                  <DrillLink
+                    id={r.component}
+                    onClick={() => drill.material(r.component)}
+                    title={`Open the full picture for component ${r.component}`}
+                  />
                 </td>
                 <td className="py-2 px-3">{r.componentDescription || "—"}</td>
                 <td className="py-2 px-3 text-right font-mono tabular-nums">
@@ -440,6 +507,36 @@ function BomTable({ rows }: { rows: BomRow[] }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/** One purchase order document — header facts plus all its line items. */
+function PoDetailCard({ detail, drill }: { detail: PoDetail; drill: Drill }) {
+  const facts: [string, string][] = [
+    ["Supplier", detail.supplier || "—"],
+    ["Order date", detail.orderDate || "—"],
+    ["PO type", detail.poType || "—"],
+    ["Purch. org", detail.purchasingOrg || "—"],
+    ["Purch. group", detail.purchasingGroup || "—"],
+    ["Company code", detail.companyCode || "—"],
+  ];
+  return (
+    <div className="mt-4">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] mb-2">
+        Purchase order {detail.poNumber}
+      </div>
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-3.5 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5">
+        {facts.map(([k, v]) => (
+          <div key={k}>
+            <div className="text-[9px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+              {k}
+            </div>
+            <div className="text-sm text-[var(--text-primary)] break-words">{v}</div>
+          </div>
+        ))}
+      </div>
+      {detail.items.length > 0 && <POTable rows={detail.items} drill={drill} />}
     </div>
   );
 }
@@ -556,6 +653,14 @@ export default function SapChat() {
 
   const hasUserSent = messages.some((m) => m.role === "user");
 
+  // Any identifier in any table is a drill-down: a material opens its full
+  // picture (stock + inbound + outbound + components), a PO opens the document.
+  const drill: Drill = {
+    material: (m) =>
+      send(`Show me everything for ${m} — stock, open POs, open sales orders and components.`),
+    po: (po) => send(`Show me the full details of purchase order ${po}.`),
+  };
+
   return (
     <>
       {/* Keyframe for typing dots */}
@@ -659,6 +764,9 @@ export default function SapChat() {
                   {msg.data?.bomError && (
                     <ErrorBanner message={`Bill of materials lookup failed: ${msg.data.bomError}`} />
                   )}
+                  {msg.data?.poDetailError && (
+                    <ErrorBanner message={`Purchase order lookup failed: ${msg.data.poDetailError}`} />
+                  )}
 
                   {/* Answer text */}
                   <p
@@ -671,16 +779,19 @@ export default function SapChat() {
 
                   {/* Data tables — source data always visible beside the answer */}
                   {msg.data?.stock && msg.data.stock.length > 0 && (
-                    <StockTable rows={msg.data.stock} />
+                    <StockTable rows={msg.data.stock} drill={drill} />
                   )}
                   {msg.data?.pos && msg.data.pos.length > 0 && (
-                    <POTable rows={msg.data.pos} />
+                    <POTable rows={msg.data.pos} drill={drill} />
                   )}
                   {msg.data?.salesOrders && msg.data.salesOrders.length > 0 && (
-                    <SalesOrderTable rows={msg.data.salesOrders} />
+                    <SalesOrderTable rows={msg.data.salesOrders} drill={drill} />
                   )}
                   {msg.data?.bom && msg.data.bom.length > 0 && (
-                    <BomTable rows={msg.data.bom} />
+                    <BomTable rows={msg.data.bom} drill={drill} />
+                  )}
+                  {msg.data?.poDetail && (
+                    <PoDetailCard detail={msg.data.poDetail} drill={drill} />
                   )}
                 </div>
               </div>

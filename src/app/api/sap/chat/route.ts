@@ -58,6 +58,19 @@ type BomRow = {
   plant: string;
 };
 
+/** Header + line items for ONE purchase order, for the PO drill-down. */
+type PoDetail = {
+  poNumber: string;
+  poType: string;
+  supplier: string;
+  orderDate: string;
+  currency: string;
+  purchasingOrg: string;
+  purchasingGroup: string;
+  companyCode: string;
+  items: PORow[];
+};
+
 type SapSummary = {
   totalOnHand: number;
   totalInbound: number;
@@ -76,6 +89,7 @@ type ToolResults = {
   pos?: ToolOutcome<PORow>;
   salesOrders?: ToolOutcome<SalesOrderRow>;
   bom?: ToolOutcome<BomRow>;
+  poDetail?: { detail?: PoDetail; error?: string };
 };
 
 /* ════════════════════ SAP API Tools ════════════════════ */
@@ -681,6 +695,89 @@ async function getBOM(material: string, apiKey: string): Promise<ToolOutcome<Bom
 }
 
 /**
+ * getPODetail — everything about ONE purchase order (header + all its items).
+ *
+ * Endpoints (both OData V2, both verified live 2026-08-10):
+ *   A_PurchaseOrder     — header: supplier, PO type, date, purchasing org/group
+ *   A_PurchaseOrderItem — every line on that PO, delivered or not
+ *
+ * Unlike getOpenPOs (which filters to undelivered lines for ONE material),
+ * this returns the whole document, so a PO drill-down shows the full order
+ * rather than just the part that matched a material search.
+ */
+async function getPODetail(
+  poNumber: string,
+  apiKey: string,
+): Promise<{ detail?: PoDetail; error?: string }> {
+  const enc = encodeURIComponent(`PurchaseOrder eq '${poNumber}'`);
+  const headerUrl = `${SAP_BASE}/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV/A_PurchaseOrder?$filter=${enc}&$format=json`;
+  const itemsUrl = `${SAP_BASE}/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV/A_PurchaseOrderItem?$filter=${enc}&$format=json&$top=100`;
+
+  let headerRes: Response;
+  let itemsRes: Response;
+  try {
+    [headerRes, itemsRes] = await Promise.all([
+      fetch(headerUrl, { headers: { APIKey: apiKey, Accept: "application/json" }, cache: "no-store" }),
+      fetch(itemsUrl, { headers: { APIKey: apiKey, Accept: "application/json" }, cache: "no-store" }),
+    ]);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "network error";
+    console.error(`[SAP PO detail] Fetch failed for "${poNumber}":`, msg);
+    return { error: `Network error: ${msg}` };
+  }
+
+  if (!headerRes.ok) {
+    console.error(`[SAP PO detail] Header HTTP ${headerRes.status} for "${poNumber}"`);
+    return {
+      error: `HTTP ${headerRes.status}${headerRes.status === 403 ? " (blocked by SAP gateway — UCON)" : ""}`,
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const headerJson: any = await headerRes.json();
+  const headerRows: Record<string, unknown>[] = headerJson?.d?.results ?? [];
+  if (headerRows.length === 0) {
+    console.log(`[SAP PO detail] No such purchase order "${poNumber}"`);
+    return {};
+  }
+
+  const h = headerRows[0];
+  const str = (v: unknown) => String(v ?? "").trim();
+
+  let items: PORow[] = [];
+  if (itemsRes.ok) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const itemsJson: any = await itemsRes.json();
+    const itemRows: Record<string, unknown>[] = itemsJson?.d?.results ?? [];
+    items = itemRows.map(parsePoRow);
+  } else {
+    console.error(`[SAP PO detail] Items HTTP ${itemsRes.status} for "${poNumber}"`);
+  }
+
+  const detail: PoDetail = {
+    poNumber: str(h.PurchaseOrder),
+    poType: str(h.PurchaseOrderType),
+    supplier: str(h.Supplier),
+    orderDate: parseSapDate(h.PurchaseOrderDate),
+    currency: str(h.DocumentCurrency),
+    purchasingOrg: str(h.PurchasingOrganization),
+    purchasingGroup: str(h.PurchasingGroup),
+    companyCode: str(h.CompanyCode),
+    items,
+  };
+
+  console.log("[SAP PO detail] Raw JSON:", JSON.stringify({ header: h, itemCount: items.length }, null, 2));
+  return { detail };
+}
+
+/** SAP V2 serialises dates as "/Date(1533168000000)/". */
+function parseSapDate(v: unknown): string {
+  const m = String(v ?? "").match(/\/Date\((\d+)\)\//);
+  if (!m) return "N/A";
+  return new Date(Number(m[1])).toISOString().slice(0, 10);
+}
+
+/**
  * canonicaliseMaterialCode — maps a user-typed code onto the real SAP one.
  *
  * SAP material numbers are exact strings, but people type them without
@@ -821,6 +918,7 @@ Available tools:
 - getOpenPOs: Open purchase orders = INBOUND supply. Use for purchase orders, pending orders, incoming material, expected deliveries.
 - getSalesOrders: Open sales orders = OUTBOUND demand. Use for sales orders, customer orders, demand, outbound, what's committed to customers, what's going out.
 - getBOM: Bill of materials — the components/raw materials needed to make one unit of a finished good. Use for BOM, bill of materials, components, ingredients, raw materials, "what goes into X", "what do I need to make X".
+- getPODetail: Full detail of ONE purchase order document (supplier, date, all its line items). Use ONLY when the user names a purchase order NUMBER — SAP PO numbers are 10 digits starting with 45 (e.g. 4500011058). Put that number in "poNumber". This is a document lookup, not a material lookup, so leave "material" empty.
 
 The material can be identified TWO ways — pick whichever applies:
 A) A material NUMBER — a short SAP code, typically alphanumeric with no spaces, e.g. TG10, FG126, MZ-FG-R100, RM101, SG23. Put it in "material".
@@ -847,9 +945,11 @@ Rules:
 5. If the question is only about purchase orders/inbound for a SPECIFIC material, call only getOpenPOs.
 6. If the question is only about sales orders/demand/outbound, call only getSalesOrders.
 7. If the question is about components/BOM/raw materials/"what's it made of", call getBOM. If they also ask whether they can build it, add getStock so component availability can be discussed.
-8. Return ONLY a JSON object — no other text, no markdown fences.
+8. If the user names a 10-digit purchase order number (starts with 45), call getPODetail and set "poNumber" — do not treat that number as a material.
+9. "Show me everything for X" / "drill into X" / "full picture for X" → call getStock, getOpenPOs, getSalesOrders AND getBOM.
+10. Return ONLY a JSON object — no other text, no markdown fences.
 
-Schema: { "tools": array containing any of "getStock", "getOpenPOs", "getSalesOrders", "getBOM" (or empty), "material": "<material number or empty string>", "materialName": "<material name/description or empty string>", "metaQuery": "materialCount" | "poCount" | "listMaterials" | "", "limit": <number, only for listMaterials> }
+Schema: { "tools": array containing any of "getStock", "getOpenPOs", "getSalesOrders", "getBOM", "getPODetail" (or empty), "material": "<material number or empty string>", "materialName": "<material name/description or empty string>", "poNumber": "<purchase order number or empty string>", "metaQuery": "materialCount" | "poCount" | "listMaterials" | "", "limit": <number, only for listMaterials> }
 
 If you cannot identify a specific material AND it isn't a meta-question: { "tools": [], "material": "", "materialName": "", "metaQuery": "", "error": "I couldn't identify a specific material in your question. Please include a specific material number (like TG10) or a product name (like \\"trading goods\\"). ${BROWSE_HINT}" }`;
 
@@ -871,7 +971,8 @@ STRICT RULES — follow these exactly:
 12. "pos" is INBOUND supply (open purchase orders); "salesOrders" is OUTBOUND demand (open sales orders). Never mix them up. If a "summary" object is present, its statusReason already states the supply-vs-demand arithmetic — echo that reasoning rather than inventing your own verdict.
 13. Any shortage judgement must compare on-hand + inbound against outbound demand. If salesOrders was not queried, say demand wasn't checked — do NOT declare the material healthy or sufficient on stock alone.
 14. This data is committed supply and demand, NOT a forecast — the sandbox exposes no planning or forecast data. Never describe any figure as a forecast, projection of future consumption, or prediction.
-15. "bom" lists the components needed to make ONE unit of the finished good. Quantities are per assembly. Do not claim a component is in stock unless stock data for that component is actually present in the data.`;
+15. "bom" lists the components needed to make ONE unit of the finished good. Quantities are per assembly. Do not claim a component is in stock unless stock data for that component is actually present in the data. Report small quantities exactly as given (0.001 KG is 0.001 KG, never "0").
+16. "poDetail" is one full purchase order document: its header (supplier, order date, purchasing org) plus EVERY line item, including already-delivered ones. Summarise the order — supplier, date, how many items, and which are still outstanding. Note that unlike a material's "open POs" view, this includes delivered lines too.`;
 
 /* ════════════════════ Route Handler ════════════════════ */
 
@@ -950,6 +1051,7 @@ export async function POST(request: Request) {
       tools?: string[];
       material?: string;
       materialName?: string;
+      poNumber?: string;
       metaQuery?: string;
       limit?: number;
       error?: string;
@@ -1006,6 +1108,44 @@ export async function POST(request: Request) {
         answer: `I couldn't reach SAP to answer that just now — please try again. ${BROWSE_HINT}`,
         data: {},
       });
+    }
+
+    /* ── Step 1c: PO DOCUMENT DRILL-DOWN — a purchase order number is a
+     *  document lookup, not a material lookup, so it short-circuits the
+     *  material path entirely. Detected from the message as well as the
+     *  router output: a 10-digit 45… number is unambiguous. ── */
+    const poFromMessage = message.match(/\b45\d{8}\b/)?.[0];
+    const poNumber = routing.poNumber?.trim() || poFromMessage;
+    if (poNumber && (routing.tools?.includes("getPODetail") || poFromMessage)) {
+      const { detail, error } = await getPODetail(poNumber, sapKey);
+      if (error) {
+        return NextResponse.json({
+          answer: `I couldn't load purchase order ${poNumber} — the SAP request failed: ${error}`,
+          data: { poDetailError: error },
+        });
+      }
+      if (!detail) {
+        return NextResponse.json({
+          answer: `No purchase order ${poNumber} exists in the sandbox.`,
+          data: {},
+        });
+      }
+      const synth = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.2,
+        max_tokens: 400,
+        messages: [
+          { role: "system", content: SYNTHESIS_PROMPT },
+          {
+            role: "user",
+            content: `Question: ${message}\n\nRAW DATA FROM SAP APIS:\n${JSON.stringify({ poDetail: detail }, null, 2)}`,
+          },
+        ],
+      });
+      const poAnswer =
+        synth.choices[0]?.message?.content ?? "Unable to summarise that purchase order.";
+      console.log("[SAP Synthesis] PO detail answer:", poAnswer);
+      return NextResponse.json({ answer: poAnswer, data: { poDetail: detail } });
     }
 
     const hasMaterial = !!routing.material?.trim();
