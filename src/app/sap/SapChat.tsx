@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, type FormEvent } from "react";
-import { FiSend, FiBox, FiTruck, FiActivity, FiArrowLeft, FiAlertTriangle, FiList } from "react-icons/fi";
+import { FiSend, FiBox, FiTruck, FiActivity, FiArrowLeft, FiAlertTriangle, FiList, FiShoppingCart } from "react-icons/fi";
 import Link from "next/link";
 import MaterialBrowser from "./MaterialBrowser";
 
@@ -11,6 +11,8 @@ type StockRow = {
   material: string;
   plant: string;
   storageLocation: string;
+  batch: string;
+  stockType: string;
   quantity: number;
   unit: string;
 };
@@ -28,11 +30,36 @@ type PORow = {
   deliveryDate: string;
 };
 
+type SalesOrderRow = {
+  salesOrder: string;
+  item: string;
+  material: string;
+  description: string;
+  requestedQuantity: number;
+  unit: string;
+  plant: string;
+  netAmount: number;
+  currency: string;
+  processStatus: string;
+};
+
+type BomRow = {
+  itemNumber: string;
+  component: string;
+  componentDescription: string;
+  quantity: number;
+  unit: string;
+  plant: string;
+};
+
 type SapSummary = {
   totalOnHand: number;
   totalInbound: number;
+  totalOutbound: number;
+  projectedBalance: number;
   unit: string;
   status: "Healthy" | "Low" | "Critical";
+  statusReason: string;
 };
 
 type MessageData = {
@@ -40,6 +67,10 @@ type MessageData = {
   stockError?: string;
   pos?: PORow[];
   posError?: string;
+  salesOrders?: SalesOrderRow[];
+  salesOrdersError?: string;
+  bom?: BomRow[];
+  bomError?: string;
   summary?: SapSummary;
   resolvedFrom?: { name: string; description: string };
 };
@@ -55,13 +86,15 @@ type ChatMessage = {
 const EXAMPLES = [
   { label: "Stock for TG10", text: "What's the stock level for material TG10?" },
   { label: "Open POs for TG10", text: "Show me open purchase orders for TG10" },
+  { label: "Demand for TG10", text: "Show me open sales orders for TG10" },
   { label: "Am I short on TG10?", text: "Am I running short on material TG10?" },
+  { label: "What's in SG23?", text: "What components go into SG23?" },
 ];
 
 const WELCOME: ChatMessage = {
   role: "assistant",
   content:
-    "Welcome! I can look up material stock levels, open purchase orders, and assess potential shortages — all from live SAP S/4HANA sandbox data. Try one of the examples below, or type your own question.",
+    "Welcome! I can look up material stock, inbound purchase orders, outbound sales orders, and the bill of materials behind a finished good — then compare supply against demand. All from live SAP S/4HANA sandbox data. Try one of the examples below, or type your own question.",
 };
 
 const STATUS_COLORS: Record<
@@ -95,52 +128,68 @@ function fmt(n: number): string {
 
 function SummaryCards({ summary }: { summary: SapSummary }) {
   const sc = STATUS_COLORS[summary.status];
+  const Card = ({
+    icon,
+    label,
+    value,
+  }: {
+    icon: React.ReactNode;
+    label: string;
+    value: number;
+  }) => (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-3.5">
+      <div className="flex items-center gap-1.5 text-[var(--text-muted)] text-[10px] font-mono uppercase tracking-wider mb-1">
+        {icon}
+        {label}
+      </div>
+      <div className="text-xl font-bold text-[var(--text-primary)] tabular-nums">
+        {fmt(value)}{" "}
+        <span className="text-xs font-normal text-[var(--text-muted)]">
+          {summary.unit}
+        </span>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
-      {/* Total on hand */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-3.5">
-        <div className="flex items-center gap-1.5 text-[var(--text-muted)] text-[10px] font-mono uppercase tracking-wider mb-1">
-          <FiBox size={11} />
-          Total on hand
-        </div>
-        <div className="text-xl font-bold text-[var(--text-primary)] tabular-nums">
-          {fmt(summary.totalOnHand)}{" "}
-          <span className="text-xs font-normal text-[var(--text-muted)]">
-            {summary.unit}
-          </span>
-        </div>
-      </div>
+    <div className="mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <Card icon={<FiBox size={11} />} label="Total on hand" value={summary.totalOnHand} />
+        <Card
+          icon={<FiTruck size={11} />}
+          label="Inbound (open POs)"
+          value={summary.totalInbound}
+        />
+        <Card
+          icon={<FiShoppingCart size={11} />}
+          label="Outbound (open SOs)"
+          value={summary.totalOutbound}
+        />
 
-      {/* Inbound on open POs */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] p-3.5">
-        <div className="flex items-center gap-1.5 text-[var(--text-muted)] text-[10px] font-mono uppercase tracking-wider mb-1">
-          <FiTruck size={11} />
-          Inbound on open POs
-        </div>
-        <div className="text-xl font-bold text-[var(--text-primary)] tabular-nums">
-          {fmt(summary.totalInbound)}{" "}
-          <span className="text-xs font-normal text-[var(--text-muted)]">
-            {summary.unit}
-          </span>
-        </div>
-      </div>
-
-      {/* Status */}
-      <div
-        className="rounded-xl p-3.5"
-        style={{ background: sc.bg, border: `1px solid ${sc.border}` }}
-      >
+        {/* Status */}
         <div
-          className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider mb-1"
-          style={{ color: sc.text, opacity: 0.8 }}
+          className="rounded-xl p-3.5"
+          style={{ background: sc.bg, border: `1px solid ${sc.border}` }}
         >
-          <FiActivity size={11} />
-          Status
-        </div>
-        <div className="text-xl font-bold" style={{ color: sc.text }}>
-          {summary.status}
+          <div
+            className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider mb-1"
+            style={{ color: sc.text, opacity: 0.8 }}
+          >
+            <FiActivity size={11} />
+            Status
+          </div>
+          <div className="text-xl font-bold" style={{ color: sc.text }}>
+            {summary.status}
+          </div>
         </div>
       </div>
+
+      {/* Why — the badge is never an unexplained verdict */}
+      {summary.statusReason && (
+        <p className="mt-2 text-[11px] leading-relaxed text-[var(--text-muted)]">
+          {summary.statusReason}
+        </p>
+      )}
     </div>
   );
 }
@@ -149,6 +198,9 @@ function StockTable({ rows }: { rows: StockRow[] }) {
   if (rows.length === 0) return null;
   const total = rows.reduce((s, r) => s + r.quantity, 0);
   const unit = rows[0]?.unit ?? "EA";
+  // Batch is part of the stock key — without it, rows at the same plant and
+  // storage location look like duplicated data when they're distinct records.
+  const showBatch = rows.some((r) => r.batch);
   return (
     <div className="mt-4">
       <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] mb-2">
@@ -167,6 +219,11 @@ function StockTable({ rows }: { rows: StockRow[] }) {
               <th className="text-left text-[10px] font-mono uppercase tracking-wider text-[var(--accent)] py-2.5 px-3">
                 Storage Loc.
               </th>
+              {showBatch && (
+                <th className="text-left text-[10px] font-mono uppercase tracking-wider text-[var(--accent)] py-2.5 px-3">
+                  Batch
+                </th>
+              )}
               <th className="text-right text-[10px] font-mono uppercase tracking-wider text-[var(--accent)] py-2.5 px-3">
                 Quantity
               </th>
@@ -184,6 +241,9 @@ function StockTable({ rows }: { rows: StockRow[] }) {
                 <td className="py-2 px-3 font-mono text-xs">{r.material}</td>
                 <td className="py-2 px-3">{r.plant}</td>
                 <td className="py-2 px-3">{r.storageLocation || "—"}</td>
+                {showBatch && (
+                  <td className="py-2 px-3 font-mono text-xs">{r.batch || "—"}</td>
+                )}
                 <td className="py-2 px-3 text-right font-mono tabular-nums">
                   {fmt(r.quantity)}
                 </td>
@@ -194,7 +254,7 @@ function StockTable({ rows }: { rows: StockRow[] }) {
               <tr className="border-t-2 border-[var(--accent)]/20 bg-[var(--bg-secondary)]">
                 <td
                   className="py-2.5 px-3 text-[10px] font-mono uppercase tracking-wider text-[var(--text-primary)] font-semibold"
-                  colSpan={3}
+                  colSpan={showBatch ? 4 : 3}
                 >
                   Total
                 </td>
@@ -260,6 +320,118 @@ function POTable({ rows }: { rows: PORow[] }) {
                 <td className="py-2 px-3 text-right font-mono tabular-nums">
                   {fmt(r.netPrice)} {r.currency}
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const TH_LEFT =
+  "text-left text-[10px] font-mono uppercase tracking-wider text-[var(--accent)] py-2.5 px-3";
+const TH_RIGHT =
+  "text-right text-[10px] font-mono uppercase tracking-wider text-[var(--accent)] py-2.5 px-3";
+
+/** Open sales orders — outbound demand, the counterpart to the PO table. */
+function SalesOrderTable({ rows }: { rows: SalesOrderRow[] }) {
+  if (rows.length === 0) return null;
+  const total = rows.reduce((s, r) => s + r.requestedQuantity, 0);
+  const unit = rows[0]?.unit ?? "EA";
+  return (
+    <div className="mt-4">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] mb-2">
+        Open sales orders (outbound demand)
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+        <table className="w-full text-sm border-collapse min-w-[460px]">
+          <thead>
+            <tr className="bg-[var(--bg-secondary)]">
+              <th className={TH_LEFT}>SO Number</th>
+              <th className={TH_LEFT}>Material</th>
+              <th className={TH_RIGHT}>Requested</th>
+              <th className={TH_LEFT}>Unit</th>
+              <th className={TH_LEFT}>Plant</th>
+              <th className={TH_RIGHT}>Net Amount</th>
+            </tr>
+          </thead>
+          <tbody className="text-[var(--text-secondary)]">
+            {rows.map((r, i) => (
+              <tr
+                key={i}
+                className="border-t border-[var(--border)] hover:bg-[var(--bg-secondary)]/50 transition-colors"
+              >
+                <td className="py-2 px-3 font-mono text-xs">{r.salesOrder}</td>
+                <td className="py-2 px-3 font-mono text-xs">{r.material}</td>
+                <td className="py-2 px-3 text-right font-mono tabular-nums">
+                  {fmt(r.requestedQuantity)}
+                </td>
+                <td className="py-2 px-3">{r.unit}</td>
+                <td className="py-2 px-3">{r.plant || "—"}</td>
+                <td className="py-2 px-3 text-right font-mono tabular-nums">
+                  {fmt(r.netAmount)} {r.currency}
+                </td>
+              </tr>
+            ))}
+            {rows.length > 1 && (
+              <tr className="border-t-2 border-[var(--accent)]/20 bg-[var(--bg-secondary)]">
+                <td
+                  className="py-2.5 px-3 text-[10px] font-mono uppercase tracking-wider text-[var(--text-primary)] font-semibold"
+                  colSpan={2}
+                >
+                  Total demand
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono font-bold text-[var(--text-primary)] tabular-nums">
+                  {fmt(total)}
+                </td>
+                <td className="py-2.5 px-3 text-[var(--text-primary)]">{unit}</td>
+                <td colSpan={2} />
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** Bill of materials — the components needed to build one finished good. */
+function BomTable({ rows }: { rows: BomRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="mt-4">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)] mb-2">
+        Bill of materials (per assembly)
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+        <table className="w-full text-sm border-collapse min-w-[420px]">
+          <thead>
+            <tr className="bg-[var(--bg-secondary)]">
+              <th className={TH_LEFT}>Item</th>
+              <th className={TH_LEFT}>Component</th>
+              <th className={TH_LEFT}>Description</th>
+              <th className={TH_RIGHT}>Qty</th>
+              <th className={TH_LEFT}>Unit</th>
+              <th className={TH_LEFT}>Plant</th>
+            </tr>
+          </thead>
+          <tbody className="text-[var(--text-secondary)]">
+            {rows.map((r, i) => (
+              <tr
+                key={i}
+                className="border-t border-[var(--border)] hover:bg-[var(--bg-secondary)]/50 transition-colors"
+              >
+                <td className="py-2 px-3 font-mono text-xs">{r.itemNumber || "—"}</td>
+                <td className="py-2 px-3 font-mono text-xs text-[var(--accent)]">
+                  {r.component}
+                </td>
+                <td className="py-2 px-3">{r.componentDescription || "—"}</td>
+                <td className="py-2 px-3 text-right font-mono tabular-nums">
+                  {fmt(r.quantity)}
+                </td>
+                <td className="py-2 px-3">{r.unit}</td>
+                <td className="py-2 px-3">{r.plant || "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -478,6 +650,12 @@ export default function SapChat() {
                   {msg.data?.posError && (
                     <ErrorBanner message={`Purchase order lookup failed: ${msg.data.posError}`} />
                   )}
+                  {msg.data?.salesOrdersError && (
+                    <ErrorBanner message={`Sales order lookup failed: ${msg.data.salesOrdersError}`} />
+                  )}
+                  {msg.data?.bomError && (
+                    <ErrorBanner message={`Bill of materials lookup failed: ${msg.data.bomError}`} />
+                  )}
 
                   {/* Answer text */}
                   <p
@@ -494,6 +672,12 @@ export default function SapChat() {
                   )}
                   {msg.data?.pos && msg.data.pos.length > 0 && (
                     <POTable rows={msg.data.pos} />
+                  )}
+                  {msg.data?.salesOrders && msg.data.salesOrders.length > 0 && (
+                    <SalesOrderTable rows={msg.data.salesOrders} />
+                  )}
+                  {msg.data?.bom && msg.data.bom.length > 0 && (
+                    <BomTable rows={msg.data.bom} />
                   )}
                 </div>
               </div>

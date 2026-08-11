@@ -16,6 +16,8 @@ type StockRow = {
   material: string;
   plant: string;
   storageLocation: string;
+  batch: string;
+  stockType: string;
   quantity: number;
   unit: string;
 };
@@ -33,16 +35,47 @@ type PORow = {
   deliveryDate: string;
 };
 
+type SalesOrderRow = {
+  salesOrder: string;
+  item: string;
+  material: string;
+  description: string;
+  requestedQuantity: number;
+  unit: string;
+  plant: string;
+  netAmount: number;
+  currency: string;
+  /** SAP SD process status: A = open, B = partially processed, C = complete. */
+  processStatus: string;
+};
+
+type BomRow = {
+  itemNumber: string;
+  component: string;
+  componentDescription: string;
+  quantity: number;
+  unit: string;
+  plant: string;
+};
+
 type SapSummary = {
   totalOnHand: number;
   totalInbound: number;
+  totalOutbound: number;
+  /** onHand + inbound − outbound. Committed supply vs committed demand — NOT
+   *  a forecast; the sandbox exposes no planning/forecast data. */
+  projectedBalance: number;
   unit: string;
   status: "Healthy" | "Low" | "Critical";
+  /** Plain-English reason, so the badge is never an unexplained verdict. */
+  statusReason: string;
 };
 
 type ToolResults = {
   stock?: ToolOutcome<StockRow>;
   pos?: ToolOutcome<PORow>;
+  salesOrders?: ToolOutcome<SalesOrderRow>;
+  bom?: ToolOutcome<BomRow>;
 };
 
 /* ════════════════════ SAP API Tools ════════════════════ */
@@ -229,8 +262,16 @@ function detectMetaQueryFast(message: string): MetaQueryKind | undefined {
  *   Material              — Material number (key, Edm.String)
  *   Plant                 — Plant code (key, Edm.String)
  *   StorageLocation       — Storage location (key, Edm.String)
+ *   Batch                 — Batch number (key, Edm.String)
+ *   InventoryStockType    — 01 unrestricted, 02 quality inspection, 03 blocked
  *   MatlWrhsStkQtyInMatlBaseUnit — Stock quantity (Edm.Decimal)
  *   MaterialBaseUnit      — Unit of measure (Edm.String, e.g. "PC", "EA")
+ *
+ * Batch and InventoryStockType are part of the composite key and MUST be
+ * surfaced: CH_C_104 returns two rows at the same plant/storage location that
+ * differ only by batch (9999991 vs 0000000189). Without those columns the
+ * rows look like duplicated data — the synthesis model actually flagged them
+ * as "might be duplicate data", which they are not.
  *
  * The response wraps results in  { d: { results: [...] } }  (V2 JSON format).
  * Material numbers may be zero-padded to 18 characters; we try raw first,
@@ -283,6 +324,8 @@ async function getStock(material: string, apiKey: string): Promise<ToolOutcome<S
           material: (r.Material ?? "").trim(),
           plant: (r.Plant ?? "").trim(),
           storageLocation: (r.StorageLocation ?? "").trim(),
+          batch: (r.Batch ?? "").trim(),
+          stockType: (r.InventoryStockType ?? "").trim(),
           quantity: parseFloat(r.MatlWrhsStkQtyInMatlBaseUnit) || 0,
           unit: (r.MaterialBaseUnit ?? "EA").trim(),
         })),
@@ -460,6 +503,184 @@ async function getOpenPOs(material: string, apiKey: string): Promise<ToolOutcome
 }
 
 /**
+ * getSalesOrders — open sales orders = OUTBOUND demand (OData V2).
+ *
+ * Endpoint: /sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrderItem
+ * VERIFIED LIVE 2026-08-10: HTTP 200 with real data. TG10 has 17 sales order
+ * items, 14 of them still open.
+ *
+ * Field names confirmed against a live response:
+ *   SalesOrder, SalesOrderItem, Material, SalesOrderItemText
+ *   RequestedQuantity / RequestedQuantityUnit — customer-requested qty
+ *   ProductionPlant                           — the plant field (NOT "Plant")
+ *   NetAmount / TransactionCurrency
+ *   SDProcessStatus — A = open, B = partially processed, C = complete
+ *
+ * "Open" is SDProcessStatus ne 'C', mirroring how getOpenPOs filters on
+ * IsCompletelyDelivered — without it every historical order comes back.
+ */
+async function getSalesOrders(material: string, apiKey: string): Promise<ToolOutcome<SalesOrderRow>> {
+  const candidates = [material];
+  const padded = material.padStart(18, "0");
+  if (padded !== material) candidates.push(padded);
+
+  const httpErrors: string[] = [];
+
+  for (const mat of candidates) {
+    const params = new URLSearchParams({
+      $filter: `Material eq '${mat}' and SDProcessStatus ne 'C'`,
+      $select: [
+        "SalesOrder",
+        "SalesOrderItem",
+        "Material",
+        "SalesOrderItemText",
+        "RequestedQuantity",
+        "RequestedQuantityUnit",
+        "ProductionPlant",
+        "NetAmount",
+        "TransactionCurrency",
+        "SDProcessStatus",
+      ].join(","),
+      $format: "json",
+      $top: "50",
+    });
+    const url = `${SAP_BASE}/sap/opu/odata/sap/API_SALES_ORDER_SRV/A_SalesOrderItem?${params}`;
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: { APIKey: apiKey, Accept: "application/json" },
+        cache: "no-store",
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "network error";
+      console.error(`[SAP SOs] Fetch failed for "${mat}":`, msg);
+      httpErrors.push(`Network error: ${msg}`);
+      continue;
+    }
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[SAP SOs] HTTP ${res.status} for "${mat}":`, body.slice(0, 400));
+      httpErrors.push(`HTTP ${res.status}${res.status === 403 ? " (blocked by SAP gateway — UCON)" : ""}`);
+      continue;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const json: any = await res.json();
+    const results: Record<string, unknown>[] = json?.d?.results ?? [];
+
+    if (results.length > 0) {
+      console.log("[SAP SOs] Raw JSON:", JSON.stringify(results, null, 2));
+      const str = (v: unknown) => String(v ?? "").trim();
+      const num = (v: unknown) => parseFloat(String(v ?? "")) || 0;
+      return {
+        rows: results.map((r) => ({
+          salesOrder: str(r.SalesOrder),
+          item: str(r.SalesOrderItem),
+          material: str(r.Material),
+          description: str(r.SalesOrderItemText),
+          requestedQuantity: num(r.RequestedQuantity),
+          unit: str(r.RequestedQuantityUnit) || "EA",
+          plant: str(r.ProductionPlant),
+          netAmount: num(r.NetAmount),
+          currency: str(r.TransactionCurrency) || "USD",
+          processStatus: str(r.SDProcessStatus),
+        })),
+      };
+    }
+  }
+
+  if (httpErrors.length === candidates.length) {
+    const error = `SAP Sales Order API request failed — ${httpErrors[httpErrors.length - 1]}`;
+    console.log(`[SAP SOs] All candidates failed for "${material}": ${error}`);
+    return { rows: [], error };
+  }
+
+  console.log(`[SAP SOs] No open sales orders for material "${material}"`);
+  return { rows: [] };
+}
+
+/**
+ * getBOM — bill of materials: the components needed to make a finished good.
+ *
+ * Endpoint: /sap/opu/odata/sap/API_BILL_OF_MATERIAL_SRV;v=0002/MaterialBOMItem
+ * VERIFIED LIVE 2026-08-10: HTTP 200. SG23 @ plant 1010 returns RM13 and RM14
+ * (100 PC each).
+ *
+ * Field names confirmed against the live $metadata:
+ *   BillOfMaterialComponent      — the component material number
+ *   ComponentDescription         — component text
+ *   BillOfMaterialItemQuantity   — qty of the component per assembly
+ *   BillOfMaterialItemUnit, BillOfMaterialItemNumber, Plant
+ *
+ * A material can have several BOM variants/versions, so the same component
+ * can appear more than once with identical values. Exact duplicates are
+ * collapsed; genuinely different quantities are kept, since those represent
+ * real alternative BOMs rather than noise.
+ */
+async function getBOM(material: string, apiKey: string): Promise<ToolOutcome<BomRow>> {
+  const params = new URLSearchParams({
+    $filter: `Material eq '${material}'`,
+    $format: "json",
+    $top: "100",
+  });
+  const url = `${SAP_BASE}/sap/opu/odata/sap/API_BILL_OF_MATERIAL_SRV;v=0002/MaterialBOMItem?${params}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { APIKey: apiKey, Accept: "application/json" },
+      cache: "no-store",
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "network error";
+    console.error(`[SAP BOM] Fetch failed for "${material}":`, msg);
+    return { rows: [], error: `Network error: ${msg}` };
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(`[SAP BOM] HTTP ${res.status} for "${material}":`, body.slice(0, 400));
+    return {
+      rows: [],
+      error: `HTTP ${res.status}${res.status === 403 ? " (blocked by SAP gateway — UCON)" : ""}`,
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const json: any = await res.json();
+  const results: Record<string, unknown>[] = json?.d?.results ?? [];
+
+  if (results.length === 0) {
+    console.log(`[SAP BOM] No BOM for material "${material}"`);
+    return { rows: [] };
+  }
+
+  console.log("[SAP BOM] Raw JSON:", JSON.stringify(results, null, 2));
+  const str = (v: unknown) => String(v ?? "").trim();
+  const num = (v: unknown) => parseFloat(String(v ?? "")) || 0;
+
+  const seen = new Set<string>();
+  const rows: BomRow[] = [];
+  for (const r of results) {
+    const row: BomRow = {
+      itemNumber: str(r.BillOfMaterialItemNumber),
+      component: str(r.BillOfMaterialComponent),
+      componentDescription: str(r.ComponentDescription),
+      quantity: num(r.BillOfMaterialItemQuantity),
+      unit: str(r.BillOfMaterialItemUnit) || "EA",
+      plant: str(r.Plant),
+    };
+    const key = `${row.component}|${row.plant}|${row.quantity}|${row.unit}`;
+    if (seen.has(key)) continue; // same component from another BOM variant
+    seen.add(key);
+    rows.push(row);
+  }
+  return { rows };
+}
+
+/**
  * canonicaliseMaterialCode — maps a user-typed code onto the real SAP one.
  *
  * SAP material numbers are exact strings, but people type them without
@@ -521,11 +742,27 @@ async function resolveMaterialByName(
 
 /* ════════════════════ Programmatic Summary ════════════════════ */
 
+/**
+ * computeSummary — supply vs demand, computed in code (never by the LLM).
+ *
+ * The status badge is a PROJECTED AVAILABLE BALANCE:
+ *     on hand + inbound (open POs) − outbound (open sales orders)
+ *
+ * This is deliberately NOT called a forecast. The sandbox exposes no planning,
+ * MRP or forecast data, so the honest question this can answer is "does
+ * committed supply cover committed demand", not "will we run out next month".
+ * statusReason spells out the arithmetic so the badge is never an
+ * unexplained verdict.
+ *
+ * The earlier logic ("Low" when onHand < inbound) was meaningless — having
+ * more on order than in stock says nothing about whether you're short.
+ */
 function computeSummary(results: ToolResults): SapSummary | undefined {
   const stock = results.stock?.rows ?? [];
   const pos = results.pos?.rows ?? [];
+  const sos = results.salesOrders?.rows ?? [];
 
-  if (stock.length === 0 && pos.length === 0) return undefined;
+  if (stock.length === 0 && pos.length === 0 && sos.length === 0) return undefined;
 
   // If a queried source failed at the API level and came back with zero
   // rows, that zero is unreliable — it means "we don't know," not "confirmed
@@ -533,18 +770,46 @@ function computeSummary(results: ToolResults): SapSummary | undefined {
   // that could be mistaken for real data; the inline error banner explains why.
   const stockUnreliable = !!results.stock?.error && stock.length === 0;
   const posUnreliable = !!results.pos?.error && pos.length === 0;
-  if (stockUnreliable || posUnreliable) return undefined;
+  const soUnreliable = !!results.salesOrders?.error && sos.length === 0;
+  if (stockUnreliable || posUnreliable || soUnreliable) return undefined;
 
   const totalOnHand = stock.reduce((sum, r) => sum + r.quantity, 0);
   const totalInbound = pos.reduce((sum, r) => sum + r.orderQuantity, 0);
-  const unit = stock[0]?.unit || pos[0]?.unit || "EA";
+  const totalOutbound = sos.reduce((sum, r) => sum + r.requestedQuantity, 0);
+  const projectedBalance = totalOnHand + totalInbound - totalOutbound;
+  const unit = stock[0]?.unit || pos[0]?.unit || sos[0]?.unit || "EA";
+
+  const fmt = (n: number) => `${n.toLocaleString()} ${unit}`;
 
   let status: SapSummary["status"];
-  if (totalOnHand === 0) status = "Critical";
-  else if (pos.length > 0 && totalOnHand < totalInbound) status = "Low";
-  else status = "Healthy";
+  let statusReason: string;
 
-  return { totalOnHand, totalInbound, unit, status };
+  // Demand was never queried — say what the number is rather than implying
+  // a supply-vs-demand verdict we have no basis for.
+  if (results.salesOrders === undefined) {
+    if (totalOnHand === 0) {
+      status = "Critical";
+      statusReason = "No stock on hand.";
+    } else {
+      status = "Healthy";
+      statusReason = `${fmt(totalOnHand)} on hand. Demand not checked — ask "am I short on this?" to compare against open sales orders.`;
+    }
+    return { totalOnHand, totalInbound, totalOutbound, projectedBalance, unit, status, statusReason };
+  }
+
+  if (projectedBalance < 0) {
+    status = "Critical";
+    statusReason = `Short by ${fmt(Math.abs(projectedBalance))}: ${fmt(totalOnHand)} on hand + ${fmt(totalInbound)} inbound doesn't cover ${fmt(totalOutbound)} of committed demand.`;
+  } else if (totalOnHand < totalOutbound) {
+    // Covered only once the POs land — genuinely at risk if they slip.
+    status = "Low";
+    statusReason = `Covered only after inbound arrives: ${fmt(totalOnHand)} on hand is below ${fmt(totalOutbound)} of demand; ${fmt(totalInbound)} on open POs closes the gap.`;
+  } else {
+    status = "Healthy";
+    statusReason = `${fmt(totalOnHand)} on hand covers ${fmt(totalOutbound)} of committed demand, leaving ${fmt(projectedBalance)} projected.`;
+  }
+
+  return { totalOnHand, totalInbound, totalOutbound, projectedBalance, unit, status, statusReason };
 }
 
 /* ════════════════════ LLM Prompts ════════════════════ */
@@ -552,8 +817,10 @@ function computeSummary(results: ToolResults): SapSummary | undefined {
 const ROUTER_PROMPT = `You are a routing engine for an SAP data assistant. Given a user question, determine which tool(s) to call and identify the material being asked about.
 
 Available tools:
-- getStock: Query material stock levels by plant and storage location. Use when the question is about inventory, stock, quantity on hand, or material availability.
-- getOpenPOs: Query open purchase orders. Use when the question is about purchase orders, pending orders, inbound materials, or expected deliveries.
+- getStock: Material stock levels by plant / storage location. Use for inventory, stock, quantity on hand, availability.
+- getOpenPOs: Open purchase orders = INBOUND supply. Use for purchase orders, pending orders, incoming material, expected deliveries.
+- getSalesOrders: Open sales orders = OUTBOUND demand. Use for sales orders, customer orders, demand, outbound, what's committed to customers, what's going out.
+- getBOM: Bill of materials — the components/raw materials needed to make one unit of a finished good. Use for BOM, bill of materials, components, ingredients, raw materials, "what goes into X", "what do I need to make X".
 
 The material can be identified TWO ways — pick whichever applies:
 A) A material NUMBER — a short SAP code, typically alphanumeric with no spaces, e.g. TG10, FG126, MZ-FG-R100, RM101, SG23. Put it in "material".
@@ -575,12 +842,14 @@ Only put something in "materialName" when the user names an actual, specific pro
 Rules:
 1. If the question is a META-question per the CRITICAL rule, set "metaQuery" (and "limit" for listMaterials), leave "tools" empty, and stop.
 2. Otherwise identify the material per (A) or (B) above.
-3. If the question asks about shortage, shortfall, "am I short", or compares stock vs orders, call BOTH tools.
+3. Shortage questions ("am I short", "will I run out", "do I have enough", "coverage") need supply AND demand: call getStock, getOpenPOs AND getSalesOrders.
 4. If the question is only about stock/inventory, call only getStock.
-5. If the question is only about purchase orders/deliveries for a SPECIFIC material, call only getOpenPOs.
-6. Return ONLY a JSON object — no other text, no markdown fences.
+5. If the question is only about purchase orders/inbound for a SPECIFIC material, call only getOpenPOs.
+6. If the question is only about sales orders/demand/outbound, call only getSalesOrders.
+7. If the question is about components/BOM/raw materials/"what's it made of", call getBOM. If they also ask whether they can build it, add getStock so component availability can be discussed.
+8. Return ONLY a JSON object — no other text, no markdown fences.
 
-Schema: { "tools": ["getStock"] | ["getOpenPOs"] | ["getStock", "getOpenPOs"] | [], "material": "<material number or empty string>", "materialName": "<material name/description or empty string>", "metaQuery": "materialCount" | "poCount" | "listMaterials" | "", "limit": <number, only for listMaterials> }
+Schema: { "tools": array containing any of "getStock", "getOpenPOs", "getSalesOrders", "getBOM" (or empty), "material": "<material number or empty string>", "materialName": "<material name/description or empty string>", "metaQuery": "materialCount" | "poCount" | "listMaterials" | "", "limit": <number, only for listMaterials> }
 
 If you cannot identify a specific material AND it isn't a meta-question: { "tools": [], "material": "", "materialName": "", "metaQuery": "", "error": "I couldn't identify a specific material in your question. Please include a specific material number (like TG10) or a product name (like \\"trading goods\\"). ${BROWSE_HINT}" }`;
 
@@ -597,7 +866,12 @@ STRICT RULES — follow these exactly:
 7. Do NOT repeat the raw JSON. The data tables are shown separately in the UI.
 8. Keep your response to 2-4 sentences maximum.
 9. If a tool's data includes an "error" field, that means the live SAP API call itself failed (network issue, permission block, etc.) — this is DIFFERENT from "no records found." You MUST say the API request failed and the result could not be confirmed. NEVER say "there are no purchase orders" or "there is no stock" when an error field is present — that would misrepresent an API failure as a real business answer.
-10. If "resolvedMaterial" is present in the data, the user searched by product name/description rather than material number — briefly mention which material number and description it resolved to (e.g. "TG10 (Trad.Good 10,PD,Third Party)") before answering their question.`;
+10. If "resolvedMaterial" is present in the data, the user searched by product name/description rather than material number — briefly mention which material number and description it resolved to (e.g. "TG10 (Trad.Good 10,PD,Third Party)") before answering their question.
+11. Stock rows are keyed by plant, storage location, BATCH and stock type. Two rows with the same plant and storage location but different batches are SEPARATE real records, NOT duplicates — never describe them as duplicated or double-counted data. Sum them for the total.
+12. "pos" is INBOUND supply (open purchase orders); "salesOrders" is OUTBOUND demand (open sales orders). Never mix them up. If a "summary" object is present, its statusReason already states the supply-vs-demand arithmetic — echo that reasoning rather than inventing your own verdict.
+13. Any shortage judgement must compare on-hand + inbound against outbound demand. If salesOrders was not queried, say demand wasn't checked — do NOT declare the material healthy or sufficient on stock alone.
+14. This data is committed supply and demand, NOT a forecast — the sandbox exposes no planning or forecast data. Never describe any figure as a forecast, projection of future consumption, or prediction.
+15. "bom" lists the components needed to make ONE unit of the finished good. Quantities are per assembly. Do not claim a component is in stock unless stock data for that component is actually present in the data.`;
 
 /* ════════════════════ Route Handler ════════════════════ */
 
@@ -821,6 +1095,20 @@ export async function POST(request: Request) {
         }),
       );
     }
+    if (routing.tools.includes("getSalesOrders")) {
+      toolPromises.push(
+        getSalesOrders(mat, sapKey).then((outcome) => {
+          results.salesOrders = outcome;
+        }),
+      );
+    }
+    if (routing.tools.includes("getBOM")) {
+      toolPromises.push(
+        getBOM(mat, sapKey).then((outcome) => {
+          results.bom = outcome;
+        }),
+      );
+    }
 
     await Promise.all(toolPromises);
 
@@ -856,6 +1144,10 @@ export async function POST(request: Request) {
         stockError: results.stock?.error,
         pos: results.pos?.rows,
         posError: results.pos?.error,
+        salesOrders: results.salesOrders?.rows,
+        salesOrdersError: results.salesOrders?.error,
+        bom: results.bom?.rows,
+        bomError: results.bom?.error,
         summary,
         resolvedFrom,
       },
