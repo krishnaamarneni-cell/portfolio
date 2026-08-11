@@ -562,9 +562,14 @@ Never fill both "material" and "materialName" for the same request.
 
 CRITICAL — a META-question is about the DATASET, not about one product. These are answered separately, so set "metaQuery" and leave BOTH "material" and "materialName" empty:
 - "how many materials do we have" / "list of materials" / "total materials in sap" / "what materials exist" → metaQuery: "materialCount"
-- "how many open POs do we have" / "total purchase orders" / "how many POs are there" → metaQuery: "poCount". BUT ONLY if the question names NO material at all. "How many open POs do we have for CH_C_107" names a material, so it is NOT a meta-question — it is a normal getOpenPOs lookup for CH_C_107. If ANY material code appears anywhere in the message (e.g. TG10, CH_C_107, chc107, FG126), NEVER use metaQuery — always treat it as a lookup for that material.
+- "how many open POs do we have" / "total purchase orders" / "how many POs are there" → metaQuery: "poCount"
 - "list me any 5 materials" / "give me the top 5 material numbers" / "show me some materials" / "give me examples" → metaQuery: "listMaterials", and put the requested count in "limit" (default 5 if unstated)
 Users often misspell these ("materail", "materails", "meterials") — match on intent, not exact spelling.
+
+OVERRIDING RULE — if ANY material code appears anywhere in the CURRENT message (e.g. TG10, CH_C_107, chc107, FG126, 221), it is NEVER a meta-question. Leave "metaQuery" empty and treat it as a normal lookup for that material, whatever else the wording resembles:
+- "How many open POs do we have for CH_C_107" → NOT poCount. It is getOpenPOs for CH_C_107.
+- "CH_C_104 any open POs" → NOT listMaterials. It is getOpenPOs for CH_C_104.
+Judge ONLY the current message. Earlier turns in the conversation may have been meta-questions; that does NOT make this one a meta-question. Never carry a previous metaQuery forward.
 Only put something in "materialName" when the user names an actual, specific product (a real word like "pineapple", "pump", "trading goods" — not a bare category noun like "material", "materials", "product", "item", "stock", "inventory", or "goods" used alone).
 
 Rules:
@@ -584,7 +589,8 @@ const SYNTHESIS_PROMPT = `You are an SAP data analyst. Answer the user's questio
 STRICT RULES — follow these exactly:
 1. Answer ONLY using the data provided below. Do not infer, estimate, or recall any numbers.
 2. Every figure in your answer MUST appear verbatim in the provided data.
-3. If a value is missing or the data arrays are empty, say "That data isn't available in the sandbox" — NEVER guess.
+3. An EMPTY array with no "error" field is a REAL ANSWER, not missing data — SAP responded successfully and the count is genuinely zero. Say so plainly and specifically: "There are no open purchase orders for CH_C_104" or "CH_C_104 has no stock on hand." Do NOT say "that data isn't available" for an empty array — that wrongly implies the lookup failed when it actually succeeded and returned zero.
+3b. Only say "That data isn't available in the sandbox" when the answer genuinely isn't in the data at all — e.g. the user asked for a field the API doesn't return (blocked stock, batch numbers). NEVER guess a value.
 4. Be concise and professional. Use plain English, not SAP jargon.
 5. When mentioning quantities, always include the unit and location (plant/storage location).
 6. If both stock and PO data are present, compare them and give a clear assessment.
@@ -691,12 +697,16 @@ export async function POST(request: Request) {
      *  deterministic SAP call. ── */
     let routedMeta = routing.metaQuery?.trim();
 
-    // Guard: the small router model classifies "how many open POs we have
-    // CH_C_107" as a sandbox-wide poCount, ignoring the named material — which
-    // answers a question the user didn't ask with a much bigger number. If the
-    // message names a material, a whole-dataset count is never what they meant,
-    // so override the classification and look that material up instead.
-    if (routedMeta === "materialCount" || routedMeta === "poCount") {
+    // Guard: if the message names a material, it is NEVER a catalog-level
+    // question — applies to EVERY metaQuery kind, not just the counts.
+    //   - "how many open POs we have CH_C_107" was answered with the
+    //     sandbox-wide poCount, ignoring the material.
+    //   - "CH_C_104 any open POs" was answered with the listMaterials sample,
+    //     because the previous turn asked for a list and the small router
+    //     model carried that classification forward through the history.
+    // Both replace the user's actual question with a different one, so the
+    // presence of a code overrides the classification outright.
+    if (routedMeta) {
       const codeInMessage = extractMaterialCodeCandidate(message);
       if (codeInMessage) {
         console.log(
