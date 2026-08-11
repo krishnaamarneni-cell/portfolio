@@ -88,7 +88,10 @@ const EXAMPLES = [
   { label: "Open POs for TG10", text: "Show me open purchase orders for TG10" },
   { label: "Demand for TG10", text: "Show me open sales orders for TG10" },
   { label: "Am I short on TG10?", text: "Am I running short on material TG10?" },
-  { label: "What's in SG23?", text: "What components go into SG23?" },
+  {
+    label: "Recipe for CH_C_002",
+    text: "What components go into CH_C_002?",
+  },
 ];
 
 const WELCOME: ChatMessage = {
@@ -736,9 +739,15 @@ export default function SapChat() {
       {browserOpen && (
         <MaterialBrowser
           onClose={() => setBrowserOpen(false)}
-          onSelect={(material) => {
+          onSelect={(material, hasBOM) => {
             setBrowserOpen(false);
-            send(`What's the stock for ${material}?`);
+            // A material with a BOM is something you make — lead with what it's
+            // built from. Everything else, lead with what's on hand.
+            send(
+              hasBOM
+                ? `What components go into ${material}, and what stock do we have of it?`
+                : `What's the stock for ${material}?`,
+            );
           }}
         />
       )}
