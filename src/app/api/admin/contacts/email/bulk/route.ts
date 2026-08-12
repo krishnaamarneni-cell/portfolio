@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
-import { sendEmailUnified } from "@/lib/resend";
+import { hasResend, sendBulkViaResend, sendEmailUnified } from "@/lib/resend";
 import { recordBulkSend } from "@/lib/email-tracking";
 import { classifyAddress } from "@/lib/unsendable";
 
@@ -234,6 +234,8 @@ Rules:
   // Fire the actual sending in the BACKGROUND. after() runs once the HTTP
   // response has been flushed, so the client gets an instant reply and can
   // close the modal instead of blocking for minutes on 400+ emails.
+  const hasResendKey = hasResend();
+
   after(async () => {
     const sendStartedAt = Date.now();
     // Stop before the 300s function ceiling so the last records still flush.
@@ -312,7 +314,8 @@ ${htmlBody}
         .replace(/<[^>]+>/g, "")
         .replace(/&nbsp;/g, " ");
 
-      const r = await sendEmailUnified({
+      const sendFn = hasResendKey ? sendBulkViaResend : sendEmailUnified;
+      const r = await sendFn({
         to: c.email,
         subject,
         html,

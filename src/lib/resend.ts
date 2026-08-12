@@ -19,15 +19,15 @@ export async function sendViaResend(opts: {
   subject: string;
   html: string;
   text?: string;
+  from?: string;
+  replyTo?: string;
   attachments?: MailAttachment[];
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, error: "RESEND_API_KEY not set" };
 
-  // Resend requires a verified "from" domain, or use their onboarding
-  // address. We default to onboarding@resend.dev if no custom domain set.
   const from =
-    process.env.RESEND_FROM_EMAIL || "Lucy <onboarding@resend.dev>";
+    opts.from || process.env.RESEND_FROM_EMAIL || "Lucy <onboarding@resend.dev>";
 
   try {
     const { Resend } = await import("resend");
@@ -38,6 +38,7 @@ export async function sendViaResend(opts: {
       subject: opts.subject,
       html: opts.html,
       text: opts.text,
+      ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
       ...(opts.attachments?.length
         ? { attachments: opts.attachments.map((a) => ({ filename: a.filename, content: a.content })) }
         : {}),
@@ -55,7 +56,28 @@ export async function sendViaResend(opts: {
 }
 
 /**
- * Unified email sender — tries Resend first, falls back to Gmail.
+ * Bulk outreach sender — forces Resend so bulk email never touches Gmail.
+ * Replies route back to Gmail via the Reply-To header so the response
+ * tracker still picks them up.
+ */
+export async function sendBulkViaResend(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  attachments?: MailAttachment[];
+}): Promise<{ ok: boolean; id?: string; error?: string; provider: string }> {
+  if (!hasResend()) {
+    return { ok: false, error: "RESEND_API_KEY not set — bulk send requires Resend.", provider: "none" };
+  }
+  const replyTo = process.env.GMAIL_USER || "avgk26@gmail.com";
+  const result = await sendViaResend({ ...opts, replyTo });
+  return { ...result, provider: "resend" };
+}
+
+/**
+ * Unified email sender — tries Gmail first, falls back to Resend.
+ * Use for 1:1 transactional emails (briefings, test sends, etc.).
  */
 export async function sendEmailUnified(opts: {
   to: string;
