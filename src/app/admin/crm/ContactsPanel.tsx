@@ -32,6 +32,7 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
   const [filterType, setFilterType] = useState<ContactType | "all">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [classifying, setClassifying] = useState(false);
+  const [cleaningJunk, setCleaningJunk] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showCompose, setShowCompose] = useState(false);
 
@@ -74,6 +75,27 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
       await load();
     } else {
       onError(d.error || "Classification failed");
+    }
+  }
+
+  async function cleanJunk() {
+    setCleaningJunk(true);
+    const r = await fetch("/api/admin/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete-junk" }),
+    });
+    const d = await r.json().catch(() => ({}));
+    setCleaningJunk(false);
+    if (r.ok) {
+      if (d.deleted > 0) {
+        onSuccess(`Removed ${d.deleted} junk contacts (noreply, bots, notifications)`);
+        await load();
+      } else {
+        onSuccess("No junk contacts found");
+      }
+    } else {
+      onError(d.error || "Clean junk failed");
     }
   }
 
@@ -213,6 +235,13 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
           className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text-secondary)] hover:border-[#ff6b00] flex items-center gap-2 whitespace-nowrap"
         >
           <FiDownload size={14} /> Export CSV
+        </button>
+        <button
+          onClick={cleanJunk}
+          disabled={cleaningJunk}
+          className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-red-500/40 text-sm font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+        >
+          <FiSlash size={14} /> {cleaningJunk ? "Cleaning..." : "Clean Junk"}
         </button>
       </div>
 

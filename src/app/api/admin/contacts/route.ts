@@ -11,6 +11,7 @@ import {
   listContactsFiltered,
   type ContactType,
 } from "@/lib/contacts";
+import { classifyAddress } from "@/lib/unsendable";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -71,6 +72,34 @@ export async function POST(request: Request) {
   if (body.action === "filtered") {
     const contacts = await listContactsFiltered(body.filters as Record<string, unknown>);
     return NextResponse.json({ contacts });
+  }
+
+  if (body.action === "delete-junk") {
+    const { requireSupabaseAdmin } = await import("@/lib/supabase");
+    const db = requireSupabaseAdmin();
+    const { data } = await db
+      .from("recruiter_contacts")
+      .select("id, email, name")
+      .limit(5000);
+
+    const junk = (data ?? []).filter(
+      (c: { id: string; email: string; name: string | null }) =>
+        classifyAddress(c.email).unsendable
+    );
+
+    if (junk.length === 0) {
+      return NextResponse.json({ deleted: 0, samples: [] });
+    }
+
+    await db
+      .from("recruiter_contacts")
+      .delete()
+      .in("id", junk.map((j: { id: string }) => j.id));
+
+    return NextResponse.json({
+      deleted: junk.length,
+      samples: junk.slice(0, 20).map((j: { email: string }) => j.email),
+    });
   }
 
   // Default: upsert.

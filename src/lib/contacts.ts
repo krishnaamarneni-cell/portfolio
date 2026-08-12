@@ -6,6 +6,7 @@
  */
 import "server-only";
 import { requireSupabaseAdmin } from "@/lib/supabase";
+import { isUnsendable } from "@/lib/unsendable";
 
 export type ContactType =
   | "recruiter"
@@ -106,6 +107,10 @@ export async function upsertContact(
   const supabase = requireSupabaseAdmin();
   const email = input.email.toLowerCase().trim();
 
+  if (input.source !== "manual" && isUnsendable(email)) {
+    throw new Error(`Blocked junk/noreply address: ${email}`);
+  }
+
   // Check if exists — if so, increment times_contacted.
   const { data: existing } = await supabase
     .from(TABLE)
@@ -163,6 +168,7 @@ export async function upsertMany(
   let saved = 0;
   for (const c of inputs) {
     try {
+      if (isUnsendable(c.email)) continue;
       const supabase = requireSupabaseAdmin();
       const { error } = await supabase
         .from(TABLE)
