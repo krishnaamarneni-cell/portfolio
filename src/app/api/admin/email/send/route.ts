@@ -85,7 +85,8 @@ Output ONLY valid JSON: {"message": "..."}`;
 
   if (body.provider === "resend") {
     const { sendViaResend } = await import("@/lib/resend");
-    const r = await sendViaResend({ to, subject, html, text });
+    const replyTo = process.env.GMAIL_USER || "avgk26@gmail.com";
+    const r = await sendViaResend({ to, subject, html, text, replyTo });
     return NextResponse.json({ ...r, provider: "resend" });
   }
 
