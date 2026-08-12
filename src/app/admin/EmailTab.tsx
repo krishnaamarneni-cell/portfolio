@@ -15,6 +15,9 @@ import {
   FiExternalLink,
   FiUploadCloud,
   FiSlash,
+  FiFilter,
+  FiMessageSquare,
+  FiArrowRight,
 } from "react-icons/fi";
 
 type EmailSubTab = "inbox" | "sent" | "compose" | "bulk";
@@ -136,28 +139,111 @@ function ThreadView({ thread }: { thread: ThreadData }) {
   );
 }
 
+/* ───────── helpers for inbox ───────── */
+
+const SELF_HINTS = ["krishnaamarneni", "avgk26", "krishna.amarneni", "jobs@krishnaamarneni"];
+function isSelf(addr?: string): boolean {
+  if (!addr) return false;
+  const l = addr.toLowerCase();
+  return SELF_HINTS.some((h) => l.includes(h));
+}
+
+const RTR_PATTERNS = [
+  /\brtr\b/i,
+  /right to represent/i,
+  /profile.*submit/i,
+  /submit.*profile/i,
+  /submission.*confirm/i,
+  /candidate.*submit/i,
+  /submit.*candidate/i,
+  /submit.*client/i,
+  /presented.*to.*client/i,
+  /forwarded.*to.*hiring/i,
+  /application.*submitted/i,
+];
+function isRTR(msg: InboxMessage): boolean {
+  const text = `${msg.subject || ""} ${msg.snippet || ""}`;
+  return RTR_PATTERNS.some((p) => p.test(text));
+}
+
+type GroupedThread = {
+  threadId: string;
+  subject: string;
+  latestDate: string;
+  snippet: string;
+  messages: InboxMessage[];
+  messageCount: number;
+  direction: "inbound" | "outbound";
+  hasReplies: boolean;
+  isRTR: boolean;
+  participants: string[];
+};
+
+function groupByThread(messages: InboxMessage[]): GroupedThread[] {
+  const map = new Map<string, InboxMessage[]>();
+  for (const m of messages) {
+    const list = map.get(m.threadId) || [];
+    list.push(m);
+    map.set(m.threadId, list);
+  }
+  const threads: GroupedThread[] = [];
+  for (const [threadId, msgs] of map) {
+    msgs.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    const latest = msgs[0];
+    const first = msgs[msgs.length - 1];
+    const direction = isSelf(first.from) ? "outbound" : "inbound";
+    const allParticipants = new Set<string>();
+    for (const m of msgs) {
+      if (m.from) allParticipants.add(m.from);
+      if (m.to) allParticipants.add(m.to);
+    }
+    threads.push({
+      threadId,
+      subject: latest.subject || first.subject || "(no subject)",
+      latestDate: latest.date || "",
+      snippet: latest.snippet || "",
+      messages: msgs,
+      messageCount: msgs.length,
+      direction,
+      hasReplies: msgs.length > 1,
+      isRTR: msgs.some(isRTR),
+      participants: [...allParticipants],
+    });
+  }
+  threads.sort((a, b) => new Date(b.latestDate).getTime() - new Date(a.latestDate).getTime());
+  return threads;
+}
+
 /* ───────── INBOX ───────── */
 
 function InboxPanel({ onError }: { onError: (m: string) => void }) {
-  const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [rawMessages, setRawMessages] = useState<InboxMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
   const [thread, setThread] = useState<ThreadData | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dirFilter, setDirFilter] = useState<"all" | "inbound" | "outbound">("all");
+  const [dateRange, setDateRange] = useState(30);
+  const [typeFilter, setTypeFilter] = useState<"all" | "replies" | "rtr">("all");
 
-  const load = useCallback(async (q?: string) => {
+  const load = useCallback(async (days: number, q?: string) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (q) params.set("q", q);
-      params.set("max", "40");
+      const afterDate = new Date();
+      afterDate.setDate(afterDate.getDate() - days);
+      const afterStr = `${afterDate.getFullYear()}/${afterDate.getMonth() + 1}/${afterDate.getDate()}`;
+      const queryParts = [`after:${afterStr}`];
+      if (q) queryParts.push(q);
+      params.set("q", queryParts.join(" "));
+      params.set("max", "100");
       const txt = await fetch(`/api/admin/email/inbox?${params}`).then((r) => r.text());
       try {
         const data = JSON.parse(txt);
         if (data.error) setError(data.error);
-        else setMessages(data.messages ?? []);
+        else setRawMessages(data.messages ?? []);
       } catch {
         setError("Invalid response from server");
       }
@@ -167,7 +253,34 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(dateRange); }, [load, dateRange]);
+
+  const grouped = useMemo(() => groupByThread(rawMessages), [rawMessages]);
+
+  const filtered = useMemo(() => {
+    let list = grouped;
+    if (dirFilter !== "all") list = list.filter((t) => t.direction === dirFilter);
+    if (typeFilter === "replies") list = list.filter((t) => t.hasReplies);
+    if (typeFilter === "rtr") list = list.filter((t) => t.isRTR);
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter((t) =>
+        t.subject.toLowerCase().includes(q) ||
+        t.snippet.toLowerCase().includes(q) ||
+        t.participants.some((p) => p.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [grouped, dirFilter, typeFilter, search]);
+
+  const stats = useMemo(() => ({
+    threads: grouped.length,
+    inbound: grouped.filter((t) => t.direction === "inbound").length,
+    outbound: grouped.filter((t) => t.direction === "outbound").length,
+    messages: rawMessages.length,
+    replies: grouped.filter((t) => t.hasReplies).length,
+    rtr: grouped.filter((t) => t.isRTR).length,
+  }), [grouped, rawMessages]);
 
   async function openThread(threadId: string) {
     setThreadLoading(true);
@@ -177,12 +290,8 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
         const data = JSON.parse(txt);
         if (data.thread) setThread(data.thread);
         else onError("Could not load thread");
-      } catch {
-        onError("Invalid thread response");
-      }
-    } catch {
-      onError("Failed to load thread");
-    }
+      } catch { onError("Invalid thread response"); }
+    } catch { onError("Failed to load thread"); }
     setThreadLoading(false);
   }
 
@@ -201,26 +310,122 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
+    <div className="space-y-5">
+      {/* Stats */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+        {([
+          { label: "Threads", value: stats.threads },
+          { label: "Inbound", value: stats.inbound },
+          { label: "Outbound", value: stats.outbound },
+          { label: "Messages", value: stats.messages },
+          { label: "Has Replies", value: stats.replies },
+          { label: "RTR / Submitted", value: stats.rtr },
+        ] as const).map((s) => (
+          <div key={s.label} className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
+            <p className="text-xl font-bold text-[var(--admin-text)]">{s.value}</p>
+            <p className="text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)] mt-0.5">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Search + Filters + Controls */}
+      <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <FiSearch size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--admin-text-muted)]" />
+          <FiSearch size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--admin-text-muted)]" />
           <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") load(query); }}
-            placeholder="Search email (e.g. from:recruiter subject:interview)"
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)]"
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") load(dateRange, search); }}
+            placeholder="Search by subject, sender, company..."
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none text-[var(--admin-text)] placeholder:text-[var(--admin-text-muted)]"
           />
         </div>
+
+        {/* Direction filter */}
+        <div className="flex gap-1 bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-1">
+          {(["all", "inbound", "outbound"] as const).map((dir) => (
+            <button
+              key={dir}
+              onClick={() => setDirFilter(dir)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                dirFilter === dir
+                  ? "bg-[#ff6b00] text-white"
+                  : "text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
+              }`}
+            >
+              {dir === "all" ? "All" : dir === "inbound" ? "Inbound" : "Outbound"}
+            </button>
+          ))}
+        </div>
+
+        {/* Date range */}
+        <div className="flex items-center gap-1 bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-1">
+          {([
+            { d: 1, label: "1d" },
+            { d: 7, label: "7d" },
+            { d: 30, label: "30d" },
+            { d: 90, label: "90d" },
+          ] as const).map(({ d, label }) => (
+            <button
+              key={d}
+              onClick={() => setDateRange(d)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                dateRange === d
+                  ? "bg-[#ff6b00]/15 text-[#ff6b00]"
+                  : "text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Sync Gmail */}
         <button
-          onClick={() => load(query)}
           disabled={loading}
-          className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm text-[var(--admin-text-muted)] hover:text-[var(--admin-text)] hover:border-[#ff6b00]/30 disabled:opacity-50"
+          onClick={() => load(dateRange, search)}
+          className="px-4 py-2.5 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] disabled:opacity-50 flex items-center gap-2"
         >
           <FiRefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          Refresh
+          {loading ? "Pulling Gmail..." : "Sync Gmail Inbox"}
         </button>
+
+        <button
+          onClick={() => load(dateRange, search)}
+          className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text-secondary)] hover:border-[#ff6b00] flex items-center gap-2"
+        >
+          <FiRefreshCw size={14} /> Refresh
+        </button>
+      </div>
+
+      {/* Type filters */}
+      <div className="flex gap-2 flex-wrap">
+        {([
+          { id: "all" as const, label: "All Threads", count: grouped.length },
+          { id: "replies" as const, label: "Has Replies", count: stats.replies },
+          { id: "rtr" as const, label: "RTR / Submitted", count: stats.rtr },
+        ]).map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setTypeFilter(f.id)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              typeFilter === f.id
+                ? "bg-[#ff6b00]/15 border-[#ff6b00]/40 text-[#ff8c38]"
+                : "bg-[var(--admin-surface)] border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:border-[#ff6b00]/30 hover:text-[var(--admin-text)]"
+            }`}
+          >
+            {f.id === "replies" && <FiMessageSquare size={11} />}
+            {f.id === "rtr" && <FiArrowRight size={11} />}
+            {f.id === "all" && <FiFilter size={11} />}
+            {f.label}
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+              typeFilter === f.id ? "bg-[#ff6b00]/20" : "bg-[var(--admin-surface-hover)]"
+            }`}>
+              {f.count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {error && (
@@ -230,38 +435,82 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
         </div>
       )}
 
-      {loading && messages.length === 0 ? (
+      {loading && rawMessages.length === 0 ? (
         <div className="text-center py-16 text-[var(--admin-text-muted)] text-sm">
           <FiRefreshCw size={20} className="animate-spin mx-auto mb-3" />
           Loading inbox...
         </div>
-      ) : messages.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-[var(--admin-text-muted)] text-sm">
           <FiInbox size={28} className="mx-auto mb-3 opacity-40" />
-          {error ? "Gmail might not be connected." : "No messages found."}
+          {rawMessages.length === 0 ? "Gmail might not be connected. Click Sync Gmail Inbox." : "No threads match your filters."}
         </div>
       ) : (
-        <div className="bg-[var(--admin-surface)] rounded-2xl border border-[var(--admin-border)] overflow-hidden">
-          <div className="divide-y divide-[var(--admin-border)]">
-            {messages.map((msg) => (
-              <button
-                key={msg.id}
-                onClick={() => openThread(msg.threadId)}
-                disabled={threadLoading}
-                className="w-full text-left px-5 py-3.5 hover:bg-[var(--admin-surface-hover)] transition-colors flex items-start gap-4"
-              >
-                <FiMail size={15} className="text-[var(--admin-text-muted)] mt-0.5 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <p className="text-sm font-medium text-[var(--admin-text)] truncate">{extractName(msg.from)}</p>
-                    <span className="text-[11px] text-[var(--admin-text-muted)] whitespace-nowrap shrink-0">{formatDate(msg.date)}</span>
-                  </div>
-                  <p className="text-sm text-[var(--admin-text-secondary)] truncate">{msg.subject || "(no subject)"}</p>
-                  <p className="text-xs text-[var(--admin-text-muted)] truncate mt-0.5">{msg.snippet}</p>
+        <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] divide-y divide-[var(--admin-border)] overflow-hidden">
+          {filtered.map((t) => (
+            <button
+              key={t.threadId}
+              onClick={() => openThread(t.threadId)}
+              disabled={threadLoading}
+              className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-[var(--admin-surface-hover)] transition-colors group"
+            >
+              {/* Direction icon */}
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                t.direction === "inbound" ? "bg-blue-500/10" : "bg-emerald-500/10"
+              }`}>
+                {t.direction === "inbound" ? (
+                  <FiInbox size={14} className="text-blue-400" />
+                ) : (
+                  <FiSend size={14} className="text-emerald-400" />
+                )}
+              </div>
+
+              {/* Main content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm truncate max-w-[200px] ${
+                    t.direction === "inbound" ? "font-semibold text-[var(--admin-text)]" : "text-[var(--admin-text-secondary)]"
+                  }`}>
+                    {t.participants
+                      .filter((p) => !isSelf(p))
+                      .slice(0, 2)
+                      .map((p) => extractName(p))
+                      .join(", ") || extractName(t.messages[0]?.from)}
+                  </span>
+                  {t.participants.filter((p) => !isSelf(p)).length > 2 && (
+                    <span className="text-[10px] text-[var(--admin-text-muted)]">+{t.participants.filter((p) => !isSelf(p)).length - 2}</span>
+                  )}
                 </div>
-              </button>
-            ))}
-          </div>
+                <div className="flex items-baseline gap-2 mt-0.5">
+                  <span className={`text-sm truncate ${
+                    t.direction === "inbound" ? "font-medium text-[var(--admin-text)]" : "text-[var(--admin-text-secondary)]"
+                  }`}>
+                    {t.subject}
+                  </span>
+                  <span className="text-xs text-[var(--admin-text-muted)] truncate hidden sm:inline">
+                    — {t.snippet.slice(0, 80)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Meta badges */}
+              <div className="flex items-center gap-2 shrink-0">
+                {t.isRTR && (
+                  <span className="hidden sm:inline text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">
+                    RTR
+                  </span>
+                )}
+                {t.messageCount > 1 && (
+                  <span className="text-[10px] text-[var(--admin-text-muted)] bg-[var(--admin-surface-hover)] px-1.5 py-0.5 rounded font-medium">
+                    {t.messageCount}
+                  </span>
+                )}
+                <span className="text-[10px] text-[var(--admin-text-muted)] min-w-[50px] text-right">
+                  {formatDate(t.latestDate)}
+                </span>
+              </div>
+            </button>
+          ))}
         </div>
       )}
     </div>
