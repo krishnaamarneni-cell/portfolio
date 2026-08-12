@@ -70,7 +70,7 @@ export async function sendBulkViaResend(opts: {
   if (!hasResend()) {
     return { ok: false, error: "RESEND_API_KEY not set — bulk send requires Resend.", provider: "none" };
   }
-  const replyTo = process.env.GMAIL_USER || "avgk26@gmail.com";
+  const replyTo = process.env.GMAIL_USER || "krishna.amarneni@gmail.com";
   const result = await sendViaResend({ ...opts, replyTo });
   return { ...result, provider: "resend" };
 }
