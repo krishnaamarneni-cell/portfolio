@@ -644,6 +644,7 @@ function BulkComposeModal({
   const [uploadingResume, setUploadingResume] = useState(false);
   const resumeUploadRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
+  const [sendVia, setSendVia] = useState<"auto" | "resend">("auto");
 
   useEffect(() => {
     fetch("/api/admin/resume")
@@ -751,6 +752,7 @@ function BulkComposeModal({
           subject: subject.trim(),
           message: message.trim(),
           attachResume,
+          sendVia,
         }),
       });
       const d = await r.json();
@@ -989,6 +991,26 @@ function BulkComposeModal({
                   </p>
                 </div>
               )}
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Send via</label>
+                <div className="flex gap-2">
+                  {(["auto", "resend"] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setSendVia(v)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        sendVia === v
+                          ? "bg-[#ff6b00]/15 border-[#ff6b00]/40 text-[#ff8c38]"
+                          : "bg-[var(--admin-surface-hover)] border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:border-[#ff6b00]/30"
+                      }`}
+                    >
+                      {v === "auto" ? "Auto (Gmail first)" : "Resend (@krishnaamarneni.com)"}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <button
                 onClick={handleSend}

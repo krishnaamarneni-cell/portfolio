@@ -5,16 +5,63 @@ import { sendEmailUnified } from "@/lib/resend";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+type SendBody = {
+  action?: "ai-rewrite";
+  to?: string;
+  subject?: string;
+  message?: string;
+  provider?: "gmail" | "resend";
+  field?: "subject" | "message";
+  currentSubject?: string;
+  currentMessage?: string;
+};
+
 export async function POST(request: Request) {
   if (!(await getSession()))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await request.json().catch(() => ({}))) as {
-    to?: string;
-    subject?: string;
-    message?: string;
-    provider?: "gmail" | "resend";
-  };
+  const body = (await request.json().catch(() => ({}))) as SendBody;
+
+  if (body.action === "ai-rewrite") {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey)
+      return NextResponse.json({ error: "GROQ_API_KEY not set" }, { status: 503 });
+
+    const { runAgent } = await import("@/lib/agents");
+    const field = body.field || "message";
+    const recipient = body.to?.trim() || "a professional contact";
+
+    let userPrompt: string;
+    if (field === "subject") {
+      userPrompt = `Rewrite this email subject line to be more professional and compelling. Keep it under 60 characters.
+Current subject: "${body.currentSubject || ""}"
+Email body context: "${(body.currentMessage || "").slice(0, 300)}"
+Recipient: ${recipient}
+Output ONLY valid JSON: {"subject": "..."}`;
+    } else {
+      userPrompt = `Rewrite this email message to be more professional, clear, and compelling. Keep the same intent but improve tone and clarity. 3-5 sentences max.
+Current message: "${body.currentMessage || ""}"
+Subject: "${body.currentSubject || ""}"
+Recipient: ${recipient}
+Output ONLY valid JSON: {"message": "..."}`;
+    }
+
+    const result = await runAgent({
+      apiKey,
+      model: "llama-3.3-70b-versatile",
+      systemPrompt: `You rewrite professional emails for Krishna Amarneni. Keep emails warm, professional, and concise. No markdown, no bold, no asterisks. No greeting line (added automatically). No signature (added automatically). Output ONLY valid JSON.`,
+      userPrompt,
+      maxTokens: 300,
+    });
+
+    try {
+      const cleaned = (result.content || "{}").replace(/```json\s*|\s*```/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      return NextResponse.json(parsed);
+    } catch {
+      return NextResponse.json({ [field]: result.content?.replace(/[{}"]/g, "").trim() });
+    }
+  }
 
   const to = body.to?.trim();
   const subject = body.subject?.trim();

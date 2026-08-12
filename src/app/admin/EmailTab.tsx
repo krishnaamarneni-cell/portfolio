@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   FiInbox,
   FiSend,
@@ -12,6 +12,9 @@ import {
   FiAlertCircle,
   FiCheck,
   FiUsers,
+  FiExternalLink,
+  FiUploadCloud,
+  FiSlash,
 } from "react-icons/fi";
 
 type EmailSubTab = "inbox" | "sent" | "compose" | "bulk";
@@ -385,6 +388,30 @@ function ComposePanel({
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [provider, setProvider] = useState<"auto" | "resend">("auto");
+  const [aiLoading, setAiLoading] = useState<"subject" | "message" | null>(null);
+
+  async function aiRewrite(field: "subject" | "message") {
+    setAiLoading(field);
+    try {
+      const r = await fetch("/api/admin/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "ai-rewrite",
+          field,
+          to: to.trim(),
+          currentSubject: subject,
+          currentMessage: message,
+        }),
+      });
+      const d = await r.json();
+      if (d.subject && field === "subject") setSubject(d.subject);
+      if (d.message && field === "message") setMessage(d.message);
+    } catch {
+      onError("AI rewrite failed");
+    }
+    setAiLoading(null);
+  }
 
   async function handleSend() {
     if (!to.trim() || !subject.trim() || !message.trim()) {
@@ -442,7 +469,17 @@ function ComposePanel({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Subject</label>
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Subject</label>
+              <button
+                onClick={() => aiRewrite("subject")}
+                disabled={!!aiLoading || !message.trim()}
+                className="text-[10px] font-semibold text-purple-400 hover:text-purple-300 disabled:opacity-50 flex items-center gap-1"
+              >
+                {aiLoading === "subject" ? <FiRefreshCw size={10} className="animate-spin" /> : <span>&#10022;</span>}
+                {aiLoading === "subject" ? "Writing..." : "Rewrite with AI"}
+              </button>
+            </div>
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -452,7 +489,17 @@ function ComposePanel({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Message</label>
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Message</label>
+              <button
+                onClick={() => aiRewrite("message")}
+                disabled={!!aiLoading || (!subject.trim() && !message.trim())}
+                className="text-[10px] font-semibold text-purple-400 hover:text-purple-300 disabled:opacity-50 flex items-center gap-1"
+              >
+                {aiLoading === "message" ? <FiRefreshCw size={10} className="animate-spin" /> : <span>&#10022;</span>}
+                {aiLoading === "message" ? "Writing..." : "Rewrite with AI"}
+              </button>
+            </div>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -520,10 +567,14 @@ function BulkPanel({
   const [loading, setLoading] = useState(true);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [roleSeeking, setRoleSeeking] = useState("");
   const [attachResume, setAttachResume] = useState(true);
-  const [roleSeeking, setRoleSeeking] = useState("SAP S/4HANA Consultant + AI/ML Engineering");
-  const [generating, setGenerating] = useState<string | null>(null);
+  const [resumeInfo, setResumeInfo] = useState<{ url: string; name: string } | null>(null);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const resumeUploadRef = useRef<HTMLInputElement>(null);
+  const [generating, setGenerating] = useState<"both" | "subject" | "message" | null>(null);
   const [sending, setSending] = useState(false);
+  const [sendVia, setSendVia] = useState<"auto" | "resend">("auto");
 
   const loadContacts = useCallback(async () => {
     setLoading(true);
@@ -539,19 +590,55 @@ function BulkPanel({
 
   useEffect(() => { loadContacts(); }, [loadContacts]);
 
+  useEffect(() => {
+    fetch("/api/admin/resume")
+      .then((r) => r.json())
+      .then((j) => { if (j.url) setResumeInfo({ url: j.url, name: j.name || "Resume" }); })
+      .catch(() => {});
+  }, []);
+
+  async function uploadResume(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingResume(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch("/api/admin/resume", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) onError(j.error || "Upload failed");
+      else {
+        setResumeInfo({ url: j.url, name: j.name || file.name });
+        onSuccess("Resume updated");
+      }
+    } catch { onError("Upload failed"); }
+    setUploadingResume(false);
+    if (resumeUploadRef.current) resumeUploadRef.current.value = "";
+  }
+
   const eligible = contacts.filter(
     (c) => !c.do_not_contact && !c.excluded_from_bulk && !c.bounced
   );
+  const excluded = contacts.filter(
+    (c) => c.do_not_contact || c.excluded_from_bulk || c.bounced
+  );
 
-  async function generateDraft(field: "both" | "subject" | "message") {
+  const contactContext = useMemo(() => {
+    const typeCounts: Record<string, number> = {};
+    const companySet = new Set<string>();
+    for (const c of eligible) {
+      typeCounts[c.contact_type] = (typeCounts[c.contact_type] || 0) + 1;
+      if (c.company) companySet.add(c.company);
+    }
+    return {
+      types: Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).map(([t]) => t),
+      companies: [...companySet].slice(0, 10),
+    };
+  }, [eligible]);
+
+  async function generateDraft(field: "both" | "subject" | "message", roleOverride?: string) {
     setGenerating(field);
     try {
-      const types: Record<string, number> = {};
-      const companies = new Set<string>();
-      for (const c of eligible) {
-        types[c.contact_type] = (types[c.contact_type] || 0) + 1;
-        if (c.company) companies.add(c.company);
-      }
       const r = await fetch("/api/admin/contacts/email/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -559,18 +646,16 @@ function BulkPanel({
           action: "generate-draft",
           field,
           count: eligible.length,
-          contactTypes: Object.keys(types),
-          companies: [...companies].slice(0, 10),
+          contactTypes: contactContext.types,
+          companies: contactContext.companies,
           currentSubject: subject,
           currentMessage: message,
-          roleSeeking: roleSeeking || undefined,
+          roleSeeking: (roleOverride ?? roleSeeking) || undefined,
         }),
-      }).then((r) => r.text());
-      try {
-        const d = JSON.parse(r);
-        if (d.subject !== undefined && field !== "message") setSubject(d.subject);
-        if (d.message !== undefined && field !== "subject") setMessage(d.message);
-      } catch { /* */ }
+      });
+      const d = await r.json();
+      if (d.subject !== undefined && field !== "message") setSubject(d.subject);
+      if (d.message !== undefined && field !== "subject") setMessage(d.message);
     } catch {
       onError("AI generation failed");
     }
@@ -592,7 +677,7 @@ function BulkPanel({
     }
     setSending(true);
     try {
-      const txt = await fetch("/api/admin/contacts/email/bulk", {
+      const r = await fetch("/api/admin/contacts/email/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -601,20 +686,17 @@ function BulkPanel({
           message: message.trim(),
           attachResume,
           roleSeeking,
+          sendVia,
         }),
-      }).then((r) => r.text());
-      try {
-        const d = JSON.parse(txt);
-        if (d.started) {
-          const skipMsg = d.skipped ? ` (${d.skipped} skipped)` : "";
-          onSuccess(
-            `Sending to ${d.total} contact${d.total !== 1 ? "s" : ""} in the background${skipMsg}. Track replies in Sent tab.`
-          );
-        } else if (d.error) {
-          onError(d.error);
-        }
-      } catch {
-        onError("Invalid response");
+      });
+      const d = await r.json();
+      if (d.started) {
+        const skipMsg = d.skipped ? ` (${d.skipped} skipped)` : "";
+        onSuccess(
+          `Sending to ${d.total} contact${d.total !== 1 ? "s" : ""} in the background${skipMsg}. Track progress in the Sent tab.`
+        );
+      } else if (d.error) {
+        onError(d.error);
       }
     } catch {
       onError("Network error");
@@ -632,113 +714,232 @@ function BulkPanel({
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-xl mx-auto space-y-5">
       <div className="flex gap-3">
-        <div className="flex-1 bg-emerald-500/10 rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-emerald-500">{eligible.length}</p>
-          <p className="text-[10px] uppercase tracking-wider text-emerald-400 mt-1">Will receive</p>
+        <div className="flex-1 bg-emerald-500/10 rounded-xl p-3 text-center">
+          <p className="text-lg font-bold text-emerald-500">{eligible.length}</p>
+          <p className="text-[10px] uppercase tracking-wider text-emerald-400">Will receive</p>
         </div>
-        <div className="flex-1 bg-[var(--admin-surface)] rounded-xl p-4 text-center border border-[var(--admin-border)]">
-          <p className="text-2xl font-bold text-[var(--admin-text)]">{contacts.length}</p>
-          <p className="text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)] mt-1">Total contacts</p>
+        {excluded.length > 0 && (
+          <div className="flex-1 bg-red-500/10 rounded-xl p-3 text-center">
+            <p className="text-lg font-bold text-red-500">{excluded.length}</p>
+            <p className="text-[10px] uppercase tracking-wider text-red-400">Excluded</p>
+          </div>
+        )}
+      </div>
+
+      {excluded.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex items-start gap-2">
+          <FiSlash size={14} className="text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-500">
+            <p className="font-semibold">These contacts will NOT receive email:</p>
+            {excluded.slice(0, 5).map((c) => (
+              <p key={c.id} className="mt-0.5">
+                {c.name || c.email} — {c.do_not_contact ? "Do Not Contact" : c.bounced ? "Bounced" : "Excluded from bulk"}
+              </p>
+            ))}
+            {excluded.length > 5 && <p className="mt-0.5">...and {excluded.length - 5} more</p>}
+          </div>
         </div>
-        <div className="flex-1 bg-red-500/10 rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-red-500">{contacts.length - eligible.length}</p>
-          <p className="text-[10px] uppercase tracking-wider text-red-400 mt-1">Excluded</p>
+      )}
+
+      {/* Role seeking */}
+      <div className="space-y-1.5">
+        <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">
+          Role you&apos;re seeking
+        </label>
+        <div className="flex gap-2">
+          <input
+            value={roleSeeking}
+            onChange={(e) => setRoleSeeking(e.target.value)}
+            placeholder="e.g. SAP S/4HANA Consultant, AI/ML Engineer, Supply Chain Analyst"
+            onKeyDown={(e) => { if (e.key === "Enter") generateDraft("both"); }}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)]"
+          />
+          <button
+            onClick={() => generateDraft("both")}
+            disabled={!!generating}
+            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-xs font-semibold text-purple-300 hover:bg-purple-500/25 disabled:opacity-50"
+          >
+            {generating === "both" ? <FiRefreshCw size={11} className="animate-spin" /> : <span>&#10022;</span>}
+            {generating === "both" ? "Writing..." : "Generate"}
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            "SAP MM/SD Consultant",
+            "SAP S/4HANA Consultant",
+            "AI/ML Engineer",
+            "Business Systems Analyst",
+            "Supply Chain Analyst",
+          ].map((r) => {
+            const active = roleSeeking.trim().toLowerCase() === r.toLowerCase();
+            return (
+              <button
+                key={r}
+                type="button"
+                disabled={!!generating}
+                onClick={() => { setRoleSeeking(r); generateDraft("both", r); }}
+                className={`px-2.5 py-1 rounded-full text-[11px] border transition-colors disabled:opacity-50 ${
+                  active
+                    ? "bg-[#ff6b00]/15 border-[#ff6b00]/40 text-[#ff8c38]"
+                    : "bg-[var(--admin-surface-hover)] border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:border-[#ff6b00]/40 hover:text-[#ff8c38]"
+                }`}
+              >
+                {r}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-[10px] text-[var(--admin-text-muted)]">
+          Pick a role above (or type one) — the email will target that specific role, not both. You can still edit below.
+        </p>
+      </div>
+
+      {/* Subject */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Subject</label>
+          <button
+            onClick={() => generateDraft("subject")}
+            disabled={!!generating}
+            className="text-[10px] font-semibold text-purple-400 hover:text-purple-300 disabled:opacity-50 flex items-center gap-1"
+          >
+            {generating === "subject" ? <FiRefreshCw size={10} className="animate-spin" /> : <span>&#10022;</span>}
+            {generating === "subject" ? "Generating..." : "Rewrite with AI"}
+          </button>
+        </div>
+        <input
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          placeholder={generating === "both" ? "AI is generating..." : "Email subject"}
+          className="w-full px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)]"
+        />
+      </div>
+
+      {/* Message */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Message</label>
+          <button
+            onClick={() => generateDraft("message")}
+            disabled={!!generating}
+            className="text-[10px] font-semibold text-purple-400 hover:text-purple-300 disabled:opacity-50 flex items-center gap-1"
+          >
+            {generating === "message" ? <FiRefreshCw size={10} className="animate-spin" /> : <span>&#10022;</span>}
+            {generating === "message" ? "Generating..." : "Rewrite with AI"}
+          </button>
+        </div>
+        <div className="relative">
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            rows={6}
+            placeholder={generating === "both" ? "AI is generating your email..." : "Write your email message... (greeting and signature are added automatically)"}
+            className="w-full px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none resize-none placeholder:text-[var(--admin-text-muted)]"
+          />
+          {generating === "both" && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-[var(--admin-input-bg)]/80">
+              <div className="flex items-center gap-2 text-sm text-purple-400">
+                <FiRefreshCw size={14} className="animate-spin" />
+                AI is writing your email...
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="bg-[var(--admin-surface)] rounded-2xl border border-[var(--admin-border)] overflow-hidden">
-        <div className="px-6 py-4 border-b border-[var(--admin-border)] flex items-center gap-2">
-          <FiUsers size={16} className="text-[#ff6b00]" />
-          <h3 className="font-bold text-[var(--admin-text)]">Compose Bulk Email</h3>
-        </div>
+      {/* Resume attach */}
+      <label className="flex items-center gap-2 text-sm text-[var(--admin-text-muted)] cursor-pointer">
+        <input
+          type="checkbox"
+          checked={attachResume}
+          onChange={(e) => setAttachResume(e.target.checked)}
+          className="rounded border-[var(--admin-border)] text-[#ff6b00] focus:ring-[#ff6b00]"
+        />
+        Attach resume file (PDF/DOCX)
+      </label>
 
-        <div className="p-6 space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Role seeking</label>
-            <div className="flex gap-2">
+      {attachResume && (
+        <div className="rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)] font-semibold">
+                Resume that will be attached
+              </p>
+              <p className="text-xs text-[var(--admin-text)] truncate">
+                {resumeInfo?.name || "Krishna_Amarneni_Resume.docx (default)"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {resumeInfo?.url && (
+                <a
+                  href={resumeInfo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-[#ff6b00] hover:underline inline-flex items-center gap-1"
+                >
+                  <FiExternalLink size={12} /> View
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => resumeUploadRef.current?.click()}
+                disabled={uploadingResume}
+                className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] hover:border-[#ff6b00] hover:text-[#ff6b00] disabled:opacity-50"
+              >
+                <FiUploadCloud size={12} /> {uploadingResume ? "Uploading..." : "Upload new"}
+              </button>
               <input
-                value={roleSeeking}
-                onChange={(e) => setRoleSeeking(e.target.value)}
-                placeholder="Target role(s)"
-                className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)]"
+                ref={resumeUploadRef}
+                type="file"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                className="hidden"
+                onChange={uploadResume}
               />
-              <button
-                onClick={() => generateDraft("both")}
-                disabled={!!generating}
-                className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-xs font-semibold text-purple-400 hover:bg-purple-500/25 disabled:opacity-50"
-              >
-                {generating === "both" ? <FiRefreshCw size={11} className="animate-spin" /> : <span>AI</span>}
-                {generating === "both" ? "Writing..." : "Generate"}
-              </button>
             </div>
           </div>
+          <p className="text-[10px] text-[var(--admin-text-muted)]">
+            Click <span className="text-[var(--admin-text-secondary)]">View</span> to check the exact file, or{" "}
+            <span className="text-[var(--admin-text-secondary)]">Upload new</span> to replace it before sending —
+            this file is attached to every email.
+          </p>
+        </div>
+      )}
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Subject</label>
-              <button
-                onClick={() => generateDraft("subject")}
-                disabled={!!generating}
-                className="text-[10px] text-purple-400 hover:text-purple-300 disabled:opacity-50"
-              >
-                {generating === "subject" ? "Writing..." : "Regenerate"}
-              </button>
-            </div>
-            <input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Email subject"
-              className="w-full px-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)]"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Message</label>
-              <button
-                onClick={() => generateDraft("message")}
-                disabled={!!generating}
-                className="text-[10px] text-purple-400 hover:text-purple-300 disabled:opacity-50"
-              >
-                {generating === "message" ? "Writing..." : "Regenerate"}
-              </button>
-            </div>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Email body (greeting and signature are added automatically)"
-              rows={8}
-              className="w-full px-4 py-3 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)] resize-y"
-            />
-            <p className="text-[10px] text-[var(--admin-text-muted)]">
-              Each contact gets a personalized greeting (Hi [FirstName],) and your signature automatically.
-            </p>
-          </div>
-
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={attachResume}
-              onChange={(e) => setAttachResume(e.target.checked)}
-              className="w-4 h-4 rounded border-[var(--admin-border)] text-[#ff6b00] focus:ring-[#ff6b00]"
-            />
-            <span className="text-sm text-[var(--admin-text)]">Attach resume</span>
-          </label>
-
-          <div className="pt-2 flex justify-end">
+      {/* Send via */}
+      <div className="space-y-1.5">
+        <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Send via</label>
+        <div className="flex gap-2">
+          {(["auto", "resend"] as const).map((v) => (
             <button
-              onClick={handleSend}
-              disabled={sending || !subject.trim() || !message.trim() || eligible.length === 0}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#ff6b00] text-white font-semibold text-sm shadow-md hover:bg-[#e55d00] disabled:opacity-50 transition-colors"
+              key={v}
+              type="button"
+              onClick={() => setSendVia(v)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                sendVia === v
+                  ? "bg-[#ff6b00]/15 border-[#ff6b00]/40 text-[#ff8c38]"
+                  : "bg-[var(--admin-surface-hover)] border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:border-[#ff6b00]/30"
+              }`}
             >
-              {sending ? <FiRefreshCw size={14} className="animate-spin" /> : <FiSend size={14} />}
-              {sending ? "Sending..." : `Send to ${eligible.length} contacts`}
+              {v === "auto" ? "Auto (Gmail first)" : "Resend (@krishnaamarneni.com)"}
             </button>
-          </div>
+          ))}
         </div>
       </div>
+
+      {/* Send button */}
+      <button
+        onClick={handleSend}
+        disabled={sending || eligible.length === 0 || !subject.trim() || !message.trim()}
+        className="w-full py-3 rounded-xl bg-[#ff6b00] text-white font-semibold hover:bg-[#e55d00] disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {sending ? (
+          <><FiRefreshCw size={14} className="animate-spin" /> Sending...</>
+        ) : (
+          <><FiSend size={14} /> Send to {eligible.length} contact{eligible.length !== 1 ? "s" : ""}</>
+        )}
+      </button>
     </div>
   );
 }

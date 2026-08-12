@@ -29,6 +29,7 @@ type BulkBody = {
   currentSubject?: string;
   currentMessage?: string;
   roleSeeking?: string;
+  sendVia?: "auto" | "resend";
 };
 
 export async function POST(request: Request) {
@@ -234,6 +235,7 @@ Rules:
   // Fire the actual sending in the BACKGROUND. after() runs once the HTTP
   // response has been flushed, so the client gets an instant reply and can
   // close the modal instead of blocking for minutes on 400+ emails.
+  const forceResend = body.sendVia === "resend" && hasResend();
   const hasResendKey = hasResend();
 
   after(async () => {
@@ -314,7 +316,7 @@ ${htmlBody}
         .replace(/<[^>]+>/g, "")
         .replace(/&nbsp;/g, " ");
 
-      const sendFn = hasResendKey ? sendBulkViaResend : sendEmailUnified;
+      const sendFn = (forceResend || hasResendKey) ? sendBulkViaResend : sendEmailUnified;
       const r = await sendFn({
         to: c.email,
         subject,
