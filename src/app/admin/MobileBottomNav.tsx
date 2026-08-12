@@ -28,7 +28,8 @@ export type Tab =
   | "connectors"
   | "contacts"
   | "chat"
-  | "resume";
+  | "resume"
+  | "email";
 
 /** Five-slot bottom bar. Order chosen for daily-touch frequency:
  *  Chat → Life → Social → Agents → More. iPhone 15/16 widths (393-440px)

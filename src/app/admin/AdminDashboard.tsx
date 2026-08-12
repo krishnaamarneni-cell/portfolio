@@ -27,6 +27,7 @@ import {
   FiFileText,
   FiMenu,
   FiHome,
+  FiMail,
   FiChevronRight,
   FiTrendingUp,
   FiTrendingDown,
@@ -53,6 +54,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import PersonalTab from "./PersonalTab";
 import ResumeCreatorTab from "./ResumeCreatorTab";
 import ApplicationsTab from "./ApplicationsTab";
+import EmailTab from "./EmailTab";
 
 type Tab =
   | "dashboard"
@@ -67,7 +69,8 @@ type Tab =
   | "connectors"
   | "chat"
   | "resume"
-  | "applications";
+  | "applications"
+  | "email";
 
 type Props = {
   session: { email: string };
@@ -90,6 +93,7 @@ const NAV_ITEMS: Array<{
   { id: "resume", label: "Resume", icon: FiFileText },
   { id: "applications", label: "Applications", icon: FiBriefcase },
   { id: "contacts", label: "CRM", icon: FiUsers },
+  { id: "email", label: "Email", icon: FiMail },
   { id: "jobs", label: "Jobs", icon: FiBriefcase, section: "Data" },
   { id: "projects", label: "Projects", icon: FiFolder },
   { id: "content", label: "Site Content", icon: FiLayout },
@@ -381,6 +385,8 @@ export default function AdminDashboard({
             <ResumeCreatorTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "applications" ? (
             <ApplicationsTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          ) : tab === "email" ? (
+            <EmailTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "connectors" ? (
             <ConnectorsEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} sessionEmail={session.email} />
           ) : tab === "chat" ? (
