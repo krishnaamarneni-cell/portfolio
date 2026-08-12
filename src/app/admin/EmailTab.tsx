@@ -160,6 +160,24 @@ const RTR_PATTERNS = [
   /presented.*to.*client/i,
   /forwarded.*to.*hiring/i,
   /application.*submitted/i,
+  /thanks for applying/i,
+  /thank you for applying/i,
+  /your application/i,
+  /application.*received/i,
+  /we received your/i,
+  /resume.*received/i,
+  /applied.*to/i,
+  /you applied/i,
+  /your.*submission/i,
+  /submitted.*resume/i,
+  /resume.*submitted/i,
+  /shared.*with.*hiring/i,
+  /sent.*to.*hiring/i,
+  /forwarded.*resume/i,
+  /presented.*your/i,
+  /shortlisted/i,
+  /we.*submitted/i,
+  /has been submitted/i,
 ];
 function isRTR(msg: InboxMessage): boolean {
   const text = `${msg.subject || ""} ${msg.snippet || ""}`;
@@ -312,14 +330,12 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
   return (
     <div className="space-y-5">
       {/* Stats */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {([
           { label: "Threads", value: stats.threads },
           { label: "Inbound", value: stats.inbound },
           { label: "Outbound", value: stats.outbound },
           { label: "Messages", value: stats.messages },
-          { label: "Has Replies", value: stats.replies },
-          { label: "RTR / Submitted", value: stats.rtr },
         ] as const).map((s) => (
           <div key={s.label} className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
             <p className="text-xl font-bold text-[var(--admin-text)]">{s.value}</p>
