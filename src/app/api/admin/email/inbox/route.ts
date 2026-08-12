@@ -11,7 +11,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q") || undefined;
-  const max = Math.min(Number(searchParams.get("max")) || 30, 100);
+  const max = Math.min(Number(searchParams.get("max")) || 30, 500);
   const threadId = searchParams.get("threadId");
 
   if (threadId) {

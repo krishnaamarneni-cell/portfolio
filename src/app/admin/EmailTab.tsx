@@ -242,21 +242,30 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
   const [threadLoading, setThreadLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dirFilter, setDirFilter] = useState<"all" | "inbound" | "outbound">("all");
-  const [dateRange, setDateRange] = useState(30);
+  const [dateRange, setDateRange] = useState(60);
   const [typeFilter, setTypeFilter] = useState<"all" | "replies" | "rtr">("all");
 
-  const load = useCallback(async (days: number, q?: string) => {
+  const RTR_GMAIL_QUERY = '{rtr OR "right to represent" OR "thanks for applying" OR "thank you for applying" OR "your application" OR "application received" OR "application submitted" OR "resume submitted" OR shortlisted OR "has been submitted" OR "submitted your" OR "profile submitted"}';
+
+  const buildQuery = useCallback((days: number, dir: "all" | "inbound" | "outbound", type: "all" | "replies" | "rtr", q?: string) => {
+    const afterDate = new Date();
+    afterDate.setDate(afterDate.getDate() - days);
+    const afterStr = `${afterDate.getFullYear()}/${afterDate.getMonth() + 1}/${afterDate.getDate()}`;
+    const parts = [`after:${afterStr}`];
+    if (dir === "inbound") parts.push("-from:me");
+    if (dir === "outbound") parts.push("from:me");
+    if (type === "rtr") parts.push(RTR_GMAIL_QUERY);
+    if (q) parts.push(q);
+    return parts.join(" ");
+  }, []);
+
+  const load = useCallback(async (days: number, dir: "all" | "inbound" | "outbound", type: "all" | "replies" | "rtr", q?: string) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      const afterDate = new Date();
-      afterDate.setDate(afterDate.getDate() - days);
-      const afterStr = `${afterDate.getFullYear()}/${afterDate.getMonth() + 1}/${afterDate.getDate()}`;
-      const queryParts = [`after:${afterStr}`];
-      if (q) queryParts.push(q);
-      params.set("q", queryParts.join(" "));
-      params.set("max", "100");
+      params.set("q", buildQuery(days, dir, type, q));
+      params.set("max", type === "rtr" ? "300" : "200");
       const txt = await fetch(`/api/admin/email/inbox?${params}`).then((r) => r.text());
       try {
         const data = JSON.parse(txt);
@@ -269,17 +278,15 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
       setError("Failed to load inbox");
     }
     setLoading(false);
-  }, []);
+  }, [buildQuery]);
 
-  useEffect(() => { load(dateRange); }, [load, dateRange]);
+  useEffect(() => { load(dateRange, dirFilter, typeFilter); }, [load, dateRange, dirFilter, typeFilter]);
 
   const grouped = useMemo(() => groupByThread(rawMessages), [rawMessages]);
 
   const filtered = useMemo(() => {
     let list = grouped;
-    if (dirFilter !== "all") list = list.filter((t) => t.direction === dirFilter);
     if (typeFilter === "replies") list = list.filter((t) => t.hasReplies);
-    if (typeFilter === "rtr") list = list.filter((t) => t.isRTR);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter((t) =>
@@ -289,7 +296,7 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
       );
     }
     return list;
-  }, [grouped, dirFilter, typeFilter, search]);
+  }, [grouped, typeFilter, search]);
 
   const stats = useMemo(() => ({
     threads: grouped.length,
@@ -352,7 +359,7 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") load(dateRange, search); }}
+            onKeyDown={(e) => { if (e.key === "Enter") load(dateRange, dirFilter, typeFilter, search); }}
             placeholder="Search by subject, sender, company..."
             className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none text-[var(--admin-text)] placeholder:text-[var(--admin-text-muted)]"
           />
@@ -378,10 +385,11 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
         {/* Date range */}
         <div className="flex items-center gap-1 bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-1">
           {([
-            { d: 1, label: "1d" },
             { d: 7, label: "7d" },
             { d: 30, label: "30d" },
+            { d: 60, label: "60d" },
             { d: 90, label: "90d" },
+            { d: 180, label: "180d" },
           ] as const).map(({ d, label }) => (
             <button
               key={d}
@@ -400,7 +408,7 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
         {/* Sync Gmail */}
         <button
           disabled={loading}
-          onClick={() => load(dateRange, search)}
+          onClick={() => load(dateRange, dirFilter, typeFilter, search)}
           className="px-4 py-2.5 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] disabled:opacity-50 flex items-center gap-2"
         >
           <FiRefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -408,7 +416,7 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
         </button>
 
         <button
-          onClick={() => load(dateRange, search)}
+          onClick={() => load(dateRange, dirFilter, typeFilter, search)}
           className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text-secondary)] hover:border-[#ff6b00] flex items-center gap-2"
         >
           <FiRefreshCw size={14} /> Refresh
