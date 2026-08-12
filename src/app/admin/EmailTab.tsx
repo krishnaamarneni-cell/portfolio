@@ -18,9 +18,13 @@ import {
   FiFilter,
   FiMessageSquare,
   FiArrowRight,
+  FiClipboard,
+  FiPlus,
+  FiTrash2,
+  FiEdit,
 } from "react-icons/fi";
 
-type EmailSubTab = "inbox" | "sent" | "compose" | "bulk";
+type EmailSubTab = "inbox" | "sent" | "compose" | "bulk" | "submissions";
 
 type InboxMessage = {
   id: string;
@@ -51,8 +55,29 @@ type ThreadData = {
   messageCount: number;
 };
 
+type Submission = {
+  id: string;
+  thread_id: string | null;
+  recruiter_email: string;
+  recruiter_name: string | null;
+  staffing_company: string | null;
+  client_company: string | null;
+  job_title: string | null;
+  location: string | null;
+  rate: string | null;
+  employment_type: string | null;
+  status: string;
+  notes: string | null;
+  submitted_at: string;
+  followed_up_at: string | null;
+  contact_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 const TABS: Array<{ id: EmailSubTab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "inbox", label: "Inbox", icon: FiInbox },
+  { id: "submissions", label: "Submissions", icon: FiClipboard },
   { id: "sent", label: "Sent", icon: FiSend },
   { id: "compose", label: "Compose", icon: FiEdit3 },
   { id: "bulk", label: "Bulk Send", icon: FiUsers },
@@ -91,14 +116,16 @@ export default function EmailTab({
       </div>
 
       {tab === "inbox" ? (
-        <InboxPanel onError={onError} />
+        <InboxPanel onError={onError} onSuccess={onSuccess} />
+      ) : tab === "submissions" ? (
+        <SubmissionsPanel onSuccess={onSuccess} onError={onError} />
       ) : tab === "sent" ? (
         <SentPanel onError={onError} />
       ) : tab === "compose" ? (
         <ComposePanel onSuccess={onSuccess} onError={onError} />
-      ) : (
+      ) : tab === "bulk" ? (
         <BulkPanel onSuccess={onSuccess} onError={onError} />
-      )}
+      ) : null}
     </div>
   );
 }
@@ -211,7 +238,7 @@ function groupByThread(messages: InboxMessage[]): GroupedThread[] {
 
 /* ───────── INBOX ───────── */
 
-function InboxPanel({ onError }: { onError: (m: string) => void }) {
+function InboxPanel({ onError, onSuccess }: { onError: (m: string) => void; onSuccess: (m: string) => void }) {
   const [rawMessages, setRawMessages] = useState<InboxMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -300,12 +327,15 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
   if (thread) {
     return (
       <div className="space-y-4">
-        <button
-          onClick={() => setThread(null)}
-          className="inline-flex items-center gap-2 text-sm text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
-        >
-          <FiChevronLeft size={14} /> Back to Inbox
-        </button>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setThread(null)}
+            className="inline-flex items-center gap-2 text-sm text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
+          >
+            <FiChevronLeft size={14} /> Back to Inbox
+          </button>
+          <TrackSubmissionButton thread={thread} onSuccess={onSuccess} onError={onError} />
+        </div>
         <ThreadView thread={thread} />
       </div>
     );
@@ -1198,6 +1228,457 @@ function BulkPanel({
           <><FiSend size={14} /> Send to {eligible.length} contact{eligible.length !== 1 ? "s" : ""}</>
         )}
       </button>
+    </div>
+  );
+}
+
+/* ───────── TRACK SUBMISSION BUTTON ───────── */
+
+function TrackSubmissionButton({
+  thread,
+  onSuccess,
+  onError,
+}: {
+  thread: ThreadData;
+  onSuccess: (m: string) => void;
+  onError: (m: string) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const firstMsg = thread.messages[0];
+      const recruiterMsg = thread.messages.find((m) => !isSelf(m.from)) || firstMsg;
+      const recruiterEmail = recruiterMsg.from.match(/<([^>]+)>/)?.[1] || recruiterMsg.from.split("<")[0].trim();
+      const recruiterName = recruiterMsg.from.split("<")[0].replace(/"/g, "").trim() || null;
+
+      const extractRes = await fetch("/api/admin/email/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "extract",
+          subject: thread.subject,
+          snippet: recruiterMsg.snippet,
+          body: recruiterMsg.bodyText,
+        }),
+      });
+      const extracted = await extractRes.json();
+
+      const r = await fetch("/api/admin/email/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          thread_id: thread.id,
+          recruiter_email: recruiterEmail,
+          recruiter_name: extracted.recruiter_name || recruiterName,
+          staffing_company: extracted.staffing_company,
+          client_company: extracted.client_company,
+          job_title: extracted.job_title || thread.subject.replace(/^(re|fwd|rtr)[:\s]*/i, "").trim(),
+          location: extracted.location,
+          rate: extracted.rate,
+          employment_type: extracted.employment_type,
+          status: "submitted",
+        }),
+      });
+      const d = await r.json();
+      if (d.ok) onSuccess("Submission tracked! View in Submissions tab.");
+      else onError(d.error || "Failed to save");
+    } catch {
+      onError("Failed to save submission");
+    }
+    setSaving(false);
+  }
+
+  return (
+    <button
+      onClick={save}
+      disabled={saving}
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-500/15 border border-purple-500/30 text-sm font-semibold text-purple-300 hover:bg-purple-500/25 disabled:opacity-50"
+    >
+      {saving ? <FiRefreshCw size={14} className="animate-spin" /> : <FiClipboard size={14} />}
+      {saving ? "Extracting..." : "Track Submission"}
+    </button>
+  );
+}
+
+/* ───────── SUBMISSIONS PANEL ───────── */
+
+const STATUS_OPTIONS = [
+  { value: "submitted", label: "Submitted", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+  { value: "interviewing", label: "Interviewing", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  { value: "offered", label: "Offered", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+  { value: "accepted", label: "Accepted", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+  { value: "rejected", label: "Rejected", color: "text-red-400 bg-red-500/10 border-red-500/20" },
+  { value: "declined", label: "Declined", color: "text-red-400 bg-red-500/10 border-red-500/20" },
+  { value: "no_response", label: "No Response", color: "text-gray-400 bg-gray-500/10 border-gray-500/20" },
+] as const;
+
+function statusStyle(status: string): string {
+  return STATUS_OPTIONS.find((s) => s.value === status)?.color || "text-gray-400 bg-gray-500/10 border-gray-500/20";
+}
+
+function SubmissionsPanel({ onSuccess, onError }: { onSuccess: (m: string) => void; onError: (m: string) => void }) {
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [editing, setEditing] = useState<Submission | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/admin/email/submissions");
+      const d = await r.json();
+      setSubmissions(d.submissions ?? []);
+    } catch { /* */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function updateStatus(id: string, status: string) {
+    const r = await fetch("/api/admin/email/submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update", id, status }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setSubmissions((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
+    } else {
+      onError(d.error || "Update failed");
+    }
+  }
+
+  async function markFollowedUp(id: string) {
+    const now = new Date().toISOString();
+    const r = await fetch("/api/admin/email/submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update", id, followed_up_at: now }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setSubmissions((prev) => prev.map((s) => (s.id === id ? { ...s, followed_up_at: now } : s)));
+      onSuccess("Marked as followed up");
+    }
+  }
+
+  async function deleteSubmission(id: string) {
+    const r = await fetch("/api/admin/email/submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", id }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setSubmissions((prev) => prev.filter((s) => s.id !== id));
+      onSuccess("Submission removed");
+    }
+  }
+
+  async function saveEdit(sub: Submission) {
+    const r = await fetch("/api/admin/email/submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update",
+        id: sub.id,
+        recruiter_name: sub.recruiter_name,
+        staffing_company: sub.staffing_company,
+        client_company: sub.client_company,
+        job_title: sub.job_title,
+        location: sub.location,
+        rate: sub.rate,
+        employment_type: sub.employment_type,
+        status: sub.status,
+        notes: sub.notes,
+      }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setSubmissions((prev) => prev.map((s) => (s.id === sub.id ? sub : s)));
+      setEditing(null);
+      onSuccess("Submission updated");
+    } else {
+      onError(d.error || "Update failed");
+    }
+  }
+
+  const filtered = useMemo(() => {
+    let list = submissions;
+    if (statusFilter !== "all") list = list.filter((s) => s.status === statusFilter);
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter((s) =>
+        (s.recruiter_name?.toLowerCase().includes(q) ?? false) ||
+        s.recruiter_email.toLowerCase().includes(q) ||
+        (s.client_company?.toLowerCase().includes(q) ?? false) ||
+        (s.staffing_company?.toLowerCase().includes(q) ?? false) ||
+        (s.job_title?.toLowerCase().includes(q) ?? false) ||
+        (s.location?.toLowerCase().includes(q) ?? false)
+      );
+    }
+    return list;
+  }, [submissions, statusFilter, search]);
+
+  const stats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of submissions) counts[s.status] = (counts[s.status] || 0) + 1;
+    return counts;
+  }, [submissions]);
+
+  if (editing) {
+    return <EditSubmissionForm sub={editing} onSave={saveEdit} onCancel={() => setEditing(null)} />;
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
+          <p className="text-xl font-bold text-[var(--admin-text)]">{submissions.length}</p>
+          <p className="text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)] mt-0.5">Total</p>
+        </div>
+        <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
+          <p className="text-xl font-bold text-blue-400">{stats["submitted"] || 0}</p>
+          <p className="text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)] mt-0.5">Submitted</p>
+        </div>
+        <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
+          <p className="text-xl font-bold text-amber-400">{stats["interviewing"] || 0}</p>
+          <p className="text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)] mt-0.5">Interviewing</p>
+        </div>
+        <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] px-4 py-3">
+          <p className="text-xl font-bold text-gray-400">{stats["no_response"] || 0}</p>
+          <p className="text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)] mt-0.5">No Response</p>
+        </div>
+      </div>
+
+      {/* Search + filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <FiSearch size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--admin-text-muted)]" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by recruiter, company, role, location..."
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none text-[var(--admin-text)] placeholder:text-[var(--admin-text-muted)]"
+          />
+        </div>
+        <div className="flex gap-1 bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-1 overflow-x-auto">
+          <button
+            onClick={() => setStatusFilter("all")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+              statusFilter === "all" ? "bg-[#ff6b00] text-white" : "text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
+            }`}
+          >
+            All
+          </button>
+          {STATUS_OPTIONS.map((s) => (
+            <button
+              key={s.value}
+              onClick={() => setStatusFilter(s.value)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                statusFilter === s.value ? "bg-[#ff6b00] text-white" : "text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
+              }`}
+            >
+              {s.label} {stats[s.value] ? `(${stats[s.value]})` : ""}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text-secondary)] hover:border-[#ff6b00] flex items-center gap-2 shrink-0"
+        >
+          <FiRefreshCw size={14} className={loading ? "animate-spin" : ""} /> Refresh
+        </button>
+      </div>
+
+      {loading && submissions.length === 0 ? (
+        <div className="text-center py-16 text-[var(--admin-text-muted)] text-sm">
+          <FiRefreshCw size={20} className="animate-spin mx-auto mb-3" />
+          Loading submissions...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-[var(--admin-text-muted)] text-sm">
+          <FiClipboard size={28} className="mx-auto mb-3 opacity-40" />
+          {submissions.length === 0
+            ? "No submissions tracked yet. Open an RTR email in Inbox and click \"Track Submission\"."
+            : "No submissions match your filter."}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((sub) => (
+            <div
+              key={sub.id}
+              className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-4 space-y-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-bold text-[var(--admin-text)] truncate">
+                    {sub.job_title || "Untitled Role"}
+                  </h4>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    {sub.client_company && (
+                      <span className="text-xs text-[var(--admin-text-secondary)]">
+                        Client: <span className="font-medium text-[var(--admin-text)]">{sub.client_company}</span>
+                      </span>
+                    )}
+                    {sub.staffing_company && (
+                      <span className="text-xs text-[var(--admin-text-muted)]">via {sub.staffing_company}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <select
+                    value={sub.status}
+                    onChange={(e) => updateStatus(sub.id, e.target.value)}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-medium border cursor-pointer appearance-none pr-6 bg-[length:12px] bg-[right_4px_center] bg-no-repeat ${statusStyle(sub.status)}`}
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")` }}
+                  >
+                    {STATUS_OPTIONS.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--admin-text-muted)]">
+                {sub.recruiter_name && <span>Recruiter: {sub.recruiter_name}</span>}
+                <span>{sub.recruiter_email}</span>
+                {sub.location && <span>{sub.location}</span>}
+                {sub.rate && <span className="font-medium text-emerald-400">{sub.rate}</span>}
+                {sub.employment_type && <span className="font-medium">{sub.employment_type}</span>}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-[var(--admin-border)]">
+                <div className="flex items-center gap-3 text-[10px] text-[var(--admin-text-muted)]">
+                  <span>Submitted {formatDate(sub.submitted_at)}</span>
+                  {sub.followed_up_at && (
+                    <span className="text-emerald-400">Followed up {formatDate(sub.followed_up_at)}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  {!sub.followed_up_at && (
+                    <button
+                      onClick={() => markFollowedUp(sub.id)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-[#ff6b00]/10 text-[#ff6b00] border border-[#ff6b00]/20 hover:bg-[#ff6b00]/20"
+                    >
+                      <FiCheck size={10} /> Followed Up
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setEditing(sub)}
+                    className="p-1.5 rounded-lg text-[var(--admin-text-muted)] hover:text-[var(--admin-text)] hover:bg-[var(--admin-surface-hover)]"
+                    title="Edit"
+                  >
+                    <FiEdit size={12} />
+                  </button>
+                  <button
+                    onClick={() => deleteSubmission(sub.id)}
+                    className="p-1.5 rounded-lg text-[var(--admin-text-muted)] hover:text-red-400 hover:bg-red-500/10"
+                    title="Delete"
+                  >
+                    <FiTrash2 size={12} />
+                  </button>
+                </div>
+              </div>
+
+              {sub.notes && (
+                <p className="text-xs text-[var(--admin-text-muted)] italic">{sub.notes}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditSubmissionForm({
+  sub,
+  onSave,
+  onCancel,
+}: {
+  sub: Submission;
+  onSave: (s: Submission) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState(sub);
+  const set = (key: keyof Submission, val: string | null) => setForm((f) => ({ ...f, [key]: val }));
+  const inputCls = "w-full px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] focus:border-[#ff6b00] focus:outline-none text-sm text-[var(--admin-text)] placeholder:text-[var(--admin-text-muted)]";
+
+  return (
+    <div className="max-w-xl mx-auto space-y-4">
+      <button onClick={onCancel} className="inline-flex items-center gap-2 text-sm text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]">
+        <FiChevronLeft size={14} /> Back
+      </button>
+      <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-5 space-y-4">
+        <h3 className="font-bold text-[var(--admin-text)]">Edit Submission</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Job Title</label>
+            <input value={form.job_title || ""} onChange={(e) => set("job_title", e.target.value)} className={inputCls} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Client Company</label>
+            <input value={form.client_company || ""} onChange={(e) => set("client_company", e.target.value)} className={inputCls} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Staffing Company</label>
+            <input value={form.staffing_company || ""} onChange={(e) => set("staffing_company", e.target.value)} className={inputCls} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Recruiter Name</label>
+            <input value={form.recruiter_name || ""} onChange={(e) => set("recruiter_name", e.target.value)} className={inputCls} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Location</label>
+            <input value={form.location || ""} onChange={(e) => set("location", e.target.value)} className={inputCls} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Rate</label>
+            <input value={form.rate || ""} onChange={(e) => set("rate", e.target.value)} placeholder="$45/hr" className={inputCls} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Employment Type</label>
+            <select value={form.employment_type || ""} onChange={(e) => set("employment_type", e.target.value)} className={inputCls}>
+              <option value="">Select</option>
+              <option value="W2">W2</option>
+              <option value="C2C">C2C</option>
+              <option value="1099">1099</option>
+              <option value="Full-Time">Full-Time</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Status</label>
+            <select value={form.status} onChange={(e) => set("status", e.target.value)} className={inputCls}>
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase text-[var(--admin-text-muted)] tracking-wider font-semibold">Notes</label>
+          <textarea
+            value={form.notes || ""}
+            onChange={(e) => set("notes", e.target.value)}
+            rows={3}
+            placeholder="Add notes..."
+            className={inputCls + " resize-y"}
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]">Cancel</button>
+          <button onClick={() => onSave(form)} className="px-4 py-2 rounded-lg bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00]">
+            Save
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
