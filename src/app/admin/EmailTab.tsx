@@ -23,6 +23,7 @@ type InboxMessage = {
   id: string;
   threadId: string;
   from?: string;
+  to?: string;
   subject?: string;
   date?: string;
   snippet?: string;
@@ -45,15 +46,6 @@ type ThreadData = {
   messages: ThreadMessage[];
   subject: string;
   messageCount: number;
-};
-
-type SentRecord = {
-  id: string;
-  email: string;
-  name: string | null;
-  subject: string;
-  sent_at: string;
-  campaign: string | null;
 };
 
 const TABS: Array<{ id: EmailSubTab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
@@ -98,12 +90,48 @@ export default function EmailTab({
       {tab === "inbox" ? (
         <InboxPanel onError={onError} />
       ) : tab === "sent" ? (
-        <SentPanel />
+        <SentPanel onError={onError} />
       ) : tab === "compose" ? (
         <ComposePanel onSuccess={onSuccess} onError={onError} />
       ) : (
         <BulkPanel onSuccess={onSuccess} onError={onError} />
       )}
+    </div>
+  );
+}
+
+/* ───────── THREAD VIEW (shared) ───────── */
+
+function ThreadView({ thread }: { thread: ThreadData }) {
+  return (
+    <div className="bg-[var(--admin-surface)] rounded-2xl border border-[var(--admin-border)] overflow-hidden">
+      <div className="px-6 py-4 border-b border-[var(--admin-border)]">
+        <h3 className="font-bold text-[var(--admin-text)]">{thread.subject || "(no subject)"}</h3>
+        <p className="text-xs text-[var(--admin-text-muted)] mt-1">{thread.messageCount} message{thread.messageCount !== 1 ? "s" : ""}</p>
+      </div>
+      <div className="divide-y divide-[var(--admin-border)]">
+        {thread.messages.map((msg) => (
+          <div key={msg.id} className="px-6 py-4">
+            <div className="flex items-start justify-between gap-4 mb-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--admin-text)] truncate">{msg.from}</p>
+                <p className="text-xs text-[var(--admin-text-muted)]">To: {msg.to}</p>
+              </div>
+              <span className="text-xs text-[var(--admin-text-muted)] whitespace-nowrap shrink-0">
+                {formatDate(msg.date)}
+              </span>
+            </div>
+            {msg.bodyHtml ? (
+              <div
+                className="text-sm text-[var(--admin-text-secondary)] leading-relaxed prose prose-sm max-w-none [&_a]:text-[#ff6b00] overflow-x-auto"
+                dangerouslySetInnerHTML={{ __html: msg.bodyHtml }}
+              />
+            ) : (
+              <p className="text-sm text-[var(--admin-text-secondary)] whitespace-pre-wrap leading-relaxed">{msg.bodyText}</p>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -167,36 +195,7 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
         >
           <FiChevronLeft size={14} /> Back to Inbox
         </button>
-
-        <div className="bg-[var(--admin-surface)] rounded-2xl border border-[var(--admin-border)] overflow-hidden">
-          <div className="px-6 py-4 border-b border-[var(--admin-border)]">
-            <h3 className="font-bold text-[var(--admin-text)]">{thread.subject || "(no subject)"}</h3>
-            <p className="text-xs text-[var(--admin-text-muted)] mt-1">{thread.messageCount} message{thread.messageCount !== 1 ? "s" : ""}</p>
-          </div>
-          <div className="divide-y divide-[var(--admin-border)]">
-            {thread.messages.map((msg) => (
-              <div key={msg.id} className="px-6 py-4">
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[var(--admin-text)] truncate">{msg.from}</p>
-                    <p className="text-xs text-[var(--admin-text-muted)]">To: {msg.to}</p>
-                  </div>
-                  <span className="text-xs text-[var(--admin-text-muted)] whitespace-nowrap shrink-0">
-                    {formatDate(msg.date)}
-                  </span>
-                </div>
-                {msg.bodyHtml ? (
-                  <div
-                    className="text-sm text-[var(--admin-text-secondary)] leading-relaxed prose prose-sm max-w-none [&_a]:text-[#ff6b00] overflow-x-auto"
-                    dangerouslySetInnerHTML={{ __html: msg.bodyHtml }}
-                  />
-                ) : (
-                  <p className="text-sm text-[var(--admin-text-secondary)] whitespace-pre-wrap leading-relaxed">{msg.bodyText}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        <ThreadView thread={thread} />
       </div>
     );
   }
@@ -271,36 +270,56 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
 
 /* ───────── SENT ───────── */
 
-function SentPanel() {
-  const [records, setRecords] = useState<SentRecord[]>([]);
+function SentPanel({ onError }: { onError: (m: string) => void }) {
+  const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  const [thread, setThread] = useState<ThreadData | null>(null);
+  const [threadLoading, setThreadLoading] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (q?: string) => {
     setLoading(true);
     try {
-      const txt = await fetch("/api/admin/contacts/email/tracking").then((r) => r.text());
+      const params = new URLSearchParams();
+      params.set("q", q ? `in:sent ${q}` : "in:sent");
+      params.set("max", "40");
+      const txt = await fetch(`/api/admin/email/inbox?${params}`).then((r) => r.text());
       try {
         const data = JSON.parse(txt);
-        setRecords(data.recipients ?? []);
-      } catch {
-        // ignore
-      }
-    } catch {
-      // ignore
-    }
+        setMessages(data.messages ?? []);
+      } catch { /* */ }
+    } catch { /* */ }
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const filtered = search
-    ? records.filter((r) =>
-        r.email.toLowerCase().includes(search.toLowerCase()) ||
-        r.name?.toLowerCase().includes(search.toLowerCase()) ||
-        r.subject?.toLowerCase().includes(search.toLowerCase())
-      )
-    : records;
+  async function openThread(threadId: string) {
+    setThreadLoading(true);
+    try {
+      const txt = await fetch(`/api/admin/email/inbox?threadId=${threadId}`).then((r) => r.text());
+      try {
+        const data = JSON.parse(txt);
+        if (data.thread) setThread(data.thread);
+        else onError("Could not load thread");
+      } catch { onError("Invalid thread response"); }
+    } catch { onError("Failed to load thread"); }
+    setThreadLoading(false);
+  }
+
+  if (thread) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => setThread(null)}
+          className="inline-flex items-center gap-2 text-sm text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
+        >
+          <FiChevronLeft size={14} /> Back to Sent
+        </button>
+        <ThreadView thread={thread} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -308,14 +327,15 @@ function SentPanel() {
         <div className="relative flex-1">
           <FiSearch size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--admin-text-muted)]" />
           <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") load(query); }}
             placeholder="Search sent emails..."
             className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)]"
           />
         </div>
         <button
-          onClick={load}
+          onClick={() => load(query)}
           disabled={loading}
           className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm text-[var(--admin-text-muted)] hover:text-[var(--admin-text)] hover:border-[#ff6b00]/30 disabled:opacity-50"
         >
@@ -324,50 +344,38 @@ function SentPanel() {
         </button>
       </div>
 
-      {loading && records.length === 0 ? (
+      {loading && messages.length === 0 ? (
         <div className="text-center py-16 text-[var(--admin-text-muted)] text-sm">
           <FiRefreshCw size={20} className="animate-spin mx-auto mb-3" />
           Loading sent emails...
         </div>
-      ) : filtered.length === 0 ? (
+      ) : messages.length === 0 ? (
         <div className="text-center py-16 text-[var(--admin-text-muted)] text-sm">
           <FiSend size={28} className="mx-auto mb-3 opacity-40" />
-          {records.length === 0 ? "No bulk sends recorded yet." : "No matches."}
+          No sent emails found.
         </div>
       ) : (
         <div className="bg-[var(--admin-surface)] rounded-2xl border border-[var(--admin-border)] overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-[var(--admin-text-muted)] border-b border-[var(--admin-border)]">
-                <th className="text-left px-5 py-3 font-semibold">Sent</th>
-                <th className="text-left px-5 py-3 font-semibold">To</th>
-                <th className="text-left px-5 py-3 font-semibold">Subject</th>
-                <th className="text-left px-5 py-3 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--admin-border)]">
-              {filtered.slice(0, 100).map((r) => (
-                <tr key={r.id} className="hover:bg-[var(--admin-surface-hover)]">
-                  <td className="px-5 py-3 text-[var(--admin-text-muted)] whitespace-nowrap">{formatDate(r.sent_at)}</td>
-                  <td className="px-5 py-3">
-                    <p className="text-[var(--admin-text)] truncate max-w-[200px]">{r.name || r.email}</p>
-                    {r.name && <p className="text-xs text-[var(--admin-text-muted)]">{r.email}</p>}
-                  </td>
-                  <td className="px-5 py-3 text-[var(--admin-text-secondary)] truncate max-w-[300px]">{r.subject}</td>
-                  <td className="px-5 py-3">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                      <FiCheck size={10} /> Sent
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filtered.length > 100 && (
-            <div className="text-center py-3 text-xs text-[var(--admin-text-muted)] border-t border-[var(--admin-border)]">
-              Showing 100 of {filtered.length}
-            </div>
-          )}
+          <div className="divide-y divide-[var(--admin-border)]">
+            {messages.map((msg) => (
+              <button
+                key={msg.id}
+                onClick={() => openThread(msg.threadId)}
+                disabled={threadLoading}
+                className="w-full text-left px-5 py-3.5 hover:bg-[var(--admin-surface-hover)] transition-colors flex items-start gap-4"
+              >
+                <FiSend size={15} className="text-[var(--admin-text-muted)] mt-0.5 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="text-sm font-medium text-[var(--admin-text)] truncate">To: {extractName(msg.to) || extractName(msg.from)}</p>
+                    <span className="text-[11px] text-[var(--admin-text-muted)] whitespace-nowrap shrink-0">{formatDate(msg.date)}</span>
+                  </div>
+                  <p className="text-sm text-[var(--admin-text-secondary)] truncate">{msg.subject || "(no subject)"}</p>
+                  <p className="text-xs text-[var(--admin-text-muted)] truncate mt-0.5">{msg.snippet}</p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

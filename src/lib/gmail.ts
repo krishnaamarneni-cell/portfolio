@@ -180,6 +180,7 @@ export type GmailMessageSummary = {
   id: string;
   threadId: string;
   from?: string;
+  to?: string;
   subject?: string;
   snippet?: string;
   date?: string;
@@ -528,7 +529,7 @@ export async function listRecentMessages(opts: {
     const results = await Promise.all(
       batch.map(async (m): Promise<GmailMessageSummary | null> => {
         const mr = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
           { headers: { Authorization: `Bearer ${access}` }, cache: "no-store" }
         );
         if (!mr.ok) return null;
@@ -545,6 +546,7 @@ export async function listRecentMessages(opts: {
           id: md.id,
           threadId: md.threadId,
           from: get("From"),
+          to: get("To"),
           subject: get("Subject"),
           date: get("Date"),
           snippet: md.snippet,
