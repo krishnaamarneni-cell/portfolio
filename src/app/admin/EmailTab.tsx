@@ -150,34 +150,11 @@ function isSelf(addr?: string): boolean {
 
 const RTR_PATTERNS = [
   /\brtr\b/i,
-  /right to represent/i,
-  /profile.*submit/i,
-  /submit.*profile/i,
-  /submission.*confirm/i,
-  /candidate.*submit/i,
-  /submit.*candidate/i,
-  /submit.*client/i,
-  /presented.*to.*client/i,
-  /forwarded.*to.*hiring/i,
-  /application.*submitted/i,
-  /thanks for applying/i,
-  /thank you for applying/i,
-  /your application/i,
-  /application.*received/i,
-  /we received your/i,
-  /resume.*received/i,
-  /applied.*to/i,
-  /you applied/i,
-  /your.*submission/i,
-  /submitted.*resume/i,
-  /resume.*submitted/i,
-  /shared.*with.*hiring/i,
-  /sent.*to.*hiring/i,
-  /forwarded.*resume/i,
-  /presented.*your/i,
-  /shortlisted/i,
-  /we.*submitted/i,
-  /has been submitted/i,
+  /right.to.represent/i,
+  /authorize.*represent/i,
+  /represent.*candidate/i,
+  /confirm.*rate/i,
+  /rate.*confirm/i,
 ];
 function isRTR(msg: InboxMessage): boolean {
   const text = `${msg.subject || ""} ${msg.snippet || ""}`;
@@ -245,7 +222,7 @@ function InboxPanel({ onError }: { onError: (m: string) => void }) {
   const [dateRange, setDateRange] = useState(60);
   const [typeFilter, setTypeFilter] = useState<"all" | "replies" | "rtr">("all");
 
-  const RTR_GMAIL_QUERY = '{rtr OR "right to represent" OR "thanks for applying" OR "thank you for applying" OR "your application" OR "application received" OR "application submitted" OR "resume submitted" OR shortlisted OR "has been submitted" OR "submitted your" OR "profile submitted"}';
+  const RTR_GMAIL_QUERY = '{rtr OR "right to represent" OR "authorize us to represent" OR "rate confirmation" OR "confirm your rate"}';
 
   const buildQuery = useCallback((days: number, dir: "all" | "inbound" | "outbound", type: "all" | "replies" | "rtr", q?: string) => {
     const afterDate = new Date();
