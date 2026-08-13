@@ -362,6 +362,13 @@ export default function AdminDashboard({
             </div>
           )}
 
+          {/* Keep heavy tabs mounted to preserve fetched data */}
+          <div style={{ display: tab === "email" ? "block" : "none" }}>
+            <EmailTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          </div>
+          <div style={{ display: tab === "contacts" ? "block" : "none" }}>
+            <CRMWorkspace onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          </div>
           {tab === "dashboard" ? (
             <DashboardOverview jobs={jobs} projects={projects} onNavigate={handleNav} />
           ) : tab === "content" ? (
@@ -375,8 +382,6 @@ export default function AdminDashboard({
             <ThoughtsEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "social" ? (
             <SocialPage onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
-          ) : tab === "contacts" ? (
-            <CRMWorkspace onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "agents" ? (
             <AgentsTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "personal" ? (
@@ -385,13 +390,11 @@ export default function AdminDashboard({
             <ResumeCreatorTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "applications" ? (
             <ApplicationsTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
-          ) : tab === "email" ? (
-            <EmailTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "connectors" ? (
             <ConnectorsEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} sessionEmail={session.email} />
           ) : tab === "chat" ? (
             <AdminChat onError={(m) => flash("err", m)} />
-          ) : tab === "jobs" ? (
+          ) : tab === "contacts" || tab === "email" ? null : tab === "jobs" ? (
             <section>
               <div className="flex items-center justify-between mb-5">
                 <h2 className="text-xl font-bold text-[var(--admin-text)]">Experience Timeline</h2>

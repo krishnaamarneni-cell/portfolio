@@ -1325,6 +1325,7 @@ function statusStyle(status: string): string {
 function SubmissionsPanel({ onSuccess, onError }: { onSuccess: (m: string) => void; onError: (m: string) => void }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scanning, setScanning] = useState(false);
   const [tableNeeded, setTableNeeded] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -1342,6 +1343,27 @@ function SubmissionsPanel({ onSuccess, onError }: { onSuccess: (m: string) => vo
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  async function scanRTR() {
+    setScanning(true);
+    try {
+      const r = await fetch("/api/admin/email/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "scan-rtr", days: 180 }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        onSuccess(`Scanned ${d.scanned} RTR threads: ${d.created} new, ${d.skipped} already tracked`);
+        await load();
+      } else {
+        onError(d.error || "Scan failed");
+      }
+    } catch {
+      onError("RTR scan failed");
+    }
+    setScanning(false);
+  }
 
   async function updateStatus(id: string, status: string) {
     const r = await fetch("/api/admin/email/submissions", {
@@ -1494,6 +1516,14 @@ function SubmissionsPanel({ onSuccess, onError }: { onSuccess: (m: string) => vo
             </button>
           ))}
         </div>
+        <button
+          onClick={scanRTR}
+          disabled={scanning || loading}
+          className="px-4 py-2.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-sm font-semibold text-purple-300 hover:bg-purple-500/25 disabled:opacity-50 flex items-center gap-2 shrink-0"
+        >
+          <FiUploadCloud size={14} className={scanning ? "animate-spin" : ""} />
+          {scanning ? "Scanning Gmail..." : "Scan RTR Emails"}
+        </button>
         <button
           onClick={load}
           disabled={loading}

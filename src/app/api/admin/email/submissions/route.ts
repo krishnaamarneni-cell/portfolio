@@ -50,6 +50,99 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as SubmissionBody;
 
+  if ((body as Record<string, unknown>).action === "scan-rtr") {
+    const { listRecentMessages, getThread } = await import("@/lib/gmail");
+    const db = requireSupabaseAdmin();
+    const days = typeof (body as Record<string, unknown>).days === "number" ? (body as Record<string, unknown>).days as number : 180;
+    const afterDate = new Date();
+    afterDate.setDate(afterDate.getDate() - days);
+    const afterStr = `${afterDate.getFullYear()}/${afterDate.getMonth() + 1}/${afterDate.getDate()}`;
+    const q = `after:${afterStr} {rtr OR "right to represent" OR "authorize us to represent" OR "rate confirmation" OR "confirm your rate"}`;
+
+    const { messages, error: listErr } = await listRecentMessages({ query: q, maxResults: 300 });
+    if (listErr) return NextResponse.json({ error: listErr }, { status: 500 });
+
+    const seen = new Set<string>();
+    const uniqueThreadIds: string[] = [];
+    for (const m of messages ?? []) {
+      if (!seen.has(m.threadId)) { seen.add(m.threadId); uniqueThreadIds.push(m.threadId); }
+    }
+
+    const { data: existing } = await db.from("rtr_submissions").select("thread_id");
+    const tracked = new Set((existing ?? []).map((r: { thread_id: string | null }) => r.thread_id).filter(Boolean));
+
+    const SELF = ["krishnaamarneni", "avgk26", "krishna.amarneni", "jobs@krishnaamarneni"];
+    const isSelfAddr = (addr?: string) => addr ? SELF.some((h) => addr.toLowerCase().includes(h)) : false;
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const tid of uniqueThreadIds.slice(0, 50)) {
+      if (tracked.has(tid)) { skipped++; continue; }
+      try {
+        const thread = await getThread(tid);
+        if (!thread) continue;
+        const recruiterMsg = thread.messages.find((m: { from: string }) => !isSelfAddr(m.from)) || thread.messages[0];
+        if (!recruiterMsg) continue;
+
+        const recruiterEmail = recruiterMsg.from.match(/<([^>]+)>/)?.[1] || recruiterMsg.from.split("<")[0].trim();
+        const recruiterName = recruiterMsg.from.split("<")[0].replace(/"/g, "").trim() || null;
+
+        let extracted: Record<string, string | null> = {};
+        const apiKey = process.env.GROQ_API_KEY;
+        const text = [
+          `Subject: ${thread.subject || ""}`,
+          `Snippet: ${recruiterMsg.snippet || ""}`,
+          recruiterMsg.bodyText ? `Body: ${recruiterMsg.bodyText.slice(0, 1500)}` : "",
+        ].filter(Boolean).join("\n");
+
+        if (apiKey) {
+          try {
+            const { runAgent } = await import("@/lib/agents");
+            const result = await runAgent({
+              apiKey,
+              model: "llama-3.3-70b-versatile",
+              systemPrompt: `Extract RTR (Right-to-Represent) submission details from this recruiter email. Output ONLY valid JSON with these fields:
+- recruiter_name: the recruiter's name
+- staffing_company: the staffing/consulting company
+- client_company: the end client company
+- job_title: the job role/title
+- location: city, state
+- rate: pay rate (e.g. "$43/hr")
+- employment_type: W2, C2C, or 1099
+If a field is not found, use null. Output ONLY JSON, nothing else.`,
+              userPrompt: text,
+              maxTokens: 300,
+            });
+            const cleaned = (result.content || "{}").replace(/```json\s*|\s*```/g, "").trim();
+            extracted = JSON.parse(cleaned);
+          } catch {
+            extracted = extractFallback({ subject: thread.subject, snippet: recruiterMsg.snippet, body: recruiterMsg.bodyText });
+          }
+        } else {
+          extracted = extractFallback({ subject: thread.subject, snippet: recruiterMsg.snippet, body: recruiterMsg.bodyText });
+        }
+
+        await db.from("rtr_submissions").insert({
+          thread_id: tid,
+          recruiter_email: recruiterEmail,
+          recruiter_name: extracted.recruiter_name || recruiterName,
+          staffing_company: extracted.staffing_company || null,
+          client_company: extracted.client_company || null,
+          job_title: extracted.job_title || thread.subject.replace(/^(re|fwd|rtr)[:\s]*/i, "").trim(),
+          location: extracted.location || null,
+          rate: extracted.rate || null,
+          employment_type: extracted.employment_type || null,
+          status: "submitted",
+          submitted_at: recruiterMsg.date || new Date().toISOString(),
+        });
+        created++;
+      } catch { /* skip bad threads */ }
+    }
+
+    return NextResponse.json({ ok: true, scanned: uniqueThreadIds.length, created, skipped });
+  }
+
   if (body.action === "extract") {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
