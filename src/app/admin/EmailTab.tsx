@@ -115,17 +115,21 @@ export default function EmailTab({
         })}
       </div>
 
-      {tab === "inbox" ? (
+      <div style={{ display: tab === "inbox" ? "block" : "none" }}>
         <InboxPanel onError={onError} onSuccess={onSuccess} />
-      ) : tab === "submissions" ? (
+      </div>
+      <div style={{ display: tab === "submissions" ? "block" : "none" }}>
         <SubmissionsPanel onSuccess={onSuccess} onError={onError} />
-      ) : tab === "sent" ? (
+      </div>
+      <div style={{ display: tab === "sent" ? "block" : "none" }}>
         <SentPanel onError={onError} />
-      ) : tab === "compose" ? (
+      </div>
+      <div style={{ display: tab === "compose" ? "block" : "none" }}>
         <ComposePanel onSuccess={onSuccess} onError={onError} />
-      ) : tab === "bulk" ? (
+      </div>
+      <div style={{ display: tab === "bulk" ? "block" : "none" }}>
         <BulkPanel onSuccess={onSuccess} onError={onError} />
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -1321,6 +1325,7 @@ function statusStyle(status: string): string {
 function SubmissionsPanel({ onSuccess, onError }: { onSuccess: (m: string) => void; onError: (m: string) => void }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tableNeeded, setTableNeeded] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [editing, setEditing] = useState<Submission | null>(null);
@@ -1331,6 +1336,7 @@ function SubmissionsPanel({ onSuccess, onError }: { onSuccess: (m: string) => vo
       const r = await fetch("/api/admin/email/submissions");
       const d = await r.json();
       setSubmissions(d.submissions ?? []);
+      if (d.tableNeeded) setTableNeeded(true);
     } catch { /* */ }
     setLoading(false);
   }, []);
@@ -1497,7 +1503,13 @@ function SubmissionsPanel({ onSuccess, onError }: { onSuccess: (m: string) => vo
         </button>
       </div>
 
-      {loading && submissions.length === 0 ? (
+      {tableNeeded ? (
+        <div className="text-center py-16 text-[var(--admin-text-muted)] text-sm space-y-2">
+          <FiAlertCircle size={28} className="mx-auto mb-3 text-amber-400" />
+          <p className="font-semibold text-amber-400">Migration needed</p>
+          <p>Run <code className="bg-[var(--admin-surface-hover)] px-2 py-0.5 rounded text-xs">supabase/rtr_submissions.sql</code> in the Supabase SQL Editor to enable submissions tracking.</p>
+        </div>
+      ) : loading && submissions.length === 0 ? (
         <div className="text-center py-16 text-[var(--admin-text-muted)] text-sm">
           <FiRefreshCw size={20} className="animate-spin mx-auto mb-3" />
           Loading submissions...

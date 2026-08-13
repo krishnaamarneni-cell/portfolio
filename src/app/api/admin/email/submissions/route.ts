@@ -15,7 +15,10 @@ export async function GET() {
     .select("*")
     .order("submitted_at", { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.code === "42P01") return NextResponse.json({ submissions: [], tableNeeded: true });
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ submissions: data ?? [] });
 }
 
