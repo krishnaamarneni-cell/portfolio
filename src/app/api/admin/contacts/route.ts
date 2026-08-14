@@ -74,6 +74,60 @@ export async function POST(request: Request) {
     return NextResponse.json({ contacts });
   }
 
+  if (body.action === "sync-gmail") {
+    const { listRecentMessages } = await import("@/lib/gmail");
+    const { upsertMany } = await import("@/lib/contacts");
+    const { runAgent } = await import("@/lib/agents");
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) return NextResponse.json({ error: "GROQ_API_KEY not set" }, { status: 503 });
+
+    const days = typeof body.days === "number" ? Math.min(body.days as number, 365) : 30;
+    const { messages, error: gmailErr } = await listRecentMessages({
+      query: `newer_than:${days}d`,
+      maxResults: 200,
+    });
+    if (gmailErr) return NextResponse.json({ error: gmailErr }, { status: 502 });
+
+    const JOB_RX = /job|hiring|opportunity|role|position|engineer|consultant|recruiter|opening|interview|offer|career|vacancy|talent/i;
+    const jobEmails = (messages ?? []).filter((m) => {
+      const text = `${m.subject ?? ""} ${m.snippet ?? ""} ${m.from ?? ""}`;
+      return JOB_RX.test(text);
+    }).slice(0, 60);
+
+    if (jobEmails.length === 0) return NextResponse.json({ saved: 0, scanned: messages?.length ?? 0 });
+
+    const emailsBlock = jobEmails.map((m, i) =>
+      `[${i + 1}] From: ${m.from ?? "?"} | Subject: ${m.subject ?? "(no subject)"}`
+    ).join("\n");
+
+    const result = await runAgent({
+      apiKey,
+      model: "llama-3.3-70b-versatile",
+      systemPrompt: `Extract recruiter/job contacts from these emails. Output ONLY a JSON array of objects with: name, email, company, role. Extract the email address from the "From" field. If name is in "Name <email>" format, parse both. Output ONLY valid JSON array, nothing else.`,
+      userPrompt: emailsBlock,
+      maxTokens: 2000,
+    });
+
+    let saved = 0;
+    try {
+      const cleaned = (result.content || "[]").replace(/```json?\s*|\s*```/g, "").trim();
+      const parsed = JSON.parse(cleaned) as Array<{ name?: string; email?: string; company?: string; role?: string }>;
+      const inputs: Array<{ name: string; email: string; company: string | null; role_pitched: string | null; match_pct: number | null; source: string }> = parsed
+        .filter((c) => c.email && c.email.includes("@"))
+        .map((c) => ({
+          name: c.name || "",
+          email: c.email!,
+          company: c.company || null,
+          role_pitched: c.role || null,
+          match_pct: null,
+          source: "gmail-sync",
+        }));
+      saved = await upsertMany(inputs);
+    } catch { /* parse error — skip */ }
+
+    return NextResponse.json({ saved, scanned: jobEmails.length });
+  }
+
   if (body.action === "delete-junk") {
     const { requireSupabaseAdmin } = await import("@/lib/supabase");
     const db = requireSupabaseAdmin();

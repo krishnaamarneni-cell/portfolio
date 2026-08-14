@@ -35,6 +35,7 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [classifying, setClassifying] = useState(false);
   const [cleaningJunk, setCleaningJunk] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showCompose, setShowCompose] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
@@ -99,6 +100,23 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
       }
     } else {
       onError(d.error || "Clean junk failed");
+    }
+  }
+
+  async function syncGmail() {
+    setSyncing(true);
+    const r = await fetch("/api/admin/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "sync-gmail", days: 60 }),
+    });
+    const d = await r.json().catch(() => ({}));
+    setSyncing(false);
+    if (r.ok) {
+      onSuccess(`Synced ${d.saved ?? 0} contacts from ${d.scanned ?? 0} job emails`);
+      if (d.saved > 0) await load();
+    } else {
+      onError(d.error || "Gmail sync failed");
     }
   }
 
@@ -238,6 +256,13 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
           className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text-secondary)] hover:border-[#ff6b00] flex items-center gap-2 whitespace-nowrap"
         >
           <FiDownload size={14} /> Export CSV
+        </button>
+        <button
+          onClick={syncGmail}
+          disabled={syncing}
+          className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-purple-500/40 text-sm font-semibold text-purple-400 hover:bg-purple-500/10 disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+        >
+          <FiRefreshCw size={14} className={syncing ? "animate-spin" : ""} /> {syncing ? "Syncing..." : "Sync Gmail"}
         </button>
         <button
           onClick={() => setShowAddContact(true)}
