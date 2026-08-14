@@ -6,7 +6,6 @@ import {
   FiRefreshCw,
   FiX,
   FiPlus,
-  FiTrash2,
   FiCheckCircle,
   FiAlertCircle,
   FiClock,
@@ -201,19 +200,25 @@ export default function AutopilotPanel({ onSuccess, onError }: Props) {
             <FiPlay size={16} className="text-emerald-500" /> Social Autopilot
           </h2>
           <p className="text-xs text-[var(--admin-text-muted)] mt-1">
-            AI posts once per day — picks topics, writes platform-native content, finds images.
+            AI generates posts 12h early for review, then posts at your scheduled time.
           </p>
         </div>
         <button
           onClick={() => save({ enabled: !settings.enabled })}
           disabled={saving}
-          className={`relative w-12 h-6 rounded-full transition-colors ${
-            settings.enabled ? "bg-emerald-500" : "bg-[var(--admin-border)]"
-          }`}
+          aria-label={settings.enabled ? "Disable autopilot" : "Enable autopilot"}
+          className="group relative shrink-0"
         >
-          <span
-            className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-              settings.enabled ? "translate-x-6" : "translate-x-0.5"
+          <div
+            className={`w-11 h-6 rounded-full transition-all duration-200 ${
+              settings.enabled
+                ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+                : "bg-[var(--admin-border)]"
+            }`}
+          />
+          <div
+            className={`absolute top-[2px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200 ${
+              settings.enabled ? "left-[22px]" : "left-[2px]"
             }`}
           />
         </button>
@@ -248,10 +253,13 @@ export default function AutopilotPanel({ onSuccess, onError }: Props) {
           </div>
           {settings.last_posted_on && (
             <div className="self-end text-xs text-[var(--admin-text-muted)]">
-              Last posted: {settings.last_posted_on}
+              Last queued: {settings.last_posted_on}
             </div>
           )}
         </div>
+        <p className="text-[10px] text-[var(--admin-text-muted)] leading-relaxed">
+          Posts are generated 12 hours before the scheduled time and queued for review. Check the Queue tab to edit or delete before they go live.
+        </p>
       </div>
 
       {/* Platforms */}
@@ -356,25 +364,26 @@ export default function AutopilotPanel({ onSuccess, onError }: Props) {
       <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--admin-text-muted)]">
-            Topics <span className="normal-case font-normal">(leave empty to auto-pick from Ideas)</span>
+            Topics <span className="normal-case font-normal">(one-shot — each used once then removed)</span>
           </h3>
         </div>
 
         {settings.topics.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="space-y-1.5">
             {settings.topics.map((t, i) => (
-              <span
+              <div
                 key={i}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-xs text-[var(--admin-text)]"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--admin-input-bg)] border border-[var(--admin-border)]"
               >
-                {t}
+                <span className="text-[10px] font-mono text-emerald-500 shrink-0 w-5 text-center">{i + 1}</span>
+                <span className="flex-1 text-xs text-[var(--admin-text)] truncate">{t}</span>
                 <button
                   onClick={() => removeTopic(i)}
-                  className="text-[var(--admin-text-muted)] hover:text-red-400"
+                  className="text-[var(--admin-text-muted)] hover:text-red-400 shrink-0"
                 >
                   <FiX size={12} />
                 </button>
-              </span>
+              </div>
             ))}
           </div>
         )}
@@ -396,8 +405,8 @@ export default function AutopilotPanel({ onSuccess, onError }: Props) {
           </button>
         </div>
 
-        <p className="text-[10px] text-[var(--admin-text-muted)]">
-          If empty, the agent picks from your Ideas inbox or generates trending topics based on your content profile and analytics.
+        <p className="text-[10px] text-[var(--admin-text-muted)] leading-relaxed">
+          Topics are a queue — the first one is used next, then automatically removed. When the list is empty, the agent picks from your Ideas inbox or generates topics based on your content profile and analytics.
         </p>
       </div>
 

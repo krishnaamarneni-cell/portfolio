@@ -20,14 +20,25 @@ export type AutopilotSettings = {
 };
 
 export type AutopilotResult =
-  | { posted: false; reason: string }
+  | { posted: false; queued?: false; reason: string }
   | {
       posted: true;
+      queued: false;
       topic: string;
       postType: string;
       platforms: string[];
       imageUrl: string | null;
       posts: Record<string, string>;
+    }
+  | {
+      posted: false;
+      queued: true;
+      topic: string;
+      postType: string;
+      platforms: string[];
+      imageUrl: string | null;
+      posts: Record<string, string>;
+      dueAt: string;
     };
 
 export async function getAutopilotSettings(): Promise<AutopilotSettings> {
@@ -109,21 +120,13 @@ async function buildAnalyticsGuidance(token: string, platforms: string[]): Promi
   }
 }
 
-async function pickTopic(settings: AutopilotSettings, analyticsCtx: string, apiKey: string): Promise<string> {
+async function pickTopic(settings: AutopilotSettings, analyticsCtx: string, apiKey: string): Promise<{ topic: string; fromCustomList: boolean }> {
   const db = requireSupabaseAdmin();
 
-  // If user has configured topics, pick from those
+  // Custom topics: use once then remove
   if (settings.topics.length > 0) {
-    // Check recent log to avoid repeating
-    const { data: recent } = await db
-      .from("social_autopilot_log")
-      .select("topic")
-      .order("created_at", { ascending: false })
-      .limit(7);
-    const recentTopics = new Set((recent ?? []).map((r: { topic: string }) => r.topic.toLowerCase()));
-    const fresh = settings.topics.filter((t) => !recentTopics.has(t.toLowerCase()));
-    if (fresh.length > 0) return fresh[Math.floor(Math.random() * fresh.length)];
-    return settings.topics[Math.floor(Math.random() * settings.topics.length)];
+    const topic = settings.topics[0];
+    return { topic, fromCustomList: true };
   }
 
   // Try ideas from the social_ideas table
@@ -155,7 +158,6 @@ Pick the ONE topic that will get the most engagement today. Return ONLY the topi
 
     if (result.ok && result.content) {
       const picked = result.content.trim().replace(/^["'\d.)\s]+/, "").replace(/["']+$/, "").trim();
-      // Mark it as drafted
       const match = ideas.find((i: { topic: string }) =>
         picked.toLowerCase().includes(i.topic.toLowerCase().slice(0, 30)) ||
         i.topic.toLowerCase().includes(picked.toLowerCase().slice(0, 30))
@@ -163,15 +165,14 @@ Pick the ONE topic that will get the most engagement today. Return ONLY the topi
       if (match) {
         await db.from("social_ideas").update({ status: "drafted" }).eq("id", match.id);
       }
-      return picked;
+      return { topic: picked, fromCustomList: false };
     }
-    // Fallback: pick first idea
     const first = ideas[0] as { id: string; topic: string };
     await db.from("social_ideas").update({ status: "drafted" }).eq("id", first.id);
-    return first.topic;
+    return { topic: first.topic, fromCustomList: false };
   }
 
-  // No ideas, no topics — generate one from the content profile
+  // No ideas, no topics — generate from content profile
   const profile = await getContentProfile();
   const result = await runAgent({
     apiKey,
@@ -182,7 +183,7 @@ Content profile: ${profile}`,
     userPrompt: "Generate a topic for today's post.",
     maxTokens: 150,
   });
-  return result.content?.trim() || "AI is changing how we work — here's what most people miss";
+  return { topic: result.content?.trim() || "AI is changing how we work — here's what most people miss", fromCustomList: false };
 }
 
 async function searchUnsplash(query: string): Promise<{ url: string; credit: string } | null> {
@@ -219,32 +220,54 @@ async function validateImageForContent(
   return (result.content ?? "").toLowerCase().includes("yes");
 }
 
-export async function runAutopilot(opts?: { force?: boolean }): Promise<AutopilotResult> {
-  const settings = await getAutopilotSettings();
+function computeGenerateTime(postTime: string): string {
+  const [h, m] = postTime.split(":").map(Number);
+  const totalMin = h * 60 + m;
+  const genMin = (totalMin - 720 + 1440) % 1440;
+  const gh = Math.floor(genMin / 60);
+  const gm = genMin % 60;
+  return `${String(gh).padStart(2, "0")}:${String(gm).padStart(2, "0")}`;
+}
 
-  if (!settings.enabled && !opts?.force) {
-    return { posted: false, reason: "disabled" };
+function computeDueAt(postTime: string, timezone: string): string {
+  const [h, m] = postTime.split(":").map(Number);
+  const now = nowInTimezone(timezone);
+  const postMin = h * 60 + m;
+
+  // If post_time is later today, due today. Otherwise due tomorrow.
+  let targetDate = now.date;
+  if (now.minutes >= postMin) {
+    // Post time already passed today — schedule for tomorrow
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).formatToParts(d);
+    const ymd = parts.reduce((acc, p) => {
+      if (p.type === "year") acc.y = p.value;
+      if (p.type === "month") acc.m = p.value;
+      if (p.type === "day") acc.d = p.value;
+      return acc;
+    }, { y: "", m: "", d: "" });
+    targetDate = `${ymd.y}-${ymd.m}-${ymd.d}`;
   }
 
-  // Time check (skip if forced)
-  if (!opts?.force) {
-    const now = nowInTimezone(settings.timezone);
-    if (!isWithinWindow(now.minutes, settings.post_time)) {
-      return { posted: false, reason: "not-scheduled" };
-    }
-    if (settings.last_posted_on === now.date) {
-      return { posted: false, reason: "already-today" };
-    }
-  }
+  // Convert target date + post_time in timezone to ISO string
+  const isoish = `${targetDate}T${postTime}:00`;
+  // Compute offset by comparing the timezone's representation to UTC
+  const refDate = new Date(isoish + "Z");
+  const utcStr = refDate.toLocaleString("en-US", { timeZone: "UTC" });
+  const tzStr = refDate.toLocaleString("en-US", { timeZone: timezone });
+  const utcMs = new Date(utcStr).getTime();
+  const tzMs = new Date(tzStr).getTime();
+  const offsetMs = tzMs - utcMs;
+  const targetMs = refDate.getTime() - offsetMs;
+  return new Date(targetMs).toISOString();
+}
 
-  const connector = await fetchConnector("buffer").catch(() => null);
-  const token = connector?.bearer_token as string | undefined;
-  if (!token) return { posted: false, reason: "no-buffer" };
+async function generatePosts(settings: AutopilotSettings, token: string, apiKey: string) {
+  const analyticsCtx = await buildAnalyticsGuidance(token, settings.platforms);
+  const { topic, fromCustomList } = await pickTopic(settings, analyticsCtx, apiKey);
+  const postType = settings.post_types[Math.floor(Math.random() * settings.post_types.length)] || "text";
 
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return { posted: false, reason: "no-groq-key" };
-
-  // Get channels and filter to selected platforms/channels
   const allChannels = await getChannels(token);
   let channels = allChannels.filter((c) => !c.isDisconnected);
 
@@ -257,22 +280,12 @@ export async function runAutopilot(opts?: { force?: boolean }): Promise<Autopilo
     });
   }
 
-  if (channels.length === 0) return { posted: false, reason: "no-channels" };
+  if (channels.length === 0) return null;
 
-  // Build analytics guidance
-  const analyticsCtx = await buildAnalyticsGuidance(token, settings.platforms);
-
-  // Pick topic
-  const topic = await pickTopic(settings, analyticsCtx, apiKey);
-  const postType = settings.post_types[Math.floor(Math.random() * settings.post_types.length)] || "text";
-
-  // Determine which platforms we're posting to
   const platformsPosting = [...new Set(channels.map((c) => SERVICE_MAP[c.service.toLowerCase()]).filter(Boolean))];
-
   const profile = await getContentProfile();
-
-  // Generate platform-specific posts
   const platformList = platformsPosting.join(", ");
+
   const systemPrompt = `You are a social media content strategist writing for Krishna Amarneni.
 
 ${profile}
@@ -310,94 +323,173 @@ Only include fields for platforms: ${platformList}`;
     maxTokens: 3000,
   });
 
-  if (!result.ok || !result.content) {
-    return { posted: false, reason: `AI generation failed: ${result.error}` };
-  }
+  if (!result.ok || !result.content) return null;
 
   const parsed = extractPostJson(result.content);
-  if (!parsed) {
-    return { posted: false, reason: "AI returned invalid JSON" };
-  }
+  if (!parsed) return null;
 
-  // Search for image if post type includes image
   let imageUrl: string | null = null;
   if ((postType === "image" || postType === "image+text") && parsed.image_query) {
     const unsplashResult = await searchUnsplash(parsed.image_query);
     if (unsplashResult) {
-      // Validate image matches content
       const samplePost = parsed.linkedin || parsed.instagram || parsed.x || topic;
       const matches = await validateImageForContent(unsplashResult.url, samplePost, apiKey);
       if (matches) {
         imageUrl = unsplashResult.url;
       } else {
-        // Try a second search with the topic directly
         const retry = await searchUnsplash(topic.split(" ").slice(0, 4).join(" "));
         if (retry) imageUrl = retry.url;
       }
     }
   }
 
-  // Post to each channel via Buffer
-  const posts: Record<string, string> = {};
-  const postedPlatforms: string[] = [];
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  // Remove used topic from custom list
+  if (fromCustomList && settings.topics.length > 0) {
+    const remaining = settings.topics.slice(1);
+    await updateAutopilotSettings({ topics: remaining });
+  }
 
-  for (const channel of channels) {
+  return { topic, postType, channels, platformsPosting, parsed, imageUrl, analyticsCtx };
+}
+
+export async function runAutopilot(opts?: { force?: boolean }): Promise<AutopilotResult> {
+  const settings = await getAutopilotSettings();
+
+  if (!settings.enabled && !opts?.force) {
+    return { posted: false, reason: "disabled" };
+  }
+
+  const connector = await fetchConnector("buffer").catch(() => null);
+  const token = connector?.bearer_token as string | undefined;
+  if (!token) return { posted: false, reason: "no-buffer" };
+
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return { posted: false, reason: "no-groq-key" };
+
+  // Force mode: generate and post immediately
+  if (opts?.force) {
+    const gen = await generatePosts(settings, token, apiKey);
+    if (!gen) return { posted: false, reason: "AI generation failed" };
+
+    const posts: Record<string, string> = {};
+    const postedPlatforms: string[] = [];
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    for (const channel of gen.channels) {
+      const svc = SERVICE_MAP[channel.service.toLowerCase()];
+      if (!svc) continue;
+      const text = svc === "linkedin" ? gen.parsed.linkedin
+        : svc === "x" ? gen.parsed.x
+        : svc === "instagram" ? gen.parsed.instagram
+        : null;
+      if (!text) continue;
+
+      const postResult = await createBufferPost({
+        token,
+        channelId: channel.id,
+        text,
+        mode: "shareNow",
+        imageUrl: gen.imageUrl ?? undefined,
+      });
+      if (postResult.ok) {
+        posts[svc] = text;
+        postedPlatforms.push(svc);
+      }
+      await sleep(1000);
+    }
+
+    if (postedPlatforms.length === 0) return { posted: false, reason: "All Buffer posts failed" };
+
+    const db = requireSupabaseAdmin();
+    try {
+      await db.from("social_autopilot_log").insert({
+        topic: gen.topic, platforms_posted: postedPlatforms, post_type: gen.postType,
+        image_url: gen.imageUrl, posts, analytics_context: gen.analyticsCtx.slice(0, 2000) || null,
+      });
+    } catch {}
+
+    return { posted: true, queued: false, topic: gen.topic, postType: gen.postType, platforms: postedPlatforms, imageUrl: gen.imageUrl, posts };
+  }
+
+  // Cron mode: generate 12h early, queue for post_time
+  const now = nowInTimezone(settings.timezone);
+  const generateTime = computeGenerateTime(settings.post_time);
+  if (!isWithinWindow(now.minutes, generateTime)) {
+    return { posted: false, reason: "not-scheduled" };
+  }
+
+  // Compute the posting date (the date the post goes live)
+  const [postH, postM] = settings.post_time.split(":").map(Number);
+  const postMin = postH * 60 + postM;
+  const [genH, genM] = generateTime.split(":").map(Number);
+  const genMin = genH * 60 + genM;
+  // If generate time > post time in the day, the post goes live tomorrow
+  const postDate = genMin > postMin ? (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: settings.timezone }).formatToParts(d);
+    const ymd = parts.reduce((acc, p) => {
+      if (p.type === "year") acc.y = p.value;
+      if (p.type === "month") acc.m = p.value;
+      if (p.type === "day") acc.d = p.value;
+      return acc;
+    }, { y: "", m: "", d: "" });
+    return `${ymd.y}-${ymd.m}-${ymd.d}`;
+  })() : now.date;
+
+  if (settings.last_posted_on === postDate) {
+    return { posted: false, reason: "already-today" };
+  }
+
+  const gen = await generatePosts(settings, token, apiKey);
+  if (!gen) return { posted: false, reason: "AI generation failed" };
+
+  // Queue posts in social_queue with due_at = post_time
+  const dueAt = computeDueAt(settings.post_time, settings.timezone);
+  const db = requireSupabaseAdmin();
+  const queuedPlatforms: string[] = [];
+  const posts: Record<string, string> = {};
+
+  for (const channel of gen.channels) {
     const svc = SERVICE_MAP[channel.service.toLowerCase()];
     if (!svc) continue;
-
-    const text = svc === "linkedin" ? parsed.linkedin
-      : svc === "x" ? parsed.x
-      : svc === "instagram" ? parsed.instagram
+    const text = svc === "linkedin" ? gen.parsed.linkedin
+      : svc === "x" ? gen.parsed.x
+      : svc === "instagram" ? gen.parsed.instagram
       : null;
-
     if (!text) continue;
 
-    const postResult = await createBufferPost({
-      token,
-      channelId: channel.id,
+    await db.from("social_queue").insert({
       text,
-      mode: "shareNow",
-      imageUrl: imageUrl ?? undefined,
+      platform: svc,
+      channel_id: channel.id,
+      channel_name: channel.displayName || channel.name,
+      image_url: gen.imageUrl,
+      due_at: dueAt,
+      status: "pending",
     });
-
-    if (postResult.ok) {
-      posts[svc] = text;
-      postedPlatforms.push(svc);
-    }
-    await sleep(1000);
+    posts[svc] = text;
+    queuedPlatforms.push(svc);
   }
 
-  if (postedPlatforms.length === 0) {
-    return { posted: false, reason: "All Buffer posts failed" };
-  }
+  if (queuedPlatforms.length === 0) return { posted: false, reason: "No posts to queue" };
 
-  // Update last_posted_on
-  const db = requireSupabaseAdmin();
-  const now = nowInTimezone(settings.timezone);
+  // Mark this date as generated
   await db
     .from("social_autopilot_settings")
-    .update({ last_posted_on: now.date, updated_at: new Date().toISOString() })
+    .update({ last_posted_on: postDate, updated_at: new Date().toISOString() })
     .eq("id", 1);
 
   // Log
   try {
     await db.from("social_autopilot_log").insert({
-      topic,
-      platforms_posted: postedPlatforms,
-      post_type: postType,
-      image_url: imageUrl,
-      posts,
-      analytics_context: analyticsCtx.slice(0, 2000) || null,
+      topic: gen.topic, platforms_posted: queuedPlatforms, post_type: gen.postType,
+      image_url: gen.imageUrl, posts, analytics_context: gen.analyticsCtx.slice(0, 2000) || null,
     });
-  } catch { /* table may not exist */ }
+  } catch {}
 
   return {
-    posted: true,
-    topic,
-    postType,
-    platforms: postedPlatforms,
-    imageUrl,
-    posts,
+    posted: false, queued: true, topic: gen.topic, postType: gen.postType,
+    platforms: queuedPlatforms, imageUrl: gen.imageUrl, posts, dueAt,
   };
 }
