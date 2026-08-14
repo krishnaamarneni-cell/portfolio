@@ -17,6 +17,8 @@ import {
   FiDownload,
   FiSend,
   FiUploadCloud,
+  FiPlus,
+  FiUserPlus,
 } from "react-icons/fi";
 import { type Contact, type ContactType, CONTACT_TYPES, typeInfo, timeAgo } from "./types";
 
@@ -35,6 +37,7 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
   const [cleaningJunk, setCleaningJunk] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showCompose, setShowCompose] = useState(false);
+  const [showAddContact, setShowAddContact] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -237,6 +240,12 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
           <FiDownload size={14} /> Export CSV
         </button>
         <button
+          onClick={() => setShowAddContact(true)}
+          className="px-4 py-2.5 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] flex items-center gap-2 whitespace-nowrap"
+        >
+          <FiUserPlus size={14} /> Add Contact
+        </button>
+        <button
           onClick={cleanJunk}
           disabled={cleaningJunk}
           className="px-4 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-red-500/40 text-sm font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
@@ -244,6 +253,20 @@ export default function ContactsPanel({ onSuccess, onError }: Props) {
           <FiSlash size={14} /> {cleaningJunk ? "Cleaning..." : "Clean Junk"}
         </button>
       </div>
+
+      {/* Add Contact Form */}
+      {showAddContact && (
+        <AddContactForm
+          onSave={async (data) => {
+            const ok = await act(data);
+            if (ok) {
+              setShowAddContact(false);
+              onSuccess("Contact added");
+            }
+          }}
+          onCancel={() => setShowAddContact(false)}
+        />
+      )}
 
       {/* Quick-select audiences for bulk send */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -1090,5 +1113,75 @@ function BulkComposeModal({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ───────── ADD CONTACT FORM ───────── */
+
+function AddContactForm({
+  onSave,
+  onCancel,
+}: {
+  onSave: (data: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
+  const [contactType, setContactType] = useState<string>("recruiter");
+  const [phone, setPhone] = useState("");
+  const [linkedin, setLinkedin] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setSaving(true);
+    await onSave({
+      email: email.trim(),
+      name: name.trim(),
+      company: company.trim() || null,
+      contact_type: contactType,
+      source: "manual",
+      notes: notes.trim() || null,
+    });
+    setSaving(false);
+  }
+
+  const inputCls = "w-full px-3 py-2.5 rounded-xl bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:border-[#ff6b00] focus:ring-2 focus:ring-[#ff6b00]/20 focus:outline-none placeholder:text-[var(--admin-text-muted)]";
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-[var(--admin-surface)] rounded-2xl border border-[#ff6b00]/30 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-[var(--admin-text)] flex items-center gap-2">
+          <FiUserPlus size={15} className="text-[#ff6b00]" /> Add Contact
+        </h3>
+        <button type="button" onClick={onCancel} className="text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]">
+          <FiX size={16} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email *" type="email" required className={inputCls} />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className={inputCls} />
+        <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company" className={inputCls} />
+        <select value={contactType} onChange={(e) => setContactType(e.target.value)} className={inputCls}>
+          {CONTACT_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>{t.label}</option>
+          ))}
+        </select>
+      </div>
+      <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional)" className={inputCls} />
+
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-xl bg-[var(--admin-surface-hover)] text-sm text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]">
+          Cancel
+        </button>
+        <button type="submit" disabled={saving || !email.trim()} className="px-5 py-2 rounded-xl bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] disabled:opacity-50">
+          {saving ? "Saving..." : "Add Contact"}
+        </button>
+      </div>
+    </form>
   );
 }
