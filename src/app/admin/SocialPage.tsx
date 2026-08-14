@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FiEdit3, FiBarChart2, FiZap } from "react-icons/fi";
+import { FiEdit3, FiBarChart2, FiZap, FiPlay } from "react-icons/fi";
 import SocialEditor from "./SocialEditor";
 import SocialAnalytics from "./SocialAnalytics";
 import IdeasPanel from "./IdeasPanel";
+import AutopilotPanel from "./AutopilotPanel";
 
 export default function SocialPage({
   onSuccess,
@@ -13,7 +14,7 @@ export default function SocialPage({
   onSuccess: (m: string) => void;
   onError: (m: string) => void;
 }) {
-  const [view, setView] = useState<"editor" | "analytics" | "ideas">("editor");
+  const [view, setView] = useState<"editor" | "analytics" | "ideas" | "autopilot">("editor");
   const [seedTopic, setSeedTopic] = useState("");
   const [seedNote, setSeedNote] = useState("");
   const [seedNonce, setSeedNonce] = useState(0);
@@ -47,12 +48,15 @@ export default function SocialPage({
           label="Ideas"
           badge={newIdeas > 0 ? newIdeas : undefined}
         />
+        <TabBtn active={view === "autopilot"} onClick={() => setView("autopilot")} icon={<FiPlay size={12} />} label="Autopilot" />
       </div>
 
       {view === "editor" ? (
         <SocialEditor onSuccess={onSuccess} onError={onError} seedTopic={seedTopic} seedNote={seedNote} seedNonce={seedNonce} />
       ) : view === "analytics" ? (
         <SocialAnalytics onSuccess={onSuccess} onError={onError} />
+      ) : view === "autopilot" ? (
+        <AutopilotPanel onSuccess={onSuccess} onError={onError} />
       ) : (
         <IdeasPanel onDraft={draftFromIdea} onSuccess={onSuccess} onError={onError} />
       )}

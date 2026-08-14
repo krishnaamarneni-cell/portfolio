@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { getDripSettings, processNextDripImage } from "@/lib/social-drip";
 import { flushDueSocialQueue } from "@/lib/social-queue";
+import { runAutopilot } from "@/lib/social-autopilot";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,6 +47,11 @@ export async function GET(request: Request) {
       await processNextDripImage();
     } catch {
       // Failures are recorded on the drip row / settings; nothing to return.
+    }
+    try {
+      await runAutopilot();
+    } catch {
+      // Logged in social_autopilot_log; no-op if disabled or outside window.
     }
   });
 
