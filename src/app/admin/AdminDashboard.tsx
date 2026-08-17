@@ -33,6 +33,7 @@ import {
   FiTrendingDown,
   FiRefreshCw,
   FiAlertTriangle,
+  FiCompass,
 } from "react-icons/fi";
 import {
   EMPTY_JOB,
@@ -53,14 +54,14 @@ import CRMWorkspace from "./crm/CRMWorkspace";
 import ThemeToggle from "@/components/ThemeToggle";
 import PersonalTab from "./PersonalTab";
 import ResumeCreatorTab from "./ResumeCreatorTab";
-import ApplicationsTab from "./ApplicationsTab";
+import JobFinderTab from "./job-finder/JobFinderTab";
 import EmailTab from "./EmailTab";
 
 type Tab =
   | "dashboard"
   | "content"
   | "thoughts"
-  | "jobs"
+  | "experience"
   | "projects"
   | "social"
   | "agents"
@@ -69,7 +70,7 @@ type Tab =
   | "connectors"
   | "chat"
   | "resume"
-  | "applications"
+  | "job-finder"
   | "email";
 
 type Props = {
@@ -91,10 +92,10 @@ const NAV_ITEMS: Array<{
   { id: "social", label: "Social", icon: FiShare2, section: "Content" },
   { id: "agents", label: "Agents", icon: FiCpu },
   { id: "resume", label: "Resume", icon: FiFileText },
-  { id: "applications", label: "Applications", icon: FiBriefcase },
+  { id: "job-finder", label: "Job Finder", icon: FiCompass },
   { id: "contacts", label: "CRM", icon: FiUsers },
   { id: "email", label: "Email", icon: FiMail },
-  { id: "jobs", label: "Jobs", icon: FiBriefcase, section: "Data" },
+  { id: "experience", label: "Experience", icon: FiBriefcase, section: "Data" },
   { id: "projects", label: "Projects", icon: FiFolder },
   { id: "content", label: "Site Content", icon: FiLayout },
   { id: "thoughts", label: "Notes", icon: FiZap },
@@ -369,6 +370,9 @@ export default function AdminDashboard({
           <div style={{ display: tab === "contacts" ? "block" : "none" }}>
             <CRMWorkspace onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           </div>
+          <div style={{ display: tab === "job-finder" ? "block" : "none" }}>
+            <JobFinderTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
+          </div>
           {tab === "dashboard" ? (
             <DashboardOverview jobs={jobs} projects={projects} onNavigate={handleNav} />
           ) : tab === "content" ? (
@@ -388,13 +392,11 @@ export default function AdminDashboard({
             <PersonalTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "resume" ? (
             <ResumeCreatorTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
-          ) : tab === "applications" ? (
-            <ApplicationsTab onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} />
           ) : tab === "connectors" ? (
             <ConnectorsEditor onSuccess={(m) => flash("ok", m)} onError={(m) => flash("err", m)} sessionEmail={session.email} />
           ) : tab === "chat" ? (
             <AdminChat onError={(m) => flash("err", m)} />
-          ) : tab === "contacts" || tab === "email" ? null : tab === "jobs" ? (
+          ) : tab === "contacts" || tab === "email" || tab === "job-finder" ? null : tab === "experience" ? (
             <section>
               <div className="flex items-center justify-between mb-5">
                 <h2 className="text-xl font-bold text-[var(--admin-text)]">Experience Timeline</h2>
@@ -547,7 +549,7 @@ function DashboardOverview({
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-[var(--admin-text-muted)] uppercase tracking-wider">Recent Experience</h3>
-          <button onClick={() => onNavigate("jobs")} className="text-xs text-[#ff6b00] font-semibold hover:underline">
+          <button onClick={() => onNavigate("experience")} className="text-xs text-[#ff6b00] font-semibold hover:underline">
             View all
           </button>
         </div>
