@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiSearch, FiRefreshCw, FiZap, FiInbox, FiAlertTriangle } from "react-icons/fi";
+import { FiSearch, FiRefreshCw, FiZap, FiInbox, FiAlertTriangle, FiDownloadCloud } from "react-icons/fi";
 import JobCard from "./JobCard";
 import type { Listing, Stats } from "./types";
 
@@ -36,6 +36,7 @@ export default function JobFeed({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [scoring, setScoring] = useState(false);
+  const [finding, setFinding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [needsMigration, setNeedsMigration] = useState(false);
 
@@ -136,6 +137,37 @@ export default function JobFeed({
     }
   };
 
+  const findJobs = async () => {
+    setFinding(true);
+    try {
+      const res = await fetch("/api/admin/job-finder/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (data.error) {
+        onError(data.error);
+        return;
+      }
+      if (!data.found) {
+        onError(`No live postings came back for ${data.searched?.join(", ") ?? "your keywords"}. Try broader keywords in Settings.`);
+        return;
+      }
+      onSuccess(
+        data.added
+          ? `Found ${data.found} postings — ${data.added} new.`
+          : `Found ${data.found} postings, all already here.`
+      );
+      load();
+      if (data.errors?.length) onError(`Some sources failed: ${data.errors[0]}`);
+    } catch {
+      onError("Job search failed.");
+    } finally {
+      setFinding(false);
+    }
+  };
+
   const scoreAll = async () => {
     setScoring(true);
     try {
@@ -222,9 +254,21 @@ export default function JobFeed({
 
         {showScoring && (
           <button
+            onClick={findJobs}
+            disabled={finding}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] transition-colors disabled:opacity-50"
+            title="Fetch live postings from Workday career sites using your saved keywords"
+          >
+            <FiDownloadCloud size={13} className={finding ? "animate-pulse" : ""} />
+            {finding ? "Searching…" : "Find jobs"}
+          </button>
+        )}
+
+        {showScoring && (
+          <button
             onClick={scoreAll}
             disabled={scoring}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#ff6b00] text-white text-sm font-semibold hover:bg-[#e55d00] transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--admin-border)] text-[var(--admin-text)] text-sm font-semibold hover:border-[#ff6b00] transition-colors disabled:opacity-50"
             title="Score unscored listings against your profile"
           >
             <FiZap size={13} className={scoring ? "animate-pulse" : ""} />

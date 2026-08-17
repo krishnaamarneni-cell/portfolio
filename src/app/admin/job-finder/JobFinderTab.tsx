@@ -79,7 +79,7 @@ export default function JobFinderTab({ onSuccess, onError }: Props) {
           onSuccess={onSuccess}
           onError={onError}
           emptyTitle="No listings discovered yet"
-          emptyHint="Add career pages under Sources, or send results here from the Jobs Scout agent. Once listings land, use Score with AI to rank them against your profile."
+          emptyHint="Hit “Find jobs” to pull live postings from 11 major career sites using the keywords in Settings. Then “Score with AI” ranks what came back against your profile."
         />
       )}
 
