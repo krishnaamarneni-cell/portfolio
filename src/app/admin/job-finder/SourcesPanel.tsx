@@ -9,6 +9,7 @@ import {
   FiGlobe,
   FiAlertTriangle,
   FiSearch,
+  FiInfo,
 } from "react-icons/fi";
 import type { DirectoryEntry, Source } from "./types";
 import { relativeDate } from "./types";
@@ -23,6 +24,7 @@ export default function SourcesPanel({ onSuccess, onError }: Props) {
   const [busy, setBusy] = useState(false);
   const [dirSearch, setDirSearch] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [liveTenants, setLiveTenants] = useState<string[]>([]);
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -46,6 +48,7 @@ export default function SourcesPanel({ onSuccess, onError }: Props) {
       setNeedsMigration(false);
       setSources(data.sources ?? []);
       setDirectory(data.directory ?? []);
+      setLiveTenants(data.liveTenants ?? []);
     } catch {
       cb.current.onError("Could not load sources.");
     } finally {
@@ -148,6 +151,26 @@ export default function SourcesPanel({ onSuccess, onError }: Props) {
 
   return (
     <div className="space-y-6">
+      <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-4 flex gap-3">
+        <FiInfo size={16} className="text-sky-500 shrink-0 mt-0.5" />
+        <div className="min-w-0">
+          <p className="font-semibold text-[var(--admin-text)] text-sm">
+            Nothing on this page affects “Find jobs” yet
+          </p>
+          <p className="text-xs text-[var(--admin-text-muted)] mt-1.5 leading-relaxed">
+            Sources are a staging list for the crawler in the next phase. Adding one has no effect on search
+            results today, so there is no need to add them all — add a company only if you want it queued for
+            when the crawler ships.
+          </p>
+          {liveTenants.length > 0 && (
+            <p className="text-xs text-[var(--admin-text-muted)] mt-2 leading-relaxed">
+              <span className="font-semibold text-[var(--admin-text)]">Searchable right now</span> (built in, no
+              setup needed): {liveTenants.join(", ")}.
+            </p>
+          )}
+        </div>
+      </div>
+
       <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-5">
         <h3 className="font-semibold text-[var(--admin-text)] text-sm mb-1">Add a career page</h3>
         <p className="text-xs text-[var(--admin-text-muted)] mb-4 leading-relaxed">

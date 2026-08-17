@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 import { CAREER_SITES } from "@/lib/company-careers";
+import { WORKDAY_TENANTS } from "@/lib/job-sources";
 import type { JobSource } from "@/lib/job-finder";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +48,11 @@ export async function GET() {
         known.has((site.sapSearchUrl ?? "").toLowerCase()),
     }));
 
-    return NextResponse.json({ sources: (data ?? []) as JobSource[], directory });
+    // Companies "Find jobs" can actually search today. These are hardcoded
+    // Workday tenants, independent of the job_sources table below.
+    const liveTenants = WORKDAY_TENANTS.map((t) => t.company);
+
+    return NextResponse.json({ sources: (data ?? []) as JobSource[], directory, liveTenants });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to load";
     return NextResponse.json(
