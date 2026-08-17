@@ -782,6 +782,7 @@ function BulkComposeModal({
 
   async function generateDraft(field: "both" | "subject" | "message", roleOverride?: string) {
     setGenerating(field);
+    const activeRole = (roleOverride ?? roleSeeking)?.trim() || "SAP S/4HANA and AI/ML engineering roles";
     try {
       const r = await fetch("/api/admin/contacts/email/bulk", {
         method: "POST",
@@ -798,10 +799,21 @@ function BulkComposeModal({
         }),
       });
       const d = await r.json();
-      if (d.subject !== undefined && field !== "message") setSubject(d.subject);
-      if (d.message !== undefined && field !== "subject") setMessage(d.message);
+      if (d.error) {
+        onError(d.error);
+        setGenerating(null);
+        return;
+      }
+      if (d.subject && field !== "message") setSubject(d.subject);
+      if (d.message && field !== "subject") setMessage(d.message);
+      if (field === "both" && !d.subject && !d.message) {
+        setSubject(`${activeRole} — available and interviewing`);
+        setMessage(`I'm reaching out because I'm actively looking for ${activeRole} opportunities. With 5+ years in enterprise systems, I'd love to know if your team has any relevant openings. I've attached my resume — if anything comes across your desk that fits, I'd welcome a conversation.`);
+      }
     } catch {
-      onError("AI generation failed");
+      if (field !== "message") setSubject(`${activeRole} — available and interviewing`);
+      if (field !== "subject") setMessage(`I'm reaching out because I'm actively looking for ${activeRole} opportunities. With 5+ years in enterprise systems, I'd love to know if your team has any relevant openings. I've attached my resume — if anything comes across your desk that fits, I'd welcome a conversation.`);
+      onError("AI generation failed — using default template");
     }
     setGenerating(null);
   }

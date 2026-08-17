@@ -89,24 +89,40 @@ Rules:
 - Body: 3-4 natural sentences, warm and professional, confident but not desperate. Include a clear ask (e.g. "if you have or come across a role that fits, I'd love to connect").
 - Subject: under 60 characters and it MUST clearly signal he is job-seeking / available — e.g. "Open to new SAP + AI engineering roles" or "SAP S/4HANA + AI Engineer — actively interviewing". NEVER a vague subject like "Exploring AI Roles".
 - BANNED phrases: "excited about the opportunity", "leverage my expertise", "confident in my ability", "passionate about", "drive business growth", "touching base", "just checking in".
-- Output ONLY valid JSON, nothing else.`,
+- Output ONLY valid JSON with "subject" and "message" keys, nothing else. No markdown fences.`,
       userPrompt,
-      maxTokens: 320,
+      maxTokens: 600,
     });
 
-    try {
-      const cleaned = (result.content || "{}").replace(/```json\s*|\s*```/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-      return NextResponse.json({
-        subject: parsed.subject ?? undefined,
-        message: parsed.message ?? undefined,
-      });
-    } catch {
-      return NextResponse.json({
-        subject: field !== "message" ? "Open to new SAP + AI engineering roles" : undefined,
-        message: field !== "subject" ? (result.content || "").replace(/[{}"]/g, "").trim() : undefined,
-      });
+    const raw = result.content || "";
+    let subject: string | undefined;
+    let message: string | undefined;
+
+    // Tolerant JSON extraction: find the first { ... } block
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        subject = typeof parsed.subject === "string" ? parsed.subject : undefined;
+        message = typeof parsed.message === "string" ? parsed.message : undefined;
+      } catch {
+        // JSON found but malformed — try key extraction below
+      }
     }
+
+    // Fallback: extract values with regex if JSON parse failed
+    if (!subject && field !== "message") {
+      const sm = raw.match(/"subject"\s*:\s*"([^"]+)"/);
+      subject = sm ? sm[1] : `${role} — available and interviewing`;
+    }
+    if (!message && field !== "subject") {
+      const mm = raw.match(/"message"\s*:\s*"([\s\S]+?)(?:"\s*[,}])/);
+      message = mm
+        ? mm[1].replace(/\\n/g, "\n").replace(/\\"/g, '"')
+        : `I'm reaching out because I'm actively looking for ${role} opportunities. With 5+ years in enterprise systems spanning SAP S/4HANA and AI/ML engineering, I'd love to know if your team has any relevant openings. I've attached my resume for your reference — if anything comes across your desk that fits, I'd welcome a conversation.`;
+    }
+
+    return NextResponse.json({ subject, message });
   }
 
   if (!body.contactIds?.length || !body.subject || !body.message) {
