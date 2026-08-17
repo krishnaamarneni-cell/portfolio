@@ -6,6 +6,7 @@ import {
   runAutopilot,
   type AutopilotSettings,
 } from "@/lib/social-autopilot";
+import { getContentProfile, saveContentProfile } from "@/lib/content-curator";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,10 @@ export async function GET() {
   if (!(await getSession()))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const settings = await getAutopilotSettings();
+  const [settings, niche] = await Promise.all([
+    getAutopilotSettings(),
+    getContentProfile(),
+  ]);
 
   const db = requireSupabaseAdmin();
   const { data: log } = await db
@@ -25,7 +29,7 @@ export async function GET() {
     .order("created_at", { ascending: false })
     .limit(10);
 
-  return NextResponse.json({ settings, log: log ?? [] });
+  return NextResponse.json({ settings, niche, log: log ?? [] });
 }
 
 export async function POST(request: Request) {
@@ -50,6 +54,13 @@ export async function POST(request: Request) {
   if (body.action === "run-now") {
     const result = await runAutopilot({ force: true });
     return NextResponse.json(result);
+  }
+
+  if (body.action === "save-niche") {
+    const niche = typeof body.niche === "string" ? body.niche.trim() : "";
+    if (!niche) return NextResponse.json({ error: "Niche cannot be empty" }, { status: 400 });
+    await saveContentProfile(niche);
+    return NextResponse.json({ niche });
   }
 
   if (body.action === "clear-log") {

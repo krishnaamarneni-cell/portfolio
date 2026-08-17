@@ -71,6 +71,9 @@ export default function AutopilotPanel({ onSuccess, onError }: Props) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [niche, setNiche] = useState("");
+  const [nicheEdit, setNicheEdit] = useState("");
+  const [nicheEditing, setNicheEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
@@ -86,6 +89,10 @@ export default function AutopilotPanel({ onSuccess, onError }: Props) {
     ]);
     setSettings(settingsRes.settings ?? null);
     setLog(settingsRes.log ?? []);
+    if (settingsRes.niche) {
+      setNiche(settingsRes.niche);
+      setNicheEdit(settingsRes.niche);
+    }
     const ch = (channelsRes.channels ?? channelsRes ?? []) as Channel[];
     setChannels(ch);
     if (settingsRes.settings?.channel_ids?.length > 0) setChannelMode("pick");
@@ -106,6 +113,25 @@ export default function AutopilotPanel({ onSuccess, onError }: Props) {
     if (d.settings) {
       setSettings(d.settings);
       onSuccess("Autopilot settings saved");
+    } else {
+      onError(d.error || "Save failed");
+    }
+  }
+
+  async function saveNiche() {
+    if (!nicheEdit.trim()) return;
+    setSaving(true);
+    const r = await fetch("/api/admin/social/autopilot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "save-niche", niche: nicheEdit.trim() }),
+    });
+    const d = await r.json().catch(() => ({}));
+    setSaving(false);
+    if (d.niche) {
+      setNiche(d.niche);
+      setNicheEditing(false);
+      onSuccess("Content niche saved");
     } else {
       onError(d.error || "Save failed");
     }
@@ -222,6 +248,58 @@ export default function AutopilotPanel({ onSuccess, onError }: Props) {
             }`}
           />
         </button>
+      </div>
+
+      {/* Content Niche */}
+      <div className="bg-[var(--admin-surface)] rounded-xl border border-[var(--admin-border)] p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--admin-text-muted)]">
+            Content Niche
+          </h3>
+          {!nicheEditing && (
+            <button
+              onClick={() => { setNicheEdit(niche); setNicheEditing(true); }}
+              className="text-[10px] text-emerald-400 hover:text-emerald-300"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+
+        {nicheEditing ? (
+          <div className="space-y-2">
+            <textarea
+              value={nicheEdit}
+              onChange={(e) => setNicheEdit(e.target.value)}
+              rows={4}
+              placeholder="Describe your content niche, voice, and topics you cover..."
+              className="w-full px-3 py-2.5 rounded-xl bg-[var(--admin-input-bg)] border border-[var(--admin-border)] text-xs text-[var(--admin-text)] focus:border-emerald-500 focus:outline-none placeholder:text-[var(--admin-text-muted)] leading-relaxed resize-none"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={saveNiche}
+                disabled={saving || !nicheEdit.trim()}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[11px] font-medium hover:bg-emerald-500/25 disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => { setNicheEdit(niche); setNicheEditing(false); }}
+                className="px-3 py-1.5 rounded-lg bg-[var(--admin-surface-hover)] border border-[var(--admin-border)] text-[var(--admin-text-muted)] text-[11px]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-[var(--admin-text-muted)] leading-relaxed whitespace-pre-wrap">
+            {niche || "No niche set — the agent uses a default profile. Click Edit to define your content voice."}
+          </p>
+        )}
+
+        <p className="text-[10px] text-[var(--admin-text-muted)]">
+          Defines what you post about, your tone, and per-platform style. The AI uses this for every post it generates.
+        </p>
       </div>
 
       {/* Schedule */}
