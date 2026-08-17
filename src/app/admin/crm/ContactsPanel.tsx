@@ -780,9 +780,21 @@ function BulkComposeModal({
     };
   }, [eligible]);
 
+  function defaultSubject(role: string) {
+    return `${role} — available and interviewing`;
+  }
+  function defaultMessage(role: string) {
+    return `I'm reaching out because I'm actively looking for ${role} opportunities. With 5+ years in enterprise systems spanning SAP S/4HANA and AI/ML engineering, I'd love to know if your team has any relevant openings. I've attached my resume for reference — if anything comes across your desk that fits, I'd welcome a conversation.`;
+  }
+
   async function generateDraft(field: "both" | "subject" | "message", roleOverride?: string) {
-    setGenerating(field);
     const activeRole = (roleOverride ?? roleSeeking)?.trim() || "SAP S/4HANA and AI/ML engineering roles";
+
+    // Populate defaults IMMEDIATELY so fields are never empty
+    if (field !== "message") setSubject(defaultSubject(activeRole));
+    if (field !== "subject") setMessage(defaultMessage(activeRole));
+    setGenerating(field);
+
     try {
       const r = await fetch("/api/admin/contacts/email/bulk", {
         method: "POST",
@@ -804,15 +816,11 @@ function BulkComposeModal({
         setGenerating(null);
         return;
       }
+      // AI-generated content overwrites the defaults
       if (d.subject && field !== "message") setSubject(d.subject);
       if (d.message && field !== "subject") setMessage(d.message);
-      if (field === "both" && !d.subject && !d.message) {
-        setSubject(`${activeRole} — available and interviewing`);
-        setMessage(`I'm reaching out because I'm actively looking for ${activeRole} opportunities. With 5+ years in enterprise systems, I'd love to know if your team has any relevant openings. I've attached my resume — if anything comes across your desk that fits, I'd welcome a conversation.`);
-      }
     } catch {
-      if (field !== "message") setSubject(`${activeRole} — available and interviewing`);
-      if (field !== "subject") setMessage(`I'm reaching out because I'm actively looking for ${activeRole} opportunities. With 5+ years in enterprise systems, I'd love to know if your team has any relevant openings. I've attached my resume — if anything comes across your desk that fits, I'd welcome a conversation.`);
+      // Defaults already set above — just notify
       onError("AI generation failed — using default template");
     }
     setGenerating(null);
