@@ -56,6 +56,7 @@ import PersonalTab from "./PersonalTab";
 import ResumeCreatorTab from "./ResumeCreatorTab";
 import JobFinderTab from "./job-finder/JobFinderTab";
 import EmailTab from "./EmailTab";
+import IntelPanel from "./IntelPanel";
 
 type Tab =
   | "dashboard"
@@ -116,6 +117,7 @@ export default function AdminDashboard({
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [intelOpen, setIntelOpen] = useState(false);
 
   useEffect(() => {
     const t = searchParams.get("tab");
@@ -340,9 +342,14 @@ export default function AdminDashboard({
             <div className="flex items-center gap-3">
               <ThemeToggle />
               <span className="hidden md:block text-sm text-[var(--admin-text-muted)]">{session.email}</span>
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-white font-bold text-sm">
+              <button
+                onClick={() => setIntelOpen(true)}
+                title="Market intel — who is hiring, skills in demand, your gaps"
+                aria-label="Open market intel"
+                className="w-9 h-9 rounded-full bg-gradient-to-br from-[#ff6b00] to-[#ff8c38] flex items-center justify-center text-white font-bold text-sm hover:ring-2 hover:ring-[#ff6b00]/40 transition-all"
+              >
                 K
-              </div>
+              </button>
             </div>
           </div>
         </header>
@@ -461,6 +468,8 @@ export default function AdminDashboard({
       )}
 
       {/* Toast */}
+      {intelOpen && <IntelPanel onClose={() => setIntelOpen(false)} />}
+
       {toast && (
         <div
           className={`fixed bottom-6 right-4 lg:right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-lg border ${
