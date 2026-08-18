@@ -24,7 +24,7 @@ export default function SourcesPanel({ onSuccess, onError }: Props) {
   const [busy, setBusy] = useState(false);
   const [dirSearch, setDirSearch] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [liveTenants, setLiveTenants] = useState<string[]>([]);
+  const [liveSources, setLiveSources] = useState<Array<{ company: string; ats: string }>>([]);
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -48,7 +48,7 @@ export default function SourcesPanel({ onSuccess, onError }: Props) {
       setNeedsMigration(false);
       setSources(data.sources ?? []);
       setDirectory(data.directory ?? []);
-      setLiveTenants(data.liveTenants ?? []);
+      setLiveSources(data.liveSources ?? []);
     } catch {
       cb.current.onError("Could not load sources.");
     } finally {
@@ -151,23 +151,51 @@ export default function SourcesPanel({ onSuccess, onError }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-4 flex gap-3">
-        <FiInfo size={16} className="text-sky-500 shrink-0 mt-0.5" />
+      <div className="bg-[var(--admin-surface)] border border-[var(--admin-border)] rounded-xl p-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-[var(--admin-text)] text-sm">
+              Searched by “Find jobs”
+            </h3>
+            <p className="text-xs text-[var(--admin-text-muted)] mt-1 leading-relaxed">
+              Built in and always on — nothing below this box changes it.
+            </p>
+          </div>
+          <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 text-xs font-bold tabular-nums shrink-0">
+            {liveSources.length} companies
+          </span>
+        </div>
+
+        {liveSources.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-3.5">
+            {liveSources.map((s) => (
+              <span
+                key={`${s.ats}-${s.company}`}
+                title={`Live via ${s.ats}`}
+                className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
+                  s.ats === "Workday"
+                    ? "bg-sky-500/10 text-sky-500 border-sky-500/30"
+                    : "bg-violet-500/10 text-violet-500 border-violet-500/30"
+                }`}
+              >
+                {s.company}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex gap-3">
+        <FiInfo size={16} className="text-amber-500 shrink-0 mt-0.5" />
         <div className="min-w-0">
           <p className="font-semibold text-[var(--admin-text)] text-sm">
-            Nothing on this page affects “Find jobs” yet
+            Everything below is staging — it does not affect search results
           </p>
           <p className="text-xs text-[var(--admin-text-muted)] mt-1.5 leading-relaxed">
-            Sources are a staging list for the crawler in the next phase. Adding one has no effect on search
-            results today, so there is no need to add them all — add a company only if you want it queued for
-            when the crawler ships.
+            Sources you add here, and the career-page directory, are queued for the crawler in the next phase.
+            Neither is searched today, so there is no need to add them all. The directory’s links are still
+            useful for applying by hand.
           </p>
-          {liveTenants.length > 0 && (
-            <p className="text-xs text-[var(--admin-text-muted)] mt-2 leading-relaxed">
-              <span className="font-semibold text-[var(--admin-text)]">Searchable right now</span> (built in, no
-              setup needed): {liveTenants.join(", ")}.
-            </p>
-          )}
         </div>
       </div>
 
