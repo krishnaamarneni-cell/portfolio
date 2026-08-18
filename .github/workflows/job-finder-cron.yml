@@ -1,0 +1,50 @@
+# Job Finder automation — free via GitHub Actions.
+#
+# Calls /api/cron/job-finder every 15 minutes. Each tick sweeps a slice of the
+# ~75 employer job boards, saves anything new, then spends the rest of its time
+# budget scoring unscored listings against the profile in Job Finder → Settings.
+#
+# Vercel Hobby crons only fire once a day, which is why this lives here.
+#
+# Setup: add CRON_SECRET as a GitHub repo secret
+#   (Settings → Secrets and variables → Actions → New repository secret)
+#   using the same value as the Vercel CRON_SECRET env var.
+#
+# GitHub may skip or delay scheduled runs when the Actions queue is busy, so
+# treat the cadence as "about every 15 minutes", not a guarantee. The cursor
+# means a skipped tick costs nothing — the next one continues where it left off.
+
+name: Job Finder Cron
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Leave blank for a normal tick, or 'score' to only score"
+        required: false
+        default: ""
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Trigger Job Finder crawl
+        run: |
+          URL="https://krishnaamarneni.com/api/cron/job-finder?trigger=github"
+          if [ -n "${{ github.event.inputs.mode }}" ]; then
+            URL="$URL&mode=${{ github.event.inputs.mode }}"
+          fi
+          RESPONSE=$(curl -s --max-time 120 -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$URL")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Job Finder cron failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
