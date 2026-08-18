@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiSearch, FiRefreshCw, FiZap, FiInbox, FiAlertTriangle, FiDownloadCloud } from "react-icons/fi";
-import JobCard from "./JobCard";
+import JobRow from "./JobRow";
+import JobDetail from "./JobDetail";
 import ApplicationPacket from "./ApplicationPacket";
 import type { Listing, Stats } from "./types";
 
@@ -55,6 +56,9 @@ export default function JobFeed({
   const [needsMigration, setNeedsMigration] = useState(false);
   const [packet, setPacket] = useState<Listing | null>(null);
   const [scoreProgress, setScoreProgress] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** Mobile only: selecting a row opens the detail as a sheet. */
+  const [mobileOpen, setMobileOpen] = useState(false);
   /** Read inside the scoring loop, so an abort is seen mid-run. */
   const stopRef = useRef(false);
 
@@ -97,8 +101,12 @@ export default function JobFeed({
         return;
       }
       setNeedsMigration(false);
-      setListings(data.listings ?? []);
+      const rows: Listing[] = data.listings ?? [];
+      setListings(rows);
       setTotal(data.total ?? 0);
+      // Keep a selection only if it survived the reload; otherwise open the
+      // first row so the detail pane is never blank next to a full list.
+      setSelectedId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : rows[0]?.id ?? null));
       if (data.stats) cb.current.onStats?.(data.stats);
       if (data.platforms) setPlatformCounts(data.platforms);
     } catch {
@@ -260,6 +268,11 @@ export default function JobFeed({
   // Counts what the scorer will actually pick up: never scored, or scored
   // before the structured fields existed. Counting only null scores made the
   // button read "Score with AI" while 82 listings still had empty facts.
+  const selected = useMemo(
+    () => listings.find((l) => l.id === selectedId) ?? null,
+    [listings, selectedId]
+  );
+
   const unscored = useMemo(
     () =>
       listings.filter(
@@ -410,18 +423,52 @@ export default function JobFeed({
           <p className="text-xs text-[var(--admin-text-muted)]">
             {listings.length} of {total} shown
           </p>
-          <div className="space-y-3">
-            {listings.map((l) => (
-              <JobCard
-                key={l.id}
-                listing={l}
-                busy={busyId === l.id}
-                onStatus={setStatus}
-                onDelete={remove}
-                onPrepare={setPacket}
-              />
-            ))}
+          {/* Two panes on desktop: scan on the left, decide on the right.
+              On mobile the detail becomes a sheet, since side-by-side at that
+              width leaves neither pane readable. */}
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:h-[calc(100vh-320px)] lg:min-h-[520px]">
+            <div className="space-y-2 lg:overflow-y-auto lg:pr-1">
+              {listings.map((l) => (
+                <JobRow
+                  key={l.id}
+                  listing={l}
+                  selected={l.id === selectedId}
+                  onSelect={() => {
+                    setSelectedId(l.id);
+                    setMobileOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+
+            {selected && (
+              <div className="hidden lg:block min-h-0">
+                <JobDetail
+                  listing={selected}
+                  busy={busyId === selected.id}
+                  onStatus={setStatus}
+                  onDelete={remove}
+                  onPrepare={setPacket}
+                />
+              </div>
+            )}
           </div>
+
+          {/* Mobile sheet */}
+          {selected && mobileOpen && (
+            <div className="fixed inset-0 z-40 bg-black/60 p-3 lg:hidden overflow-y-auto">
+              <div className="max-h-full">
+                <JobDetail
+                  listing={selected}
+                  busy={busyId === selected.id}
+                  onStatus={setStatus}
+                  onDelete={remove}
+                  onPrepare={setPacket}
+                  onClose={() => setMobileOpen(false)}
+                />
+              </div>
+            </div>
+          )}
         </>
       )}
 
