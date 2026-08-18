@@ -60,6 +60,12 @@ const STATE_META: Record<string, { label: string; dot: string; chip: string; blu
     chip: "bg-amber-500/10 text-amber-500 border-amber-500/30",
     blurb: "registered but not yet crawled",
   },
+  needs_config: {
+    label: "Needs setup",
+    dot: "bg-violet-500",
+    chip: "bg-violet-500/10 text-violet-400 border-violet-500/30",
+    blurb: "waiting on an API key — nothing is broken",
+  },
   inactive: {
     label: "Inactive",
     dot: "bg-[var(--admin-text-muted)]",
@@ -68,7 +74,7 @@ const STATE_META: Record<string, { label: string; dot: string; chip: string; blu
   },
 };
 
-const STATE_ORDER = ["producing", "no_matches", "unverified", "failing", "inactive"];
+const STATE_ORDER = ["producing", "no_matches", "unverified", "needs_config", "failing", "inactive"];
 
 export default function SourcesPanel({ onSuccess, onError }: Props) {
   const [sources, setSources] = useState<Source[]>([]);

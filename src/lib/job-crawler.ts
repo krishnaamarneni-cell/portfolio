@@ -26,6 +26,7 @@ import {
   type JobFinderSettings,
 } from "@/lib/job-finder";
 import { buildCandidateBlock, locationVerdict, scoreJob } from "@/lib/job-scoring";
+import { scanRequirementEmails } from "@/lib/gmail-jobs";
 
 export type CrawlResult = {
   sourcesChecked: number;
@@ -35,6 +36,8 @@ export type CrawlResult = {
   outOfArea: number;
   jobsScored: number;
   relevantFound: number;
+  /** Requirements pulled out of recruiter mail this tick. */
+  emailJobsAdded: number;
   cursorStart: number;
   cursorEnd: number;
   durationMs: number;
@@ -87,6 +90,8 @@ export type CrawlOutcome = {
   invalid: number;
   httpStatus: number | null;
   error: string | null;
+  /** Missing credentials — not a failure, and must not show as one. */
+  needsConfig?: boolean;
 };
 
 /**
@@ -109,8 +114,14 @@ async function recordCrawlResult(source: AtsSource, outcome: CrawlOutcome): Prom
       .eq("kind", source.kind)
       .maybeSingle();
 
-    const failed = Boolean(outcome.error);
-    const status = failed ? "failing" : outcome.found > 0 ? "producing" : "no_matches";
+    const failed = Boolean(outcome.error) && !outcome.needsConfig;
+    const status = outcome.needsConfig
+      ? "needs_config"
+      : failed
+        ? "failing"
+        : outcome.found > 0
+          ? "producing"
+          : "no_matches";
 
     const patch = {
       company: source.company,
@@ -136,6 +147,11 @@ async function recordCrawlResult(source: AtsSource, outcome: CrawlOutcome): Prom
 
 /** How many sources to sweep per tick before switching to scoring. */
 const SOURCES_PER_RUN = 12;
+/**
+ * Scan recruiter mail once per this many cursor positions — roughly one full
+ * pass of the source list, so about every two hours at a 15-minute cadence.
+ */
+const EMAIL_SCAN_EVERY = 60;
 /** Stop starting new work once this much of the budget is gone. */
 const CRAWL_SHARE = 0.55;
 
@@ -164,6 +180,7 @@ export async function runCrawlCycle(opts: {
   let jobsSeen = 0;
   let jobsAdded = 0;
   let outOfArea = 0;
+  let emailJobsAdded = 0;
 
   // ── Phase 1: sweep a slice of the source list ──
   if (!opts.scoreOnly && ATS_SOURCES.length) {
@@ -175,12 +192,14 @@ export async function runCrawlCycle(opts: {
       const source = ATS_SOURCES[cursor % ATS_SOURCES.length];
       cursor = (cursor + 1) % ATS_SOURCES.length;
 
-      const { jobs, httpStatus, error } = await fetchFromSource(
+      const { jobs, httpStatus, error, needsConfig } = await fetchFromSource(
         source,
         settings.keywords,
         preferredCountry
       );
       sourcesChecked++;
+      // A source awaiting credentials is reported once, as configuration rather
+      // than as a crawl failure — it would otherwise raise an alarm every tick.
       if (error) errors.push(`${source.company}: ${error}`);
 
       // Validate, then apply the geography gate. Out-of-area postings are
@@ -224,7 +243,37 @@ export async function runCrawlCycle(opts: {
         invalid,
         httpStatus,
         error,
+        needsConfig,
       });
+    }
+  }
+
+  // ── Phase 1b: recruiter email, on a slow rotation ──
+  //
+  // Not every tick. Reading mail costs one model call per message, and the same
+  // inbox re-read every 15 minutes would burn the scoring budget for almost no
+  // new requirements. Tied to the cursor so it runs roughly once per full sweep
+  // of the source list rather than on a separate clock.
+  if (!opts.scoreOnly && cursorStart % EMAIL_SCAN_EVERY < (opts.sourcesPerRun ?? SOURCES_PER_RUN)) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (apiKey) {
+      try {
+        const scan = await scanRequirementEmails({
+          apiKey,
+          days: 2,
+          maxEmails: 12,
+          deadline: start + opts.budgetMs * 0.7,
+        });
+        if (scan.rows.length) {
+          const res = await bulkUpsertListings(scan.rows);
+          emailJobsAdded = res.added;
+          jobsAdded += res.added;
+          errors.push(...res.errors);
+        }
+        errors.push(...scan.errors);
+      } catch (err) {
+        errors.push(`email scan: ${err instanceof Error ? err.message : "failed"}`);
+      }
     }
   }
 
@@ -241,6 +290,7 @@ export async function runCrawlCycle(opts: {
     outOfArea,
     jobsScored: scored.count,
     relevantFound: scored.relevant,
+    emailJobsAdded,
     cursorStart,
     cursorEnd: cursor,
     durationMs: Date.now() - start,

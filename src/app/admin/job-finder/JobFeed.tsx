@@ -28,6 +28,7 @@ const PLATFORMS: Array<{ id: string; label: string }> = [
   { id: "ashby", label: "Ashby" },
   { id: "smartrecruiters", label: "SmartRecruiters" },
   { id: "lever", label: "Lever" },
+  { id: "usajobs", label: "USAJOBS (federal)" },
   { id: "email", label: "Recruiter email" },
 ];
 

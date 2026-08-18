@@ -33,7 +33,13 @@ import {
   type SourcedJob,
 } from "@/lib/job-sources";
 
-export type AtsKind = "workday" | "greenhouse" | "lever" | "ashby" | "smartrecruiters";
+export type AtsKind =
+  | "workday"
+  | "greenhouse"
+  | "lever"
+  | "ashby"
+  | "smartrecruiters"
+  | "usajobs";
 
 export type AtsSource = {
   company: string;
@@ -53,6 +59,8 @@ export type NormalizedJob = {
   workMode: "remote" | "hybrid" | "onsite" | null;
   employmentType: string | null;
   department: string | null;
+  /** As published. Most ATS boards omit it; USAJOBS always states a range. */
+  salary: string | null;
   description: string | null;
   requirements: string[];
   /** ISO timestamp, or null when the source will not say. */
@@ -69,6 +77,12 @@ export type FetchResult = {
   /** Recorded in source health so a failure is diagnosable, not just "failed". */
   httpStatus: number | null;
   error: string | null;
+  /**
+   * Set when the source cannot run until credentials are supplied. Distinct
+   * from an error: nothing is broken, it simply has not been configured, and
+   * flagging it red would be wrong.
+   */
+  needsConfig?: boolean;
 };
 
 const TIMEOUT = 12_000;
@@ -147,6 +161,7 @@ async function fetchLever(source: AtsSource, kws: string[]): Promise<FetchResult
       workMode: inferWorkMode(p.categories?.location ?? null),
       employmentType: p.categories?.commitment ?? null,
       department: p.categories?.team ?? null,
+      salary: null,
       description: (p.descriptionPlain ?? "").slice(0, 6000) || String(p.text),
       requirements: (p.lists ?? [])
         .flatMap((l) => (l.content ?? "").split(/<\/li>/i))
@@ -190,6 +205,7 @@ async function fetchAshby(source: AtsSource, kws: string[]): Promise<FetchResult
       workMode: inferWorkMode(p.location ?? null),
       employmentType: p.employmentType ?? null,
       department: p.departmentName ?? null,
+      salary: null,
       description:
         (p.descriptionPlain ?? "").slice(0, 6000) ||
         [p.title, p.departmentName, p.employmentType].filter(Boolean).join(" — "),
@@ -243,6 +259,7 @@ async function fetchSmartRecruiters(source: AtsSource, keywords: string[]): Prom
         workMode: p.location?.remote ? "remote" : inferWorkMode(loc || null),
         employmentType: p.typeOfEmployment?.label ?? null,
         department: p.department?.label ?? null,
+        salary: null,
         description: `${p.name} — ${source.company}${loc ? ` — ${loc}` : ""}`,
         requirements: [],
         postedAt: isoOrNull(p.releasedDate),
@@ -284,6 +301,7 @@ async function fetchGreenhouse(source: AtsSource, kws: string[]): Promise<FetchR
       workMode: inferWorkMode(p.location?.name ?? null),
       employmentType: null,
       department: p.departments?.[0]?.name ?? null,
+      salary: null,
       description: `${p.title} — ${source.company}${p.location?.name ? ` — ${p.location.name}` : ""}`,
       requirements: [],
       postedAt: isoOrNull(p.updated_at),
@@ -334,6 +352,7 @@ async function fetchWorkday(
     workMode: inferWorkMode(j.location),
     employmentType: null,
     department: null,
+    salary: null,
     description: j.description || j.title,
     requirements: [],
     postedAt: isoOrNull(j.postedOn),
@@ -346,6 +365,113 @@ async function fetchWorkday(
   // indistinguishable from "no matches". Reported as no-error; the crawler
   // classifies zero-results as no_matches rather than failing.
   return { jobs, httpStatus: null, error: null };
+}
+
+/**
+ * USAJOBS — every US federal opening, free and official.
+ *
+ * Worth having for two reasons: federal agencies run SAP and ERP heavily, and
+ * almost nobody targets this board, so competition per posting is far lower
+ * than on a commercial one.
+ *
+ * Requires a free key from https://developer.usajobs.gov/apirequest/ — the API
+ * returns 401 without one, confirmed by probe. Both headers are mandatory: the
+ * User-Agent must be the email the key was issued to.
+ */
+async function fetchUsaJobs(source: AtsSource, keywords: string[]): Promise<FetchResult> {
+  const key = process.env.USAJOBS_API_KEY;
+  const email = process.env.USAJOBS_EMAIL;
+  if (!key || !email) {
+    return {
+      jobs: [],
+      httpStatus: null,
+      needsConfig: true,
+      error:
+        "USAJOBS_API_KEY and USAJOBS_EMAIL are not set — request a free key at developer.usajobs.gov/apirequest",
+    };
+  }
+
+  const jobs: NormalizedJob[] = [];
+  const seen = new Set<string>();
+  let lastStatus: number | null = null;
+  let lastError: string | null = null;
+
+  for (const kw of keywords.slice(0, 3)) {
+    const url =
+      "https://data.usajobs.gov/api/search?ResultsPerPage=25" +
+      `&Keyword=${encodeURIComponent(kw)}`;
+    try {
+      const r = await fetch(url, {
+        headers: { Host: "data.usajobs.gov", "User-Agent": email, "Authorization-Key": key },
+        cache: "no-store",
+        signal: AbortSignal.timeout(TIMEOUT),
+      });
+      lastStatus = r.status;
+      if (!r.ok) {
+        lastError = `HTTP ${r.status}`;
+        continue;
+      }
+      const j = (await r.json()) as {
+        SearchResult?: {
+          SearchResultItems?: Array<{
+            MatchedObjectId?: string;
+            MatchedObjectDescriptor?: {
+              PositionID?: string;
+              PositionTitle?: string;
+              PositionURI?: string;
+              ApplyURI?: string[];
+              OrganizationName?: string;
+              DepartmentName?: string;
+              PositionLocationDisplay?: string;
+              PublicationStartDate?: string;
+              PositionRemuneration?: Array<{ MinimumRange?: string; MaximumRange?: string }>;
+              PositionSchedule?: Array<{ Name?: string }>;
+              QualificationSummary?: string;
+              UserArea?: { Details?: { JobSummary?: string; TeleworkEligible?: boolean } };
+            };
+          }>;
+        };
+      };
+
+      for (const item of j.SearchResult?.SearchResultItems ?? []) {
+        const d = item.MatchedObjectDescriptor;
+        const id = item.MatchedObjectId ?? d?.PositionID;
+        const apply = d?.ApplyURI?.[0] ?? d?.PositionURI;
+        if (!d?.PositionTitle || !apply || !id || seen.has(id)) continue;
+        seen.add(id);
+
+        const pay = d.PositionRemuneration?.[0];
+        const salary =
+          pay?.MinimumRange && pay?.MaximumRange
+            ? `$${Math.round(Number(pay.MinimumRange)).toLocaleString()} – $${Math.round(Number(pay.MaximumRange)).toLocaleString()}`
+            : null;
+        const location = d.PositionLocationDisplay ?? null;
+
+        jobs.push({
+          ats: "usajobs",
+          externalId: id,
+          company: d.OrganizationName ?? d.DepartmentName ?? source.company,
+          title: d.PositionTitle,
+          location,
+          workMode: d.UserArea?.Details?.TeleworkEligible ? "remote" : inferWorkMode(location),
+          employmentType: d.PositionSchedule?.[0]?.Name ?? null,
+          department: d.DepartmentName ?? null,
+          salary,
+          description: (d.UserArea?.Details?.JobSummary ?? d.QualificationSummary ?? "").slice(0, 6000),
+          requirements: [],
+          postedAt: isoOrNull(d.PublicationStartDate),
+          applyUrl: apply,
+          sourceUrl: "https://www.usajobs.gov",
+          crawledAt: new Date().toISOString(),
+        });
+        if (jobs.length >= PER_SOURCE_CAP) return { jobs, httpStatus: lastStatus, error: null };
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : "fetch failed";
+    }
+  }
+
+  return { jobs, httpStatus: lastStatus, error: jobs.length ? null : lastError };
 }
 
 // ─── Validation ────────────────────────────────────────────────────────────
@@ -376,6 +502,7 @@ export function toListingRow(job: NormalizedJob) {
     work_type: job.workMode,
     employment_type: job.employmentType,
     department: job.department,
+    salary_range: job.salary,
     description: job.description,
     required_skills: job.requirements.length ? job.requirements : null,
     application_url: job.applyUrl.trim(),
@@ -433,6 +560,8 @@ const SMARTRECRUITERS_SOURCES: AtsSource[] = [
  * well it behaved when probed standalone — and Bosch alone is ~4,800 postings.
  */
 export const ATS_SOURCES: AtsSource[] = [
+  // One entry covers the whole federal government rather than one per agency.
+  { company: "US Federal Government", kind: "usajobs", slug: "usajobs" },
   ...SMARTRECRUITERS_SOURCES,
   ...WORKDAY_TENANTS.map<AtsSource>((t) => ({
     company: t.company,
@@ -449,7 +578,7 @@ export const ATS_SOURCES: AtsSource[] = [
 ];
 
 export function sourceCounts(): Record<AtsKind, number> {
-  const counts = { workday: 0, greenhouse: 0, lever: 0, ashby: 0, smartrecruiters: 0 };
+  const counts = { workday: 0, greenhouse: 0, lever: 0, ashby: 0, smartrecruiters: 0, usajobs: 0 };
   for (const s of ATS_SOURCES) counts[s.kind]++;
   return counts;
 }
@@ -479,6 +608,8 @@ export async function fetchFromSource(
         return await fetchAshby(source, kws);
       case "smartrecruiters":
         return await fetchSmartRecruiters(source, keywords);
+      case "usajobs":
+        return await fetchUsaJobs(source, keywords);
       default:
         return { jobs: [], httpStatus: null, error: `unknown ATS: ${source.kind}` };
     }
