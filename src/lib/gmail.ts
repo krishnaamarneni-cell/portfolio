@@ -557,3 +557,46 @@ export async function listRecentMessages(opts: {
   }
   return { messages: summaries };
 }
+
+/**
+ * One message with its full decoded body.
+ *
+ * listRecentMessages only asks for metadata, which caps the body at Gmail's
+ * ~200-character snippet. A recruiter requirement email carries the skills,
+ * rate, duration and location further down, so parsing one needs the real body.
+ */
+export async function getMessageFull(
+  messageId: string
+): Promise<GmailThreadMessage | null> {
+  const access = await getAccessToken();
+  if (!access) return null;
+  try {
+    const r = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
+      { headers: { Authorization: `Bearer ${access}` }, cache: "no-store" }
+    );
+    if (!r.ok) return null;
+    const m = (await r.json()) as {
+      id: string;
+      snippet?: string;
+      payload?: Record<string, unknown>;
+    };
+    const headers = (m.payload?.headers as Array<{ name: string; value: string }>) ?? [];
+    const header = (name: string) =>
+      headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? "";
+    const { text, html } = extractBody(m.payload ?? {});
+    return {
+      id: m.id,
+      from: header("From"),
+      to: header("To"),
+      cc: header("Cc") || undefined,
+      date: header("Date"),
+      subject: header("Subject"),
+      snippet: m.snippet ?? "",
+      bodyText: text,
+      bodyHtml: html,
+    };
+  } catch {
+    return null;
+  }
+}

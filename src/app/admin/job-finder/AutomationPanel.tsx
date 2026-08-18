@@ -8,6 +8,7 @@ import {
   FiCheckCircle,
   FiXCircle,
   FiClock,
+  FiMail,
 } from "react-icons/fi";
 import { relativeDate } from "./types";
 
@@ -69,6 +70,7 @@ export default function AutomationPanel({ onSuccess, onError }: Props) {
   const [pending, setPending] = useState(0);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [scanningEmail, setScanningEmail] = useState(false);
   const [needsMigration, setNeedsMigration] = useState(false);
 
   const cb = useRef({ onSuccess, onError });
@@ -129,6 +131,38 @@ export default function AutomationPanel({ onSuccess, onError }: Props) {
     }
   };
 
+  const scanEmail = async () => {
+    setScanningEmail(true);
+    try {
+      const res = await fetch("/api/admin/job-finder/email-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: 7 }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        onError(data.error);
+        return;
+      }
+      if (!data.requirementsFound) {
+        onSuccess(
+          `Read ${data.emailsChecked} email${data.emailsChecked === 1 ? "" : "s"} — no job requirements in them.`
+        );
+      } else {
+        onSuccess(
+          `${data.requirementsFound} requirement${data.requirementsFound === 1 ? "" : "s"} in ` +
+            `${data.emailsWithJobs} email${data.emailsWithJobs === 1 ? "" : "s"} · ${data.added} new`
+        );
+      }
+      load();
+      if (data.errors?.length) onError(`Some emails failed: ${data.errors[0]}`);
+    } catch {
+      onError("Email scan failed.");
+    } finally {
+      setScanningEmail(false);
+    }
+  };
+
   if (needsMigration) {
     return (
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5 flex gap-3">
@@ -165,6 +199,15 @@ export default function AutomationPanel({ onSuccess, onError }: Props) {
             aria-label="Refresh"
           >
             <FiRefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          </button>
+          <button
+            onClick={scanEmail}
+            disabled={scanningEmail}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-[var(--admin-border)] text-[var(--admin-text)] text-sm font-semibold hover:border-[#ff6b00] transition-colors disabled:opacity-50"
+            title="Read the last 7 days of recruiter mail and extract any job requirements"
+          >
+            <FiMail size={13} className={scanningEmail ? "animate-pulse" : ""} />
+            {scanningEmail ? "Reading mail…" : "Scan email"}
           </button>
           <button
             onClick={runNow}
