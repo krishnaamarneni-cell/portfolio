@@ -98,6 +98,7 @@ export async function POST(request: Request) {
         companies: companies.length ? companies : undefined,
         location,
         perTenant: 6,
+        country: settings.locations.find((l) => /^(united states|usa?|america)$/i.test(l.trim())),
       });
       found.push(...jobs);
     } catch (err) {

@@ -243,12 +243,104 @@ export function matchesLocation(jobLocation: string | null, filter: string): boo
   return loc.includes(q) || q.includes(loc);
 }
 
+
+/**
+ * Ask a Workday tenant to return only postings in a given country.
+ *
+ * Filtering on the location STRING does not work: Accenture returns "Location
+ * Negotiable", Intel returns "2 Locations", and neither says where. Workday
+ * knows the answer though — it publishes location facets — so the filter is
+ * pushed to the source instead of guessed afterwards. Accenture drops from
+ * 2,000 SAP hits to ~116 US ones, and every posting that comes back is in
+ * country even when its display string is vague.
+ *
+ * Tenants disagree on how they expose this, so three shapes are handled:
+ *   - a top-level country facet (Abbott: `Location_Country`)
+ *   - a country facet nested under `locationMainGroup` (Accenture:
+ *     `locationCountry`)
+ *   - no country facet at all, only city-level `locations` (Intel, Merck) —
+ *     in which case the US-looking location ids are selected individually.
+ */
+type FacetValue = { id?: string; descriptor?: string; count?: number };
+type Facet = { facetParameter?: string; descriptor?: string; values?: Array<FacetValue & { facetParameter?: string; values?: FacetValue[] }> };
+
+const US_LOCATION = /(usa?|united states|u\.s\.a?\.)|^us\s*[-,]/i;
+const US_STATE = /(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)/i;
+
+/** Resolved once per tenant per process — facet ids are stable. */
+const facetCache = new Map<string, Record<string, string[]> | null>();
+
+function isUnitedStates(descriptor: string): boolean {
+  return /^(united states( of america)?|usa?)$/i.test(descriptor.trim());
+}
+
+async function resolveCountryFacet(
+  t: WorkdayTenant,
+  keyword: string
+): Promise<Record<string, string[]> | null> {
+  const key = t.tenant;
+  if (facetCache.has(key)) return facetCache.get(key) ?? null;
+
+  let resolved: Record<string, string[]> | null = null;
+  try {
+    const base = `https://${t.tenant}.${t.wd}.myworkdayjobs.com`;
+    const r = await fetch(`${base}/wday/cxs/${t.tenant}/${t.site}/jobs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ appliedFacets: {}, limit: 1, offset: 0, searchText: keyword }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15000),
+    });
+    if (r.ok) {
+      const j = (await r.json()) as { facets?: Facet[] };
+      const facets = j.facets ?? [];
+
+      // 1 — a country facet at the top level.
+      for (const f of facets) {
+        if (!f.facetParameter || !/country/i.test(f.facetParameter)) continue;
+        const us = (f.values ?? []).find((v) => isUnitedStates(v.descriptor ?? ""));
+        if (us?.id) resolved = { [f.facetParameter]: [us.id] };
+      }
+
+      // 2 — a country facet nested inside locationMainGroup.
+      if (!resolved) {
+        const groups = facets.find((f) => f.facetParameter === "locationMainGroup")?.values ?? [];
+        for (const g of groups) {
+          if (!g.facetParameter || !/country/i.test(g.facetParameter)) continue;
+          const us = (g.values ?? []).find((v) => isUnitedStates(v.descriptor ?? ""));
+          if (us?.id) resolved = { [g.facetParameter]: [us.id] };
+        }
+
+        // 3 — no country grouping; pick the US cities out of `locations`.
+        if (!resolved) {
+          const locs = groups.find((g) => g.facetParameter === "locations")?.values ?? [];
+          const ids = locs
+            .filter((v) => {
+              const d = v.descriptor ?? "";
+              return US_LOCATION.test(d) || US_STATE.test(d);
+            })
+            .map((v) => v.id)
+            .filter((id): id is string => Boolean(id))
+            .slice(0, 60);
+          if (ids.length) resolved = { locations: ids };
+        }
+      }
+    }
+  } catch {
+    resolved = null;
+  }
+
+  facetCache.set(key, resolved);
+  return resolved;
+}
+
 async function fetchOneTenant(
   t: WorkdayTenant,
   keyword: string,
   perTenant: number,
   locationFilter: string,
-  fetchLimit: number
+  fetchLimit: number,
+  appliedFacets: Record<string, string[]> = {}
 ): Promise<SourcedJob[]> {
   const base = `https://${t.tenant}.${t.wd}.myworkdayjobs.com`;
   try {
@@ -256,7 +348,7 @@ async function fetchOneTenant(
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
-        appliedFacets: {},
+        appliedFacets,
         limit: Math.min(20, fetchLimit),
         offset: 0,
         searchText: keyword,
@@ -301,6 +393,8 @@ export async function fetchWorkdayJobs(opts: {
   location?: string;
   perTenant?: number;
   maxTenants?: number;
+  /** Restrict to a country using Workday's own facets, e.g. "United States". */
+  country?: string;
 }): Promise<SourcedJob[]> {
   const keyword = opts.keyword?.trim() || "SAP";
   const perTenant = Math.max(1, Math.min(20, opts.perTenant ?? 6));
@@ -317,8 +411,15 @@ export async function fetchWorkdayJobs(opts: {
   tenants = tenants.slice(0, Math.max(1, opts.maxTenants ?? WORKDAY_TENANTS.length));
   if (tenants.length === 0) return [];
 
+  const wantsUS = /^(united states|usa?|america)$/i.test((opts.country ?? "").trim());
+
   const results = await Promise.all(
-    tenants.map((t) => fetchOneTenant(t, keyword, perTenant, locationFilter, fetchLimit))
+    tenants.map(async (t) => {
+      // Push the country filter into Workday itself where the tenant supports
+      // it — far more reliable than reading "Location Negotiable" afterwards.
+      const facets = wantsUS ? await resolveCountryFacet(t, keyword) : null;
+      return fetchOneTenant(t, keyword, perTenant, locationFilter, fetchLimit, facets ?? {});
+    })
   );
   const seen = new Set<string>();
   return results.flat().filter((j) => {

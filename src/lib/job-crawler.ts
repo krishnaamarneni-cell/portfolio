@@ -153,6 +153,12 @@ export async function runCrawlCycle(opts: {
   const cursorStart = state.cursor ?? 0;
   let cursor = cursorStart;
 
+  // Workday can filter by country itself; a location string like "Location
+  // Negotiable" cannot be judged after the fact, so prefer the source filter.
+  const preferredCountry = settings.locations.find((l) =>
+    /^(united states|usa?|america)$/i.test(l.trim())
+  );
+
   let sourcesChecked = 0;
   let jobsSeen = 0;
   let jobsAdded = 0;
@@ -169,7 +175,7 @@ export async function runCrawlCycle(opts: {
       const source = ATS_SOURCES[cursor % ATS_SOURCES.length];
       cursor = (cursor + 1) % ATS_SOURCES.length;
 
-      const { jobs, error } = await fetchFromSource(source, settings.keywords);
+      const { jobs, error } = await fetchFromSource(source, settings.keywords, preferredCountry);
       sourcesChecked++;
       collected.push(...jobs);
       if (error) errors.push(`${source.company}: ${error}`);

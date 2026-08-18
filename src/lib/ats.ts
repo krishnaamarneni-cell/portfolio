@@ -184,10 +184,14 @@ async function fetchGreenhouseBoard(
 }
 
 /** Workday needs a keyword per request; the existing helper handles the triple. */
-async function fetchWorkdayOne(company: string, kws: string[]): Promise<SourcedJob[]> {
+async function fetchWorkdayOne(
+  company: string,
+  kws: string[],
+  country?: string
+): Promise<SourcedJob[]> {
   const out: SourcedJob[] = [];
   for (const kw of kws.slice(0, 2)) {
-    const jobs = await fetchWorkdayJobs({ keyword: kw, companies: [company], perTenant: 12 });
+    const jobs = await fetchWorkdayJobs({ keyword: kw, companies: [company], perTenant: 12, country });
     out.push(...jobs);
     if (out.length >= PER_SOURCE_CAP) break;
   }
@@ -261,7 +265,9 @@ export function sourceCounts(): Record<AtsKind, number> {
  */
 export async function fetchFromSource(
   source: AtsSource,
-  keywords: string[]
+  keywords: string[],
+  /** Country to restrict to, where the platform can filter server-side. */
+  country?: string
 ): Promise<{ jobs: SourcedJob[]; error: string | null }> {
   const kws = keywords.map((k) => k.toLowerCase().trim()).filter(Boolean);
   if (!kws.length) return { jobs: [], error: "no keywords" };
@@ -270,7 +276,7 @@ export async function fetchFromSource(
     let jobs: SourcedJob[];
     switch (source.kind) {
       case "workday":
-        jobs = await fetchWorkdayOne(source.company, keywords);
+        jobs = await fetchWorkdayOne(source.company, keywords, country);
         break;
       case "greenhouse":
         jobs = await fetchGreenhouseBoard(source.company, source.slug, kws);
