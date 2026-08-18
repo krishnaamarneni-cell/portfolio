@@ -1,19 +1,29 @@
 /**
- * Multi-ATS job crawler.
+ * Multi-ATS job source layer.
  *
  * Every large employer runs one of a handful of applicant tracking systems, and
- * most of those expose the job board as public JSON — no key, no browser. That
- * is what this file speaks. A headless-Chrome crawler was the obvious approach
- * and the wrong one: it is slow, fragile, breaks whenever a page's markup
- * changes, and does not fit in a serverless function's time budget. Parsing
- * JSON that the employer publishes deliberately is faster and far more stable.
+ * most expose the job board as public JSON — no key, no browser. That is what
+ * this file speaks. A headless-Chrome crawler was the obvious approach and the
+ * wrong one: slow, fragile, breaks whenever markup changes, and does not fit a
+ * serverless time budget. Parsing JSON the employer publishes deliberately is
+ * faster and far more stable.
  *
- * Every slug below was probed before being committed — the postings count each
- * returned is recorded so a source that silently dries up is easy to spot.
- * Nothing here is a guess. Companies that failed the probe were dropped.
+ * Shape of the layer — each adapter is isolated behind the same contract:
  *
- * Adding a company is a one-line entry. Adding a new ATS means writing one
- * adapter that returns SourcedJob[].
+ *   fetchJobs(source)      → FetchResult   (per-platform; does its own normalize)
+ *   validateJob(job)       → ValidationResult
+ *   toListingRow(job)      → database row
+ *   upsertJobs(rows)       → in lib/job-finder (dedup lives in one place)
+ *   recordCrawlResult(...)  → in lib/job-crawler (health lives with the loop)
+ *
+ * Normalization happens inside each adapter rather than in a shared function,
+ * because "raw" means something different on every platform — there is no
+ * common intermediate worth inventing. What IS shared is the output contract
+ * below, plus validation and persistence.
+ *
+ * Every slug here was probed before being committed and the postings count is
+ * recorded, so a source that silently dries up is easy to spot. Nothing is a
+ * guess; candidates that failed the probe were dropped.
  */
 import "server-only";
 import {
@@ -32,15 +42,45 @@ export type AtsSource = {
   slug: string;
 };
 
+/** The single output contract every adapter must produce. */
+export type NormalizedJob = {
+  ats: AtsKind;
+  /** The ATS's own job id — the primary dedup key. Null when not exposed. */
+  externalId: string | null;
+  company: string;
+  title: string;
+  location: string | null;
+  workMode: "remote" | "hybrid" | "onsite" | null;
+  employmentType: string | null;
+  department: string | null;
+  description: string | null;
+  requirements: string[];
+  /** ISO timestamp, or null when the source will not say. */
+  postedAt: string | null;
+  /** Official apply link only — never an aggregator or a search page. */
+  applyUrl: string;
+  /** The board this was found on, as distinct from where a human applies. */
+  sourceUrl: string;
+  crawledAt: string;
+};
+
+export type FetchResult = {
+  jobs: NormalizedJob[];
+  /** Recorded in source health so a failure is diagnosable, not just "failed". */
+  httpStatus: number | null;
+  error: string | null;
+};
+
 const TIMEOUT = 12_000;
 
-async function getJson<T>(url: string): Promise<T | null> {
+/** Fetch JSON, keeping the status code so health can report it. */
+async function getJson<T>(url: string): Promise<{ data: T | null; status: number | null; error: string | null }> {
   try {
     const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT) });
-    if (!r.ok) return null;
-    return (await r.json()) as T;
-  } catch {
-    return null;
+    if (!r.ok) return { data: null, status: r.status, error: `HTTP ${r.status}` };
+    return { data: (await r.json()) as T, status: r.status, error: null };
+  } catch (err) {
+    return { data: null, status: null, error: err instanceof Error ? err.message : "fetch failed" };
   }
 }
 
@@ -49,153 +89,302 @@ function matchesAny(text: string, keywords: string[]): boolean {
   return keywords.some((k) => t.includes(k));
 }
 
-/** Cap per company so one huge board (Bosch has ~4,800) can't crowd out the rest. */
+/** Cap per company so one huge board (Bosch has ~4,800) cannot crowd out the rest. */
 const PER_SOURCE_CAP = 25;
+
+/** Location strings are free text; this is the only work-mode signal available. */
+function inferWorkMode(location: string | null): NormalizedJob["workMode"] {
+  if (!location) return null;
+  const l = location.toLowerCase();
+  if (l.includes("remote")) return "remote";
+  if (l.includes("hybrid")) return "hybrid";
+  return null;
+}
+
+/** ISO where possible; null rather than a guess. */
+function isoOrNull(value: string | number | null | undefined): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return new Date(value).toISOString();
+  // Workday reports age as a phrase capped at "30+ Days Ago" — the `+` must be
+  // tolerated or the most common format parses to null.
+  const days = value.match(/(\d+)\s*\+?\s*day/i);
+  if (days) return new Date(Date.now() - Number(days[1]) * 86_400_000).toISOString();
+  const months = value.match(/(\d+)\s*\+?\s*month/i);
+  if (months) return new Date(Date.now() - Number(months[1]) * 30 * 86_400_000).toISOString();
+  if (/today|just posted/i.test(value)) return new Date().toISOString();
+  if (/yesterday/i.test(value)) return new Date(Date.now() - 86_400_000).toISOString();
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
+}
 
 // ─── Adapters ──────────────────────────────────────────────────────────────
 
-async function fetchLever(company: string, slug: string, kws: string[]): Promise<SourcedJob[]> {
-  const jobs = await getJson<
+async function fetchLever(source: AtsSource, kws: string[]): Promise<FetchResult> {
+  const { data, status, error } = await getJson<
     Array<{
+      id?: string;
       text?: string;
       hostedUrl?: string;
       applyUrl?: string;
       createdAt?: number;
-      categories?: { location?: string; team?: string };
+      categories?: { location?: string; team?: string; commitment?: string };
       descriptionPlain?: string;
+      lists?: Array<{ text?: string; content?: string }>;
     }>
-  >(`https://api.lever.co/v0/postings/${slug}?mode=json`);
-  if (!Array.isArray(jobs)) return [];
+  >(`https://api.lever.co/v0/postings/${source.slug}?mode=json`);
 
-  return jobs
+  if (!Array.isArray(data)) return { jobs: [], httpStatus: status, error: error ?? "unexpected shape" };
+
+  const jobs = data
     .filter((p) => p.text && (p.hostedUrl || p.applyUrl) && matchesAny(p.text, kws))
     .slice(0, PER_SOURCE_CAP)
-    .map((p) => ({
+    .map<NormalizedJob>((p) => ({
+      ats: "lever",
+      externalId: p.id ?? null,
+      company: source.company,
       title: String(p.text),
-      company,
       location: p.categories?.location ?? null,
-      url: String(p.hostedUrl || p.applyUrl),
-      description: (p.descriptionPlain ?? "").slice(0, 4000) || String(p.text),
-      source: "lever",
-      postedOn: p.createdAt ? new Date(p.createdAt).toISOString() : null,
+      workMode: inferWorkMode(p.categories?.location ?? null),
+      employmentType: p.categories?.commitment ?? null,
+      department: p.categories?.team ?? null,
+      description: (p.descriptionPlain ?? "").slice(0, 6000) || String(p.text),
+      requirements: (p.lists ?? [])
+        .flatMap((l) => (l.content ?? "").split(/<\/li>/i))
+        .map((s) => s.replace(/<[^>]*>/g, "").trim())
+        .filter((s) => s.length > 3)
+        .slice(0, 20),
+      postedAt: isoOrNull(p.createdAt ?? null),
+      applyUrl: String(p.hostedUrl || p.applyUrl),
+      sourceUrl: `https://jobs.lever.co/${source.slug}`,
+      crawledAt: new Date().toISOString(),
     }));
+
+  return { jobs, httpStatus: status, error: null };
 }
 
-async function fetchAshby(company: string, slug: string, kws: string[]): Promise<SourcedJob[]> {
-  const data = await getJson<{
+async function fetchAshby(source: AtsSource, kws: string[]): Promise<FetchResult> {
+  const { data, status, error } = await getJson<{
     jobs?: Array<{
+      id?: string;
       title?: string;
       jobUrl?: string;
       location?: string;
       publishedAt?: string;
       departmentName?: string;
       employmentType?: string;
+      descriptionPlain?: string;
     }>;
-  }>(`https://api.ashbyhq.com/posting-api/job-board/${slug}`);
-  if (!data?.jobs) return [];
+  }>(`https://api.ashbyhq.com/posting-api/job-board/${source.slug}`);
 
-  return data.jobs
+  if (!data?.jobs) return { jobs: [], httpStatus: status, error: error ?? "unexpected shape" };
+
+  const jobs = data.jobs
     .filter((p) => p.title && p.jobUrl && matchesAny(p.title, kws))
     .slice(0, PER_SOURCE_CAP)
-    .map((p) => ({
+    .map<NormalizedJob>((p) => ({
+      ats: "ashby",
+      externalId: p.id ?? null,
+      company: source.company,
       title: String(p.title),
-      company,
       location: p.location ?? null,
-      url: String(p.jobUrl),
-      description: [p.title, p.departmentName, p.employmentType].filter(Boolean).join(" — "),
-      source: "ashby",
-      postedOn: p.publishedAt ?? null,
+      workMode: inferWorkMode(p.location ?? null),
+      employmentType: p.employmentType ?? null,
+      department: p.departmentName ?? null,
+      description:
+        (p.descriptionPlain ?? "").slice(0, 6000) ||
+        [p.title, p.departmentName, p.employmentType].filter(Boolean).join(" — "),
+      requirements: [],
+      postedAt: isoOrNull(p.publishedAt),
+      applyUrl: String(p.jobUrl),
+      sourceUrl: `https://jobs.ashbyhq.com/${source.slug}`,
+      crawledAt: new Date().toISOString(),
     }));
+
+  return { jobs, httpStatus: status, error: null };
 }
 
-async function fetchSmartRecruiters(
-  company: string,
-  slug: string,
-  kws: string[]
-): Promise<SourcedJob[]> {
-  // SmartRecruiters filters server-side, so ask per keyword rather than pulling
-  // a 4,800-posting board and discarding almost all of it.
-  const out: SourcedJob[] = [];
+async function fetchSmartRecruiters(source: AtsSource, keywords: string[]): Promise<FetchResult> {
+  // Filters server-side, so ask per keyword rather than pulling a
+  // 4,800-posting board and discarding almost all of it.
+  const jobs: NormalizedJob[] = [];
   const seen = new Set<string>();
+  let lastStatus: number | null = null;
+  let lastError: string | null = null;
 
-  for (const kw of kws.slice(0, 3)) {
-    const data = await getJson<{
+  for (const kw of keywords.slice(0, 3)) {
+    const { data, status, error } = await getJson<{
       content?: Array<{
         id?: string;
         name?: string;
         releasedDate?: string;
-        location?: { city?: string; region?: string; country?: string };
-        company?: { identifier?: string };
-        ref?: string;
+        location?: { city?: string; region?: string; country?: string; remote?: boolean };
+        department?: { label?: string };
+        typeOfEmployment?: { label?: string };
       }>;
     }>(
-      `https://api.smartrecruiters.com/v1/companies/${slug}/postings?limit=15&q=${encodeURIComponent(kw)}`
+      `https://api.smartrecruiters.com/v1/companies/${source.slug}/postings?limit=15&q=${encodeURIComponent(kw)}`
     );
+    lastStatus = status;
+    if (error) {
+      lastError = error;
+      continue;
+    }
+
     for (const p of data?.content ?? []) {
-      if (!p.id || !p.name) continue;
-      const url = `https://jobs.smartrecruiters.com/${slug}/${p.id}`;
-      if (seen.has(url)) continue;
-      seen.add(url);
-      const loc = [p.location?.city, p.location?.region, p.location?.country]
-        .filter(Boolean)
-        .join(", ");
-      out.push({
+      if (!p.id || !p.name || seen.has(p.id)) continue;
+      seen.add(p.id);
+      const loc = [p.location?.city, p.location?.region, p.location?.country].filter(Boolean).join(", ");
+      jobs.push({
+        ats: "smartrecruiters",
+        externalId: p.id,
+        company: source.company,
         title: String(p.name),
-        company,
         location: loc || null,
-        url,
-        description: `${p.name} — ${company}${loc ? ` — ${loc}` : ""}`,
-        source: "smartrecruiters",
-        postedOn: p.releasedDate ?? null,
+        workMode: p.location?.remote ? "remote" : inferWorkMode(loc || null),
+        employmentType: p.typeOfEmployment?.label ?? null,
+        department: p.department?.label ?? null,
+        description: `${p.name} — ${source.company}${loc ? ` — ${loc}` : ""}`,
+        requirements: [],
+        postedAt: isoOrNull(p.releasedDate),
+        applyUrl: `https://jobs.smartrecruiters.com/${source.slug}/${p.id}`,
+        sourceUrl: `https://jobs.smartrecruiters.com/${source.slug}`,
+        crawledAt: new Date().toISOString(),
       });
-      if (out.length >= PER_SOURCE_CAP) return out;
+      if (jobs.length >= PER_SOURCE_CAP) return { jobs, httpStatus: lastStatus, error: null };
     }
   }
-  return out;
+
+  // Only an error if nothing at all came back — a partial result is still useful.
+  return { jobs, httpStatus: lastStatus, error: jobs.length ? null : lastError };
 }
 
-async function fetchGreenhouseBoard(
-  company: string,
-  slug: string,
-  kws: string[]
-): Promise<SourcedJob[]> {
-  const data = await getJson<{
+async function fetchGreenhouse(source: AtsSource, kws: string[]): Promise<FetchResult> {
+  const { data, status, error } = await getJson<{
     jobs?: Array<{
+      id?: number;
       title?: string;
       absolute_url?: string;
       location?: { name?: string };
       updated_at?: string;
+      departments?: Array<{ name?: string }>;
     }>;
-  }>(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`);
-  if (!data?.jobs) return [];
+  }>(`https://boards-api.greenhouse.io/v1/boards/${source.slug}/jobs`);
 
-  return data.jobs
+  if (!data?.jobs) return { jobs: [], httpStatus: status, error: error ?? "unexpected shape" };
+
+  const jobs = data.jobs
     .filter((p) => p.title && p.absolute_url && matchesAny(p.title, kws))
     .slice(0, PER_SOURCE_CAP)
-    .map((p) => ({
+    .map<NormalizedJob>((p) => ({
+      ats: "greenhouse",
+      externalId: p.id ? String(p.id) : null,
+      company: source.company,
       title: String(p.title),
-      company,
       location: p.location?.name ?? null,
-      url: String(p.absolute_url),
-      description: `${p.title} — ${company}${p.location?.name ? ` — ${p.location.name}` : ""}`,
-      source: "greenhouse",
-      postedOn: p.updated_at ?? null,
+      workMode: inferWorkMode(p.location?.name ?? null),
+      employmentType: null,
+      department: p.departments?.[0]?.name ?? null,
+      description: `${p.title} — ${source.company}${p.location?.name ? ` — ${p.location.name}` : ""}`,
+      requirements: [],
+      postedAt: isoOrNull(p.updated_at),
+      applyUrl: String(p.absolute_url),
+      sourceUrl: `https://boards.greenhouse.io/${source.slug}`,
+      crawledAt: new Date().toISOString(),
     }));
+
+  return { jobs, httpStatus: status, error: null };
 }
 
-/** Workday needs a keyword per request; the existing helper handles the triple. */
-async function fetchWorkdayOne(
-  company: string,
-  kws: string[],
+/**
+ * Workday's requisition id sits at the end of the posting path —
+ * "/job/Bangkok/SAP-Consultant_R00212169". That is the stable identity; the URL
+ * itself changes if the employer relabels the location.
+ */
+function workdayExternalId(url: string): string | null {
+  return url.match(/_([A-Za-z]{0,3}\d{4,}[A-Za-z0-9-]*)(?:\/|$)/)?.[1] ?? null;
+}
+
+async function fetchWorkday(
+  source: AtsSource,
+  keywords: string[],
   country?: string
-): Promise<SourcedJob[]> {
-  const out: SourcedJob[] = [];
-  for (const kw of kws.slice(0, 2)) {
-    const jobs = await fetchWorkdayJobs({ keyword: kw, companies: [company], perTenant: 12, country });
-    out.push(...jobs);
-    if (out.length >= PER_SOURCE_CAP) break;
+): Promise<FetchResult> {
+  const collected: SourcedJob[] = [];
+  try {
+    for (const kw of keywords.slice(0, 2)) {
+      const batch = await fetchWorkdayJobs({
+        keyword: kw,
+        companies: [source.company],
+        perTenant: 12,
+        country,
+      });
+      collected.push(...batch);
+      if (collected.length >= PER_SOURCE_CAP) break;
+    }
+  } catch (err) {
+    return { jobs: [], httpStatus: null, error: err instanceof Error ? err.message : "fetch failed" };
   }
-  return out.slice(0, PER_SOURCE_CAP);
+
+  const jobs = collected.slice(0, PER_SOURCE_CAP).map<NormalizedJob>((j) => ({
+    ats: "workday",
+    externalId: workdayExternalId(j.url),
+    company: j.company || source.company,
+    title: j.title,
+    location: j.location,
+    workMode: inferWorkMode(j.location),
+    employmentType: null,
+    department: null,
+    description: j.description || j.title,
+    requirements: [],
+    postedAt: isoOrNull(j.postedOn),
+    applyUrl: j.url,
+    sourceUrl: `https://${source.slug}.myworkdayjobs.com`,
+    crawledAt: new Date().toISOString(),
+  }));
+
+  // fetchWorkdayJobs swallows per-tenant errors, so an empty result is
+  // indistinguishable from "no matches". Reported as no-error; the crawler
+  // classifies zero-results as no_matches rather than failing.
+  return { jobs, httpStatus: null, error: null };
+}
+
+// ─── Validation ────────────────────────────────────────────────────────────
+
+export type ValidationResult = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Reject anything that cannot become a usable listing.
+ *
+ * Kept separate from normalization so a source returning junk is visible in
+ * crawl results rather than silently producing rows nobody can act on.
+ */
+export function validateJob(job: NormalizedJob): ValidationResult {
+  if (!job.title?.trim()) return { ok: false, reason: "no title" };
+  if (!job.applyUrl?.trim()) return { ok: false, reason: "no apply URL" };
+  if (!/^https?:\/\//i.test(job.applyUrl)) return { ok: false, reason: "apply URL is not http(s)" };
+  if (!job.company?.trim()) return { ok: false, reason: "no company" };
+  if (job.title.length > 300) return { ok: false, reason: "title implausibly long" };
+  return { ok: true };
+}
+
+/** NormalizedJob → job_listings row. The one place the mapping lives. */
+export function toListingRow(job: NormalizedJob) {
+  return {
+    title: job.title.trim(),
+    company: job.company,
+    location: job.location,
+    work_type: job.workMode,
+    employment_type: job.employmentType,
+    department: job.department,
+    description: job.description,
+    required_skills: job.requirements.length ? job.requirements : null,
+    application_url: job.applyUrl.trim(),
+    external_id: job.externalId,
+    source_type: job.ats,
+    source_url: job.sourceUrl,
+    posted_at: job.postedAt,
+    crawled_at: job.crawledAt,
+  };
 }
 
 // ─── Registry ──────────────────────────────────────────────────────────────
@@ -236,8 +425,15 @@ const SMARTRECRUITERS_SOURCES: AtsSource[] = [
   { company: "Wipro", kind: "smartrecruiters", slug: "WiproLimited" }, // 1
 ];
 
-/** Every source the crawler knows, in one list it can page through. */
+/**
+ * Every source the crawler knows, in one list it pages through.
+ *
+ * SmartRecruiters sits first. It is the only platform the round-robin cursor
+ * had never reached, so nothing about it was verified in the database however
+ * well it behaved when probed standalone — and Bosch alone is ~4,800 postings.
+ */
 export const ATS_SOURCES: AtsSource[] = [
+  ...SMARTRECRUITERS_SOURCES,
   ...WORKDAY_TENANTS.map<AtsSource>((t) => ({
     company: t.company,
     kind: "workday",
@@ -248,9 +444,8 @@ export const ATS_SOURCES: AtsSource[] = [
     kind: "greenhouse",
     slug: b.board,
   })),
-  ...LEVER_SOURCES,
   ...ASHBY_SOURCES,
-  ...SMARTRECRUITERS_SOURCES,
+  ...LEVER_SOURCES,
 ];
 
 export function sourceCounts(): Record<AtsKind, number> {
@@ -260,41 +455,34 @@ export function sourceCounts(): Record<AtsKind, number> {
 }
 
 /**
- * Pull matching postings from one source. Never throws — a single employer
- * being down must not abort a crawl over dozens of them.
+ * Pull matching postings from one source. Never throws — one employer being
+ * down must not abort a crawl across dozens of them.
  */
 export async function fetchFromSource(
   source: AtsSource,
   keywords: string[],
   /** Country to restrict to, where the platform can filter server-side. */
   country?: string
-): Promise<{ jobs: SourcedJob[]; error: string | null }> {
+): Promise<FetchResult> {
   const kws = keywords.map((k) => k.toLowerCase().trim()).filter(Boolean);
-  if (!kws.length) return { jobs: [], error: "no keywords" };
+  if (!kws.length) return { jobs: [], httpStatus: null, error: "no keywords configured" };
 
   try {
-    let jobs: SourcedJob[];
     switch (source.kind) {
       case "workday":
-        jobs = await fetchWorkdayOne(source.company, keywords, country);
-        break;
+        return await fetchWorkday(source, keywords, country);
       case "greenhouse":
-        jobs = await fetchGreenhouseBoard(source.company, source.slug, kws);
-        break;
+        return await fetchGreenhouse(source, kws);
       case "lever":
-        jobs = await fetchLever(source.company, source.slug, kws);
-        break;
+        return await fetchLever(source, kws);
       case "ashby":
-        jobs = await fetchAshby(source.company, source.slug, kws);
-        break;
+        return await fetchAshby(source, kws);
       case "smartrecruiters":
-        jobs = await fetchSmartRecruiters(source.company, source.slug, keywords);
-        break;
+        return await fetchSmartRecruiters(source, keywords);
       default:
-        return { jobs: [], error: `unknown ATS: ${source.kind}` };
+        return { jobs: [], httpStatus: null, error: `unknown ATS: ${source.kind}` };
     }
-    return { jobs, error: null };
   } catch (err) {
-    return { jobs: [], error: err instanceof Error ? err.message : "fetch failed" };
+    return { jobs: [], httpStatus: null, error: err instanceof Error ? err.message : "fetch failed" };
   }
 }

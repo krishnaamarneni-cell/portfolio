@@ -13,14 +13,19 @@
  */
 import "server-only";
 import { requireSupabaseAdmin } from "@/lib/supabase";
-import { ATS_SOURCES, fetchFromSource, type AtsSource } from "@/lib/ats";
+import {
+  ATS_SOURCES,
+  fetchFromSource,
+  toListingRow,
+  validateJob,
+  type AtsSource,
+} from "@/lib/ats";
 import {
   bulkUpsertListings,
   getJobFinderSettings,
   type JobFinderSettings,
 } from "@/lib/job-finder";
 import { buildCandidateBlock, locationVerdict, scoreJob } from "@/lib/job-scoring";
-import type { SourcedJob } from "@/lib/job-sources";
 
 export type CrawlResult = {
   sourcesChecked: number;
@@ -75,37 +80,26 @@ async function saveState(state: CrawlerState): Promise<string | null> {
   }
 }
 
-function inferWorkType(location: string | null): string | null {
-  if (!location) return null;
-  const l = location.toLowerCase();
-  if (l.includes("remote")) return "remote";
-  if (l.includes("hybrid")) return "hybrid";
-  return null;
-}
+export type CrawlOutcome = {
+  found: number;
+  added: number;
+  deduped: number;
+  invalid: number;
+  httpStatus: number | null;
+  error: string | null;
+};
 
 /**
- * Posting age arrives either as an ISO date or as Workday's phrasing, which
- * caps at "30+ Days Ago" — the `+` must be tolerated or the most common format
- * parses to null and the listing looks undated.
+ * Record what one source actually did.
+ *
+ * The status distinction that matters: a source returning zero jobs is NOT
+ * failing. A sweep of 80 employers found 8 healthy sources returning nothing —
+ * Robinhood, Carta, Chime, SoFi, Palantir, AngelList, Tala, Dell — because they
+ * are tech boards queried with SAP keywords. Collapsing that into "failing"
+ * would disable eight working sources and lose them the day they post a
+ * relevant role, so no_matches is its own state.
  */
-function parsePostedOn(postedOn: string | null): string | null {
-  if (!postedOn) return null;
-  const days = postedOn.match(/(\d+)\s*\+?\s*day/i);
-  if (days) return new Date(Date.now() - Number(days[1]) * 86_400_000).toISOString();
-  const months = postedOn.match(/(\d+)\s*\+?\s*month/i);
-  if (months) return new Date(Date.now() - Number(months[1]) * 30 * 86_400_000).toISOString();
-  if (/today|just posted/i.test(postedOn)) return new Date().toISOString();
-  if (/yesterday/i.test(postedOn)) return new Date(Date.now() - 86_400_000).toISOString();
-  const parsed = Date.parse(postedOn);
-  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
-}
-
-async function recordSourceHealth(
-  source: AtsSource,
-  ok: boolean,
-  found: number,
-  error: string | null
-): Promise<void> {
+async function recordCrawlResult(source: AtsSource, outcome: CrawlOutcome): Promise<void> {
   try {
     const db = requireSupabaseAdmin();
     const { data: existing } = await db
@@ -115,15 +109,22 @@ async function recordSourceHealth(
       .eq("kind", source.kind)
       .maybeSingle();
 
+    const failed = Boolean(outcome.error);
+    const status = failed ? "failing" : outcome.found > 0 ? "producing" : "no_matches";
+
     const patch = {
       company: source.company,
       kind: source.kind,
+      status,
       last_checked_at: new Date().toISOString(),
-      last_ok: ok,
-      last_error: error,
-      last_jobs_found: found,
-      total_jobs_found: (existing?.total_jobs_found ?? 0) + found,
-      consecutive_failures: ok ? 0 : (existing?.consecutive_failures ?? 0) + 1,
+      last_ok: !failed,
+      last_error: outcome.error,
+      last_http_status: outcome.httpStatus,
+      last_jobs_found: outcome.found,
+      jobs_added: outcome.added,
+      jobs_deduped: outcome.deduped,
+      total_jobs_found: (existing?.total_jobs_found ?? 0) + outcome.found,
+      consecutive_failures: failed ? (existing?.consecutive_failures ?? 0) + 1 : 0,
     };
 
     if (existing) await db.from("job_source_health").update(patch).eq("id", existing.id);
@@ -168,52 +169,62 @@ export async function runCrawlCycle(opts: {
   if (!opts.scoreOnly && ATS_SOURCES.length) {
     const crawlDeadline = start + opts.budgetMs * CRAWL_SHARE;
     const limit = opts.sourcesPerRun ?? SOURCES_PER_RUN;
-    const collected: SourcedJob[] = [];
 
     for (let i = 0; i < limit; i++) {
       if (Date.now() > crawlDeadline) break;
       const source = ATS_SOURCES[cursor % ATS_SOURCES.length];
       cursor = (cursor + 1) % ATS_SOURCES.length;
 
-      const { jobs, error } = await fetchFromSource(source, settings.keywords, preferredCountry);
+      const { jobs, httpStatus, error } = await fetchFromSource(
+        source,
+        settings.keywords,
+        preferredCountry
+      );
       sourcesChecked++;
-      collected.push(...jobs);
       if (error) errors.push(`${source.company}: ${error}`);
-      await recordSourceHealth(source, !error, jobs.length, error);
-    }
 
-    jobsSeen = collected.length;
-    outOfArea = collected.filter(
-      (j) => !locationVerdict(j.location, settings.locations).ok
-    ).length;
-
-    if (collected.length) {
-      // Drop out-of-area postings before they are stored. Keeping them meant
-      // Discover filled with roles in countries the search excludes, and every
-      // one of them still consumed a scoring call just to be capped. Postings
-      // whose location the source didn't state are kept — they may well be
+      // Validate, then apply the geography gate. Out-of-area postings are
+      // dropped before storage: keeping them filled Discover with countries the
+      // search excludes, and each still consumed a scoring call to be capped.
+      // Postings whose location the source didn't state are kept — they may be
       // in area, and the scorer flags them for confirmation.
-      const rows = collected
-        .filter((j) => j.title?.trim() && j.url?.trim())
-        .filter((j) => locationVerdict(j.location, settings.locations).ok)
-        .map((j) => ({
-          title: j.title.trim(),
-          application_url: j.url.trim(),
-          company: j.company ?? null,
-          location: j.location,
-          work_type: inferWorkType(j.location),
-          description: j.description || null,
-          posted_at: parsePostedOn(j.postedOn),
-          source_type: j.source,
-          crawled_at: new Date().toISOString(),
-        }));
-      try {
-        const res = await bulkUpsertListings(rows);
-        jobsAdded = res.added;
-        errors.push(...res.errors);
-      } catch (err) {
-        errors.push(err instanceof Error ? err.message : "write failed");
+      let invalid = 0;
+      const usable = jobs.filter((job) => {
+        const v = validateJob(job);
+        if (!v.ok) {
+          invalid++;
+          return false;
+        }
+        return locationVerdict(job.location, settings.locations).ok;
+      });
+
+      outOfArea += jobs.length - usable.length - invalid;
+      jobsSeen += jobs.length;
+
+      // Written per source, not per batch, so health reflects what THIS source
+      // contributed rather than an aggregate nobody can act on.
+      let added = 0;
+      let deduped = 0;
+      if (usable.length) {
+        try {
+          const res = await bulkUpsertListings(usable.map(toListingRow));
+          added = res.added;
+          deduped = res.skipped;
+          jobsAdded += res.added;
+          errors.push(...res.errors);
+        } catch (err) {
+          errors.push(err instanceof Error ? err.message : "write failed");
+        }
       }
+
+      await recordCrawlResult(source, {
+        found: jobs.length,
+        added,
+        deduped,
+        invalid,
+        httpStatus,
+        error,
+      });
     }
   }
 

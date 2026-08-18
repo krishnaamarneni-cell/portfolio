@@ -264,10 +264,10 @@ export default function JobCard({ listing, busy, onStatus, onDelete, onPrepare }
             <button
               onClick={() => onPrepare(listing)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#ff6b00] text-[#ff6b00] text-xs font-semibold hover:bg-[#ff6b00]/10 transition-colors"
-              title="Tailored resume points, screening answers and contacts for this role"
+              title="Open the application packet — answers, contacts, and resume tailoring"
             >
               <FiClipboard size={12} />
-              Tailor &amp; apply
+              Prepare
             </button>
           )}
 

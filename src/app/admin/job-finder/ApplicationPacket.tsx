@@ -14,6 +14,7 @@ import {
   FiCheckCircle,
   FiAlertTriangle,
   FiZap,
+  FiFileText,
 } from "react-icons/fi";
 import { scoreTone, type Listing } from "./types";
 
@@ -101,6 +102,14 @@ export default function ApplicationPacket({
   const [draft, setDraft] = useState({ label: "", answer: "", keywords: "" });
   const [adding, setAdding] = useState(false);
   const [marking, setMarking] = useState(false);
+  const [tailoring, setTailoring] = useState(false);
+  const [tailored, setTailored] = useState<{
+    summary: string;
+    bullets: string[];
+    atsScore: number | null;
+    matched: string[];
+    missing: string[];
+  } | null>(null);
 
   const cb = useRef({ onSuccess, onError });
   cb.current = { onSuccess, onError };
@@ -207,6 +216,64 @@ export default function ApplicationPacket({
       load();
     } catch {
       onError("Delete failed.");
+    }
+  };
+
+  /**
+   * Actually rewrite the resume against this posting.
+   *
+   * Reuses /api/admin/resume/tailor, which is the same engine the Resume tab
+   * uses, so a version is saved there too rather than living only in this modal.
+   * The description is what it works from — without one there is nothing to
+   * tailor against, and a request would just produce generic filler.
+   */
+  const tailorResume = async () => {
+    const jd = [
+      listing.title,
+      listing.company ? `Company: ${listing.company}` : "",
+      listing.location ? `Location: ${listing.location}` : "",
+      listing.required_skills?.length ? `Required: ${listing.required_skills.join(", ")}` : "",
+      listing.description ?? "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (jd.trim().length < 60) {
+      onError("This posting has too little detail to tailor against. Open it and paste the description first.");
+      return;
+    }
+
+    setTailoring(true);
+    try {
+      const res = await fetch("/api/admin/resume/tailor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobDescription: jd,
+          companyName: listing.company ?? "",
+          jobTitle: listing.title,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        onError(data.error);
+        return;
+      }
+      const bullets: string[] = (data.resume?.experience ?? [])
+        .flatMap((e: { bullets?: string[] }) => e.bullets ?? [])
+        .slice(0, 10);
+      setTailored({
+        summary: data.resume?.summary ?? "",
+        bullets,
+        atsScore: typeof data.analysis?.atsScore === "number" ? data.analysis.atsScore : null,
+        matched: data.analysis?.matchedKeywords ?? [],
+        missing: data.analysis?.missingKeywords ?? [],
+      });
+      onSuccess("Resume tailored — also saved under Resume → versions.");
+    } catch {
+      onError("Tailoring failed.");
+    } finally {
+      setTailoring(false);
     }
   };
 
@@ -370,6 +437,15 @@ export default function ApplicationPacket({
               Open the application form
             </a>
             <button
+              onClick={tailorResume}
+              disabled={tailoring}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#ff6b00] text-[#ff6b00] text-xs font-semibold hover:bg-[#ff6b00]/10 transition-colors disabled:opacity-50"
+              title="Rewrite your resume against this posting"
+            >
+              <FiFileText size={12} className={tailoring ? "animate-pulse" : ""} />
+              {tailoring ? "Tailoring…" : tailored ? "Tailor again" : "Tailor resume"}
+            </button>
+            <button
               onClick={markApplied}
               disabled={marking}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[var(--admin-border)] text-[var(--admin-text)] text-xs font-semibold hover:border-emerald-500 transition-colors disabled:opacity-50"
@@ -384,6 +460,43 @@ export default function ApplicationPacket({
         </div>
 
         <div className="p-5 space-y-5">
+          {/* Tailored resume — only present once it has actually been generated */}
+          {tailored && (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--admin-text-muted)]">
+                  Tailored resume
+                </h3>
+                {tailored.atsScore !== null && (
+                  <span className="text-[10px] font-semibold text-[var(--admin-text-muted)] tabular-nums">
+                    ATS score {tailored.atsScore}
+                  </span>
+                )}
+              </div>
+
+              {tailored.summary && <CopyField label="Rewritten summary" value={tailored.summary} multiline />}
+
+              {tailored.bullets.length > 0 && (
+                <CopyField
+                  label={`Rewritten bullets (${tailored.bullets.length})`}
+                  value={tailored.bullets.map((b) => `• ${b}`).join("\n")}
+                  multiline
+                />
+              )}
+
+              {tailored.missing.length > 0 && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-1.5">
+                    Keywords still missing
+                  </p>
+                  <p className="text-xs text-[var(--admin-text)] leading-relaxed">
+                    {tailored.missing.join(" · ")}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Tailoring */}
           <div className="space-y-2.5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--admin-text-muted)]">

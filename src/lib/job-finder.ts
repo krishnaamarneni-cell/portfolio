@@ -11,6 +11,14 @@ export type JobListing = {
   description: string | null;
   required_skills: string[] | null;
   application_url: string;
+  /** The ATS's own job id — primary dedup key. Needs job_source_v2.sql. */
+  external_id: string | null;
+  source_url: string | null;
+  department: string | null;
+  seniority: string | null;
+  employment_type: string | null;
+  sponsorship: string | null;
+  clearance: string | null;
   posted_at: string | null;
   expires_at: string | null;
   salary_range: string | null;
@@ -230,29 +238,83 @@ export async function bulkUpsertListings(
   const now = new Date().toISOString();
   const errors: string[] = [];
 
-  const existing = new Set<string>();
+  // Two key spaces, in priority order:
+  //   1. platform + the ATS's own job id — stable across URL changes, and the
+  //      only workable key for email requirements, where several roles from one
+  //      recruiter share a single mailto apply link
+  //   2. the lowercased apply URL — the fallback for sources with no id
+  const existingUrls = new Set<string>();
+  const existingIds = new Set<string>();
   const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await db
+  let hasExternalId = true;
+
+  type KeyRow = {
+    application_url: string;
+    source_type?: string | null;
+    external_id?: string | null;
+  };
+
+  /** One page of dedup keys. Falls back to URL-only before job_source_v2.sql. */
+  const keyPage = async (
+    from: number
+  ): Promise<{ rows: KeyRow[] | null; error: string | null }> => {
+    if (hasExternalId) {
+      const res = await db
+        .from("job_listings")
+        .select("application_url,source_type,external_id")
+        .range(from, from + PAGE - 1);
+      if (!res.error) return { rows: (res.data ?? []) as unknown as KeyRow[], error: null };
+      // Tolerate the column being absent so discovery keeps working until the
+      // migration is applied.
+      if (/external_id|column/i.test(res.error.message)) hasExternalId = false;
+      else return { rows: null, error: res.error.message };
+    }
+    const res = await db
       .from("job_listings")
       .select("application_url")
       .range(from, from + PAGE - 1);
+    if (res.error) return { rows: null, error: res.error.message };
+    return { rows: (res.data ?? []) as unknown as KeyRow[], error: null };
+  };
+
+  for (let from = 0; ; from += PAGE) {
+    const { rows, error } = await keyPage(from);
     if (error) {
-      errors.push(error.message);
+      errors.push(error);
       break;
     }
-    if (!data?.length) break;
-    for (const r of data) existing.add(r.application_url.toLowerCase());
-    if (data.length < PAGE) break;
+    if (!rows?.length) break;
+    for (const r of rows) {
+      existingUrls.add(r.application_url.toLowerCase());
+      if (r.external_id) existingIds.add(`${r.source_type ?? ""}:${r.external_id}`);
+    }
+    if (rows.length < PAGE) break;
   }
 
   // Dedupe against the table and within this batch — the same posting often
   // surfaces under several keywords.
-  const seen = new Set<string>();
+  const seenUrls = new Set<string>();
+  const seenIds = new Set<string>();
   const fresh = listings.filter((l) => {
-    const key = l.application_url.toLowerCase();
-    if (existing.has(key) || seen.has(key)) return false;
-    seen.add(key);
+    const idKey =
+      hasExternalId && l.external_id ? `${l.source_type ?? ""}:${l.external_id}` : null;
+    const urlKey = l.application_url.toLowerCase();
+
+    if (idKey && (existingIds.has(idKey) || seenIds.has(idKey))) return false;
+
+    // The URL must still be checked even when an id is present. Rows stored
+    // before external_id existed carry a null id, so an id lookup finds nothing
+    // and the posting looks new — then the insert trips the unique index on
+    // lower(application_url). Skipping this check cost every insert in a crawl.
+    //
+    // The exception is a deliberately shared URL: an email requirement's apply
+    // link is a mailto to the recruiter, and several distinct roles from one
+    // person share it. There the id is the only thing that separates them.
+    const urlIsShared = /^mailto:/i.test(l.application_url);
+    if (!urlIsShared && (existingUrls.has(urlKey) || seenUrls.has(urlKey))) return false;
+
+    if (idKey) seenIds.add(idKey);
+    if (!urlIsShared) seenUrls.add(urlKey);
     return true;
   });
 
