@@ -55,6 +55,14 @@ export const WORKDAY_TENANTS: WorkdayTenant[] = [
   { company: "Mastercard", tenant: "mastercard", wd: "wd1", site: "CorporateCareers" }, // SAP=12
   { company: "PayPal", tenant: "paypal", wd: "wd1", site: "jobs" }, // SAP=7
   { company: "Dell", tenant: "dell", wd: "wd1", site: "External" }, // SAP=0, live for other keywords
+  // Found by reading each company's careers page for a myworkdayjobs URL
+  // rather than guessing tenant names. Note the locale segment in those URLs
+  // ("boeing/wd1/en-US/EXTERNAL_CAREERS") is NOT the site — the site follows it.
+  { company: "Nike", tenant: "nike", wd: "wd1", site: "nke" }, // SAP=58, supply chain=100
+  { company: "Boeing", tenant: "boeing", wd: "wd1", site: "EXTERNAL_CAREERS" }, // SAP=31, supply chain=79
+  { company: "Unilever", tenant: "unilever", wd: "wd3", site: "Unilever_Experienced_Professionals" }, // SAP=50
+  { company: "General Mills", tenant: "genmills", wd: "wd1", site: "GMI_External_Careers" }, // SAP=45
+  { company: "Baxter", tenant: "baxter", wd: "wd1", site: "baxter" }, // SAP=28, supply chain=70
 ];
 
 /**
