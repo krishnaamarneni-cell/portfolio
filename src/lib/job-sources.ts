@@ -193,7 +193,16 @@ function locationFrom(p: WorkdayPosting): string | null {
   const parts = (p.bulletFields ?? []).filter(
     (b) => b && !/^[A-Z]{0,3}[-_]?\d{4,}/.test(b.trim())
   );
-  return parts.length ? parts.join(", ") : null;
+  if (parts.length) return parts.join(", ");
+
+  // Last resort: the city is always in the posting path — Accenture in
+  // particular returns neither locationsText nor bulletFields on some rows,
+  // and a null location silently exempts a posting from the geography check.
+  // "/job/Budapest-Millennium-Gardens/Senior-SAP-Consultant_R00319877"
+  const seg = p.externalPath?.match(/^\/job\/([^/]+)\//)?.[1];
+  if (!seg) return null;
+  const city = decodeURIComponent(seg).replace(/-/g, " ").trim();
+  return city && !/^\d+$/.test(city) ? city : null;
 }
 
 /**

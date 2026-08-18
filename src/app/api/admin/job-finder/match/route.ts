@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 import { resolveAgentModel, runAgent } from "@/lib/agents";
 import { getJobFinderSettings } from "@/lib/job-finder";
+import { matchesLocation } from "@/lib/job-sources";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,6 +27,10 @@ Scoring guide:
 - 70-84 "good": clear overlap, one or two gaps that experience covers.
 - 50-69 "stretch": adjacent role, real gaps, worth applying only if motivated.
 - 0-49 "skip": wrong domain, wrong seniority, or requires credentials they lack.
+
+Score SKILL AND EXPERIENCE FIT ONLY. Do not raise or lower the score for the
+job's location — geography is checked separately, and adjusting for it here
+would penalise the posting twice.
 
 Be honest. Inflated scores are worse than low ones — they waste the candidate's time.`;
 
@@ -57,6 +62,30 @@ function parseMatch(raw: string): MatchResult | null {
     return null;
   }
 }
+
+/** Workday's stand-ins for "we aren't saying where" — not a real mismatch. */
+const AMBIGUOUS_LOCATION = /^\s*(\d+\s+locations?|multiple\s+locations?|location\s+negotiable|various)\s*$/i;
+
+/**
+ * Is this posting somewhere the candidate will actually work?
+ *
+ * Deterministic on purpose. Asking the model to weigh location produced an 84
+ * for a Bangkok role under a United-States preference — it optimises for skill
+ * fit and quietly ignores a soft instruction. A geography check is a fact, so
+ * it belongs in code, not in a prompt.
+ */
+function locationVerdict(
+  location: string | null,
+  preferred: string[]
+): { ok: boolean; unknown: boolean } {
+  if (!preferred.length) return { ok: true, unknown: false };
+  if (!location?.trim() || AMBIGUOUS_LOCATION.test(location)) return { ok: true, unknown: true };
+  if (/remote|anywhere|work from home|virtual/i.test(location)) return { ok: true, unknown: false };
+  return { ok: preferred.some((p) => matchesLocation(location, p)), unknown: false };
+}
+
+/** Ceiling for a posting outside every preferred location. */
+const OUT_OF_AREA_CAP = 35;
 
 type Body = { ids?: string[]; rescore?: boolean };
 
@@ -147,14 +176,28 @@ export async function POST(request: Request) {
       continue;
     }
 
+    // Geography gate, applied after the model has judged skill fit.
+    const verdict = locationVerdict(job.location, settings.locations);
+    let score = match.score;
+    let recommendation = match.recommendation;
+    let summary = match.summary;
+
+    if (!verdict.ok) {
+      score = Math.min(score, OUT_OF_AREA_CAP);
+      recommendation = "skip";
+      summary = `Outside your preferred locations (${settings.locations.join(", ")}) — this role is in ${job.location}. ${summary}`;
+    } else if (verdict.unknown && settings.locations.length) {
+      summary = `${summary} (Location not stated by the source — confirm it before applying.)`;
+    }
+
     const { error: updateError } = await db
       .from("job_listings")
       .update({
-        match_score: match.score,
-        match_recommendation: match.recommendation,
+        match_score: score,
+        match_recommendation: recommendation,
         match_skills: match.matching_skills,
         missing_skills: match.missing_skills,
-        match_summary: match.summary,
+        match_summary: summary,
         resume_keywords: match.resume_keywords,
         updated_at: new Date().toISOString(),
       })
