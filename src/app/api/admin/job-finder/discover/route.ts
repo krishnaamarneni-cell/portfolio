@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { fetchWorkdayJobs, type SourcedJob } from "@/lib/job-sources";
-import { getJobFinderSettings, upsertListing } from "@/lib/job-finder";
+import { fetchWorkdayJobs, fetchGreenhouseBoards, type SourcedJob } from "@/lib/job-sources";
+import { getJobFinderSettings, bulkUpsertListings } from "@/lib/job-finder";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -74,72 +74,70 @@ export async function POST(request: Request) {
   const companies = body.companies?.length ? body.companies : settings.target_companies;
   const location = (body.location ?? "").trim();
 
-  // One keyword at a time — each call already fans out across all 11 tenants
-  // in parallel, so running the keywords concurrently too would mean ~44
-  // simultaneous requests to the same handful of hosts.
   const found: SourcedJob[] = [];
   const searchErrors: string[] = [];
+
+  // Greenhouse has no server-side query, so its boards are pulled once and
+  // matched against every keyword locally. Kicked off first so it runs while
+  // the Workday rounds go out.
+  const greenhouse = fetchGreenhouseBoards(keywords).catch((err): SourcedJob[] => {
+    searchErrors.push(`greenhouse: ${err instanceof Error ? err.message : "fetch failed"}`);
+    return [];
+  });
+
+  // Workday filters server-side, so it needs one round per keyword. Each round
+  // already fans out across every tenant in parallel; running the keywords
+  // concurrently too would mean a hundred-plus simultaneous requests.
   for (const keyword of keywords) {
     try {
       const jobs = await fetchWorkdayJobs({
         keyword,
         companies: companies.length ? companies : undefined,
         location,
-        perTenant: 8,
+        perTenant: 6,
       });
       found.push(...jobs);
     } catch (err) {
       searchErrors.push(`${keyword}: ${err instanceof Error ? err.message : "fetch failed"}`);
     }
   }
+  found.push(...(await greenhouse));
 
-  // Same posting can surface under several keywords.
-  const seen = new Set<string>();
-  const unique = found.filter((j) => {
-    const key = j.url.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const rows = found
+    .filter((j) => j.title?.trim() && j.url?.trim())
+    .map((job) => ({
+      title: job.title.trim(),
+      application_url: job.url.trim(),
+      company: job.company ?? null,
+      location: job.location,
+      work_type: inferWorkType(job.location),
+      description: job.description || null,
+      posted_at: parsePostedOn(job.postedOn),
+      source_type: job.source || "workday",
+      crawled_at: new Date().toISOString(),
+    }));
 
-  let added = 0;
-  let updated = 0;
-  const writeErrors: string[] = [];
-
-  for (const job of unique) {
-    if (!job.title?.trim() || !job.url?.trim()) continue;
-    try {
-      const res = await upsertListing({
-        title: job.title.trim(),
-        application_url: job.url.trim(),
-        company: job.company ?? null,
-        location: job.location,
-        work_type: inferWorkType(job.location),
-        description: job.description || null,
-        posted_at: parsePostedOn(job.postedOn),
-        source_type: job.source || "workday",
-        crawled_at: new Date().toISOString(),
-      });
-      if (res.isNew) added++;
-      else updated++;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "write failed";
-      if (/does not exist|schema cache|relation/i.test(message)) {
-        return NextResponse.json(
-          { error: "Run supabase/job_finder.sql in Supabase to enable the Job Finder." },
-          { status: 500 }
-        );
-      }
-      writeErrors.push(message);
-    }
+  let result;
+  try {
+    result = await bulkUpsertListings(rows);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "write failed";
+    return NextResponse.json(
+      {
+        error: /does not exist|schema cache|relation/i.test(message)
+          ? "Run supabase/job_finder.sql in Supabase to enable the Job Finder."
+          : message,
+      },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({
     ok: true,
     searched: keywords,
-    found: unique.length,
-    added,
-    updated,
-    errors: [...searchErrors, ...writeErrors].slice(0, 3),
+    found: rows.length,
+    added: result.added,
+    updated: result.skipped,
+    errors: [...searchErrors, ...result.errors].slice(0, 3),
   });
 }

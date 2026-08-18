@@ -17,6 +17,9 @@ type Props = {
   showScoring?: boolean;
 };
 
+/** Must match the batch size in /api/admin/job-finder/match. */
+const SCORE_BATCH = 10;
+
 const SORTS = [
   { id: "newest", label: "Newest" },
   { id: "match", label: "Best match" },
@@ -246,10 +249,13 @@ export default function JobFeed({
           onChange={(e) => setMinScore(Number(e.target.value))}
           className="px-3 py-2 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[#ff6b00]"
         >
+          {/* Score filters compare against match_score, so they necessarily
+              hide unscored listings. Say so — silently dropping them looked
+              like discovery had found almost nothing. */}
           <option value={0}>Any score</option>
-          <option value={50}>50+</option>
-          <option value={70}>70+</option>
-          <option value={85}>85+</option>
+          <option value={50}>50+ (scored only)</option>
+          <option value={70}>70+ (scored only)</option>
+          <option value={85}>85+ (scored only)</option>
         </select>
 
         {showScoring && (
@@ -272,7 +278,13 @@ export default function JobFeed({
             title="Score unscored listings against your profile"
           >
             <FiZap size={13} className={scoring ? "animate-pulse" : ""} />
-            {scoring ? "Scoring…" : unscored ? `Score ${unscored}` : "Score with AI"}
+            {/* The route scores SCORE_BATCH at a time; promising the full
+                unscored count made one click look like it had failed. */}
+            {scoring
+              ? "Scoring…"
+              : unscored
+                ? `Score ${Math.min(unscored, SCORE_BATCH)}${unscored > SCORE_BATCH ? ` of ${unscored}` : ""}`
+                : "Score with AI"}
           </button>
         )}
 

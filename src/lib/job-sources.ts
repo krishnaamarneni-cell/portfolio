@@ -42,7 +42,109 @@ export const WORKDAY_TENANTS: WorkdayTenant[] = [
   { company: "Intel", tenant: "intel", wd: "wd1", site: "External" },
   { company: "Salesforce", tenant: "salesforce", wd: "wd12", site: "External_Career_Site" },
   { company: "Pfizer", tenant: "pfizer", wd: "wd1", site: "PfizerCareers" },
+  // Probed 2026-08-17; the SAP hit count each returned is noted so a tenant
+  // that silently stops matching is easy to spot.
+  { company: "Abbott", tenant: "abbott", wd: "wd5", site: "abbottcareers" }, // SAP=164
+  { company: "Medtronic", tenant: "medtronic", wd: "wd1", site: "MedtronicCareers" }, // SAP=91
+  { company: "AstraZeneca", tenant: "astrazeneca", wd: "wd3", site: "Careers" }, // SAP=72
+  { company: "Stryker", tenant: "stryker", wd: "wd1", site: "StrykerCareers" }, // SAP=55
+  { company: "NVIDIA", tenant: "nvidia", wd: "wd5", site: "NVIDIAExternalCareerSite" }, // SAP=46
+  { company: "Gilead", tenant: "gilead", wd: "wd1", site: "gileadcareers" }, // SAP=43
+  { company: "Target", tenant: "target", wd: "wd5", site: "targetcareers" }, // SAP=28
+  { company: "Adobe", tenant: "adobe", wd: "wd5", site: "external_experienced" }, // SAP=16
+  { company: "Mastercard", tenant: "mastercard", wd: "wd1", site: "CorporateCareers" }, // SAP=12
+  { company: "PayPal", tenant: "paypal", wd: "wd1", site: "jobs" }, // SAP=7
+  { company: "Dell", tenant: "dell", wd: "wd1", site: "External" }, // SAP=0, live for other keywords
 ];
+
+/**
+ * Greenhouse public job boards, keyed by slug — one identifier instead of
+ * Workday's tenant/host/site triple, and no key required. Skews tech, so this
+ * is the half of the pool that carries AI/engineering roles rather than SAP.
+ *
+ * Every slug below returned a non-empty board when probed on 2026-08-17.
+ */
+export const GREENHOUSE_BOARDS: Array<{ company: string; board: string }> = [
+  { company: "Anthropic", board: "anthropic" },
+  { company: "Stripe", board: "stripe" },
+  { company: "Databricks", board: "databricks" },
+  { company: "Datadog", board: "datadog" },
+  { company: "Waymo", board: "waymo" },
+  { company: "Cloudflare", board: "cloudflare" },
+  { company: "Samsara", board: "samsara" },
+  { company: "Pinterest", board: "pinterest" },
+  { company: "Scale AI", board: "scaleai" },
+  { company: "GitLab", board: "gitlab" },
+  { company: "Affirm", board: "affirm" },
+  { company: "Coinbase", board: "coinbase" },
+  { company: "Lyft", board: "lyft" },
+  { company: "Figma", board: "figma" },
+  { company: "Twilio", board: "twilio" },
+  { company: "Flexport", board: "flexport" },
+  { company: "Reddit", board: "reddit" },
+  { company: "Asana", board: "asana" },
+  { company: "Robinhood", board: "robinhood" },
+  { company: "Instacart", board: "instacart" },
+  { company: "Gusto", board: "gusto" },
+  { company: "Vercel", board: "vercel" },
+  { company: "Carta", board: "carta" },
+  { company: "Chime", board: "chime" },
+  { company: "SoFi", board: "sofi" },
+  { company: "Discord", board: "discord" },
+  { company: "Dropbox", board: "dropbox" },
+  { company: "Airtable", board: "airtable" },
+];
+
+/**
+ * Search every Greenhouse board once and filter locally.
+ *
+ * Greenhouse has no server-side query, so fetching per keyword would re-pull
+ * whole boards N times. One fetch per board, matched against all keywords, is
+ * the difference between ~28 requests and ~112.
+ */
+export async function fetchGreenhouseBoards(keywords: string[]): Promise<SourcedJob[]> {
+  const kws = keywords.map((k) => k.toLowerCase().trim()).filter(Boolean);
+  if (!kws.length) return [];
+
+  const results = await Promise.all(
+    GREENHOUSE_BOARDS.map(async ({ company, board }) => {
+      try {
+        const r = await fetch(`https://boards-api.greenhouse.io/v1/boards/${board}/jobs`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!r.ok) return [];
+        const j = (await r.json()) as {
+          jobs?: Array<{
+            title?: string;
+            absolute_url?: string;
+            location?: { name?: string };
+            updated_at?: string;
+          }>;
+        };
+        return (j.jobs ?? [])
+          .filter((p) => {
+            if (!p.title || !p.absolute_url) return false;
+            const t = p.title.toLowerCase();
+            return kws.some((k) => t.includes(k));
+          })
+          .slice(0, 10)
+          .map<SourcedJob>((p) => ({
+            title: String(p.title),
+            company,
+            location: p.location?.name ?? null,
+            url: String(p.absolute_url),
+            description: `${p.title} — ${company}${p.location?.name ? ` — ${p.location.name}` : ""}`,
+            source: "greenhouse",
+            postedOn: p.updated_at ?? null,
+          }));
+      } catch {
+        return [];
+      }
+    })
+  );
+  return results.flat();
+}
 
 /**
  * Split requested company names into ones we can fetch live (Workday tenants)

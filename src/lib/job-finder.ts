@@ -210,6 +210,58 @@ export async function upsertListing(
   return { id: data.id, isNew: true };
 }
 
+/**
+ * Insert many discovered listings in a few round trips.
+ *
+ * upsertListing() costs two queries per row, which is fine for a manual import
+ * but not for a crawl across 20+ employers — a few hundred postings would spend
+ * the whole request budget on database latency. This reads the existing URLs
+ * once and bulk-inserts only what's new.
+ */
+export async function bulkUpsertListings(
+  listings: Array<Partial<JobListing> & { application_url: string; title: string }>
+): Promise<{ added: number; skipped: number; errors: string[] }> {
+  const db = requireSupabaseAdmin();
+  const now = new Date().toISOString();
+  const errors: string[] = [];
+
+  const existing = new Set<string>();
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db
+      .from("job_listings")
+      .select("application_url")
+      .range(from, from + PAGE - 1);
+    if (error) {
+      errors.push(error.message);
+      break;
+    }
+    if (!data?.length) break;
+    for (const r of data) existing.add(r.application_url.toLowerCase());
+    if (data.length < PAGE) break;
+  }
+
+  // Dedupe against the table and within this batch — the same posting often
+  // surfaces under several keywords.
+  const seen = new Set<string>();
+  const fresh = listings.filter((l) => {
+    const key = l.application_url.toLowerCase();
+    if (existing.has(key) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  let added = 0;
+  for (let i = 0; i < fresh.length; i += 200) {
+    const chunk = fresh.slice(i, i + 200).map((l) => ({ ...l, created_at: now, updated_at: now }));
+    const { data, error } = await db.from("job_listings").insert(chunk).select("id");
+    if (error) errors.push(error.message);
+    else added += data?.length ?? 0;
+  }
+
+  return { added, skipped: listings.length - fresh.length, errors: errors.slice(0, 3) };
+}
+
 export async function updateListingStatus(id: string, status: string, extra?: Record<string, unknown>) {
   const db = requireSupabaseAdmin();
   const now = new Date().toISOString();
