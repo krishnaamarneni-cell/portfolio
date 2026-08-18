@@ -8,6 +8,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+/** Leave headroom under maxDuration so a response always gets sent. */
+const BUDGET_MS = 45_000;
+/** A single Groq call is a few seconds; don't start one that can't finish. */
+const PER_JOB_ALLOWANCE = 9_000;
+
 /**
  * Manual scoring. The same work happens automatically on the cron, so this is
  * the "score these now" path — the scoring itself lives in lib/job-scoring so
@@ -16,6 +21,7 @@ export const maxDuration = 60;
 type Body = { ids?: string[]; rescore?: boolean };
 
 export async function POST(request: Request) {
+  const start = Date.now();
   if (!(await getSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -65,7 +71,15 @@ export async function POST(request: Request) {
   let relevant = 0;
   const failures: string[] = [];
 
+  // Return partial work rather than dying at the platform timeout. Ten model
+  // calls at a few seconds each can exceed the function limit, and the 504 that
+  // follows is an HTML page — so the caller's res.json() throws and every
+  // successful score in the batch is lost with it. The client loops, so
+  // stopping early costs nothing.
+  const deadline = start + BUDGET_MS;
+
   for (const job of listings) {
+    if (Date.now() + PER_JOB_ALLOWANCE > deadline) break;
     const res = await scoreJob(apiKey, job, settings, candidateBlock);
     if (!res.ok) {
       failures.push(`${job.title}: ${res.error}`);
@@ -103,5 +117,12 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, scored, relevant, failures: failures.slice(0, 5) });
+  return NextResponse.json({
+    ok: true,
+    scored,
+    relevant,
+    // Signals the batch was cut short by time, not that work ran out.
+    partial: scored + failures.length < listings.length,
+    failures: failures.slice(0, 5),
+  });
 }

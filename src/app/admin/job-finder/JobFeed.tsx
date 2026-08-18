@@ -262,8 +262,24 @@ export default function JobFeed({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({}),
         });
-        const data = await res.json();
 
+        // A gateway timeout returns HTML, so json() throws and the real cause
+        // is lost behind a generic failure. Read the status first and say what
+        // actually happened.
+        if (!res.ok) {
+          cb.current.onError(
+            res.status === 504 || res.status === 502
+              ? `Scoring timed out after ${totalScored} listing${totalScored === 1 ? "" : "s"} — press Score again to continue.`
+              : `Scoring failed (HTTP ${res.status}).`
+          );
+          break;
+        }
+
+        const data = await res.json().catch(() => null);
+        if (!data) {
+          cb.current.onError("Scoring returned an unreadable response.");
+          break;
+        }
         if (data.error) {
           cb.current.onError(data.error);
           break;
@@ -288,8 +304,11 @@ export default function JobFeed({
         );
         load();
       }
-    } catch {
-      cb.current.onError("Scoring failed.");
+    } catch (err) {
+      cb.current.onError(
+        `Scoring stopped after ${totalScored} listing${totalScored === 1 ? "" : "s"}: ` +
+          (err instanceof Error ? err.message : "network error")
+      );
     } finally {
       setScoring(false);
       setScoreProgress(0);
