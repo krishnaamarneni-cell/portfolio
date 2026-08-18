@@ -1,23 +1,25 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { FiZap, FiCompass, FiBookmark, FiFileText, FiGlobe, FiSliders, FiActivity } from "react-icons/fi";
+import { FiZap, FiCompass, FiBookmark, FiFileText, FiGlobe, FiSliders, FiActivity, FiBarChart2 } from "react-icons/fi";
 import JobFeed from "./JobFeed";
 import SourcesPanel from "./SourcesPanel";
 import JobSettings from "./JobSettings";
 import AutomationPanel from "./AutomationPanel";
+import InsightsPanel from "./InsightsPanel";
 import ApplicationsTab from "../ApplicationsTab";
 import type { Stats } from "./types";
 
 type Props = { onSuccess: (m: string) => void; onError: (m: string) => void };
 
-type SubTab = "today" | "discover" | "saved" | "applications" | "automation" | "sources" | "settings";
+type SubTab = "today" | "discover" | "saved" | "applications" | "insights" | "automation" | "sources" | "settings";
 
 const SUB_TABS: Array<{ id: SubTab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "today", label: "Jobs Today", icon: FiZap },
   { id: "discover", label: "All Jobs", icon: FiCompass },
   { id: "saved", label: "Saved", icon: FiBookmark },
   { id: "applications", label: "Applications", icon: FiFileText },
+  { id: "insights", label: "Insights", icon: FiBarChart2 },
   { id: "automation", label: "Automation", icon: FiActivity },
   { id: "sources", label: "Sources", icon: FiGlobe },
   { id: "settings", label: "Settings", icon: FiSliders },
@@ -111,6 +113,8 @@ export default function JobFinderTab({ onSuccess, onError }: Props) {
       )}
 
       {sub === "applications" && <ApplicationsTab onSuccess={onSuccess} onError={onError} />}
+
+      {sub === "insights" && <InsightsPanel onError={onError} />}
 
       {sub === "automation" && <AutomationPanel onSuccess={onSuccess} onError={onError} />}
 
