@@ -17,6 +17,11 @@ export type Listing = {
   missing_skills: string[] | null;
   match_summary: string | null;
   resume_keywords: string[] | null;
+  required_skills: string[] | null;
+  seniority: string | null;
+  employment_type: string | null;
+  sponsorship: string | null;
+  clearance: string | null;
   status: string;
   notes: string | null;
   source_type: string | null;
@@ -117,4 +122,32 @@ export function relativeDate(iso: string | null): string {
   if (days === 1) return "yesterday";
   if (days < 30) return `${days}d ago`;
   return new Date(iso).toLocaleDateString();
+}
+
+export type WarmContact = {
+  id: string;
+  name: string;
+  email: string;
+  company: string | null;
+  title: string | null;
+  role_pitched: string | null;
+  linkedin_url: string | null;
+  starred: boolean;
+  emailed_at: string | null;
+  why?: string;
+};
+
+/** Colour for a screening fact — green passes, amber needs checking. */
+export function factTone(kind: "sponsorship" | "clearance", value: string | null): string {
+  const v = (value ?? "").toLowerCase();
+  if (kind === "sponsorship") {
+    if (/^no/.test(v)) return "text-rose-500";
+    if (/maybe|unclear/.test(v)) return "text-amber-500";
+    if (/yes/.test(v)) return "text-emerald-500";
+  }
+  if (kind === "clearance") {
+    if (/^required/.test(v)) return "text-amber-500";
+    if (/not/.test(v)) return "text-emerald-500";
+  }
+  return "text-[var(--admin-text)]";
 }

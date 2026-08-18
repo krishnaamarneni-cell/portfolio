@@ -16,6 +16,8 @@ type Props = {
   onStats?: (s: Stats) => void;
   /** Show the "Score with AI" button — only useful on the discovery feed. */
   showScoring?: boolean;
+  /** Restrict to postings found in the last N hours (the "Today" feed). */
+  freshHours?: number;
 };
 
 /** Must match the batch size in /api/admin/job-finder/match. */
@@ -35,6 +37,7 @@ export default function JobFeed({
   onError,
   onStats,
   showScoring,
+  freshHours,
 }: Props) {
   const [listings, setListings] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
@@ -66,6 +69,7 @@ export default function JobFeed({
       const params = new URLSearchParams({ status: scope, sort, limit: "60" });
       if (debounced) params.set("search", debounced);
       if (minScore > 0) params.set("min_score", String(minScore));
+      if (freshHours) params.set("fresh_hours", String(freshHours));
 
       const res = await fetch(`/api/admin/job-finder?${params}`);
       const data = await res.json();
@@ -88,7 +92,7 @@ export default function JobFeed({
     } finally {
       setLoading(false);
     }
-  }, [scope, sort, debounced, minScore]);
+  }, [scope, sort, debounced, minScore, freshHours]);
 
   useEffect(() => {
     load();

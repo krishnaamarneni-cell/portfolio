@@ -24,8 +24,18 @@ Return ONLY a JSON object. No prose, no markdown fences.
   "matching_skills": ["..."],
   "missing_skills": ["..."],
   "summary": "two sentences, plain language, why this score",
-  "resume_keywords": ["exact phrases from the posting worth mirroring in a resume"]
+  "resume_keywords": ["exact phrases from the posting worth mirroring in a resume"],
+  "required_skills": ["the skills the posting actually asks for, most important first"],
+  "seniority": "e.g. Senior · 7+ yrs, Mid-level, Director — or null if unstated",
+  "work_mode": "Remote | Hybrid | Onsite — or null if unstated",
+  "employment_type": "Full-time | Contract | C2C | Contract-to-hire — or null if unstated",
+  "sponsorship": "Yes | No | Maybe — whether visa sponsorship appears available",
+  "clearance": "Required | Not required — security clearance"
 }
+
+For the five fields above, report ONLY what the posting states or clearly
+implies. Use null rather than guessing — a wrong "No sponsorship" costs the
+candidate a real opportunity, and a wrong "Remote" wastes their time.
 
 Scoring guide:
 - 85-100 "strong": core responsibilities are what the candidate already does daily.
@@ -46,6 +56,13 @@ export type ScoredMatch = {
   missing_skills: string[];
   summary: string;
   resume_keywords: string[];
+  /** Facts lifted from the posting so the card can show what gets screened on. */
+  required_skills: string[];
+  seniority: string | null;
+  work_mode: string | null;
+  employment_type: string | null;
+  sponsorship: string | null;
+  clearance: string | null;
 };
 
 export type ScoreTarget = {
@@ -56,6 +73,14 @@ export type ScoreTarget = {
   salary_range?: string | null;
   description?: string | null;
 };
+
+/** Models like to answer "null", "N/A" or "unstated" as strings. */
+function text(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  if (!t || /^(null|n\/a|na|none|unknown|unstated|not specified)$/i.test(t)) return null;
+  return t.slice(0, 60);
+}
 
 function parseMatch(raw: string): ScoredMatch | null {
   const block = raw.match(/\{[\s\S]*\}/);
@@ -71,6 +96,12 @@ function parseMatch(raw: string): ScoredMatch | null {
       missing_skills: Array.isArray(parsed.missing_skills) ? parsed.missing_skills.map(String) : [],
       summary: String(parsed.summary ?? ""),
       resume_keywords: Array.isArray(parsed.resume_keywords) ? parsed.resume_keywords.map(String) : [],
+      required_skills: Array.isArray(parsed.required_skills) ? parsed.required_skills.map(String) : [],
+      seniority: text(parsed.seniority),
+      work_mode: text(parsed.work_mode),
+      employment_type: text(parsed.employment_type),
+      sponsorship: text(parsed.sponsorship),
+      clearance: text(parsed.clearance),
     };
   } catch {
     return null;

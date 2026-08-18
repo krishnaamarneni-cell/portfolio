@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { FiCompass, FiBookmark, FiFileText, FiGlobe, FiSliders, FiActivity } from "react-icons/fi";
+import { FiZap, FiCompass, FiBookmark, FiFileText, FiGlobe, FiSliders, FiActivity } from "react-icons/fi";
 import JobFeed from "./JobFeed";
 import SourcesPanel from "./SourcesPanel";
 import JobSettings from "./JobSettings";
@@ -11,10 +11,11 @@ import type { Stats } from "./types";
 
 type Props = { onSuccess: (m: string) => void; onError: (m: string) => void };
 
-type SubTab = "discover" | "saved" | "applications" | "automation" | "sources" | "settings";
+type SubTab = "today" | "discover" | "saved" | "applications" | "automation" | "sources" | "settings";
 
 const SUB_TABS: Array<{ id: SubTab; label: string; icon: React.ComponentType<{ size?: number }> }> = [
-  { id: "discover", label: "Discover", icon: FiCompass },
+  { id: "today", label: "Jobs Today", icon: FiZap },
+  { id: "discover", label: "All Jobs", icon: FiCompass },
   { id: "saved", label: "Saved", icon: FiBookmark },
   { id: "applications", label: "Applications", icon: FiFileText },
   { id: "automation", label: "Automation", icon: FiActivity },
@@ -23,7 +24,7 @@ const SUB_TABS: Array<{ id: SubTab; label: string; icon: React.ComponentType<{ s
 ];
 
 export default function JobFinderTab({ onSuccess, onError }: Props) {
-  const [sub, setSub] = useState<SubTab>("discover");
+  const [sub, setSub] = useState<SubTab>("today");
   const [stats, setStats] = useState<Stats>({});
 
   const handleStats = useCallback((s: Stats) => setStats(s), []);
@@ -72,6 +73,19 @@ export default function JobFinderTab({ onSuccess, onError }: Props) {
           );
         })}
       </div>
+
+      {sub === "today" && (
+        <JobFeed
+          scope="active"
+          showScoring
+          freshHours={24}
+          onStats={handleStats}
+          onSuccess={onSuccess}
+          onError={onError}
+          emptyTitle="Nothing new in the last 24 hours"
+          emptyHint="The automation sweeps employers every 15 minutes. Hit Find jobs to pull now, or check All Jobs for everything discovered so far."
+        />
+      )}
 
       {sub === "discover" && (
         <JobFeed

@@ -130,6 +130,8 @@ export type ListingsQuery = {
   min_score?: number;
   source_type?: string;
   sort?: "newest" | "match" | "company";
+  /** Only postings discovered within the last N hours — the "Today" feed. */
+  fresh_hours?: number;
   limit?: number;
   offset?: number;
 };
@@ -156,6 +158,9 @@ export async function queryListings(q: ListingsQuery) {
   if (q.work_type) query = query.eq("work_type", q.work_type);
   if (q.min_score) query = query.gte("match_score", q.min_score);
   if (q.source_type) query = query.eq("source_type", q.source_type);
+  if (q.fresh_hours && q.fresh_hours > 0) {
+    query = query.gte("created_at", new Date(Date.now() - q.fresh_hours * 3_600_000).toISOString());
+  }
 
   if (q.sort === "match") {
     query = query.order("match_score", { ascending: false, nullsFirst: false });

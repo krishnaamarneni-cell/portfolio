@@ -34,6 +34,7 @@ export async function GET(request: Request) {
     work_type: sp.get("work_type") ?? undefined,
     min_score: sp.get("min_score") ? Number(sp.get("min_score")) : undefined,
     source_type: sp.get("source_type") ?? undefined,
+    fresh_hours: sp.get("fresh_hours") ? Number(sp.get("fresh_hours")) : undefined,
     sort: (sp.get("sort") as ListingsQuery["sort"]) ?? "newest",
     limit: sp.get("limit") ? Number(sp.get("limit")) : 50,
     offset: sp.get("offset") ? Number(sp.get("offset")) : 0,

@@ -293,6 +293,12 @@ async function scoreUntil(
         missing_skills: m.missing_skills,
         match_summary: m.summary,
         resume_keywords: m.resume_keywords,
+        required_skills: m.required_skills.length ? m.required_skills : null,
+        seniority: m.seniority,
+        work_type: m.work_mode ?? undefined,
+        employment_type: m.employment_type,
+        sponsorship: m.sponsorship,
+        clearance: m.clearance,
         updated_at: new Date().toISOString(),
       })
       .eq("id", job.id);
