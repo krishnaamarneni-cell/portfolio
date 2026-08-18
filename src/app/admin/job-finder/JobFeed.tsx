@@ -20,9 +20,6 @@ type Props = {
   freshHours?: number;
 };
 
-/** Must match the batch size in /api/admin/job-finder/match. */
-const SCORE_BATCH = 10;
-
 const SORTS = [
   { id: "newest", label: "Newest" },
   { id: "match", label: "Best match" },
@@ -47,6 +44,9 @@ export default function JobFeed({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [needsMigration, setNeedsMigration] = useState(false);
   const [packet, setPacket] = useState<Listing | null>(null);
+  const [scoreProgress, setScoreProgress] = useState(0);
+  /** Read inside the scoring loop, so an abort is seen mid-run. */
+  const stopRef = useRef(false);
 
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -170,6 +170,12 @@ export default function JobFeed({
       );
       load();
       if (data.errors?.length) onError(`Some sources failed: ${data.errors[0]}`);
+      // A freshly found role is useless unscored, so score straight away rather
+      // than making the user notice and click a second button.
+      if (data.added) {
+        setFinding(false);
+        await scoreAll();
+      }
     } catch {
       onError("Job search failed.");
     } finally {
@@ -177,34 +183,76 @@ export default function JobFeed({
     }
   };
 
-  const scoreAll = async () => {
+  /**
+   * Score everything, not one batch.
+   *
+   * The endpoint handles ten listings per call to stay inside the function time
+   * limit, so a single click left hundreds unscored and looked broken. This
+   * keeps calling until the server reports nothing left, reporting progress as
+   * it goes. `stopScoring` lets the user abort a long run, and the ref is read
+   * inside the loop so the current value is always seen.
+   */
+  const scoreAll = useCallback(async () => {
     setScoring(true);
+    stopRef.current = false;
+    let totalScored = 0;
+    let totalRelevant = 0;
+
     try {
-      const res = await fetch("/api/admin/job-finder/match", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (data.error) {
-        onError(data.error);
-        return;
+      // Hard cap so a server that always reports work left can't spin forever.
+      for (let round = 0; round < 60; round++) {
+        if (stopRef.current) break;
+
+        const res = await fetch("/api/admin/job-finder/match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          cb.current.onError(data.error);
+          break;
+        }
+        if (!data.scored) break; // nothing left
+
+        totalScored += data.scored;
+        totalRelevant += data.relevant ?? 0;
+        setScoreProgress(totalScored);
+        // Refresh every couple of rounds so results appear as they land.
+        if (round % 2 === 1) load();
+        if (data.failures?.length) cb.current.onError(`Some failed: ${data.failures[0]}`);
       }
-      if (!data.scored) {
-        onSuccess(data.message ?? "Everything is already scored.");
+
+      if (!totalScored) {
+        cb.current.onSuccess("Everything is already scored.");
       } else {
-        onSuccess(`Scored ${data.scored} listing${data.scored === 1 ? "" : "s"}.`);
+        cb.current.onSuccess(
+          `Scored ${totalScored} listing${totalScored === 1 ? "" : "s"}` +
+            (totalRelevant ? ` · ${totalRelevant} relevant` : "") +
+            (stopRef.current ? " (stopped)" : "")
+        );
         load();
       }
-      if (data.failures?.length) onError(`Some failed: ${data.failures[0]}`);
     } catch {
-      onError("Scoring failed.");
+      cb.current.onError("Scoring failed.");
     } finally {
       setScoring(false);
+      setScoreProgress(0);
+      stopRef.current = false;
     }
-  };
+  }, [load]);
 
-  const unscored = useMemo(() => listings.filter((l) => l.match_score === null).length, [listings]);
+  // Counts what the scorer will actually pick up: never scored, or scored
+  // before the structured fields existed. Counting only null scores made the
+  // button read "Score with AI" while 82 listings still had empty facts.
+  const unscored = useMemo(
+    () =>
+      listings.filter(
+        (l) => l.match_score === null || (l.match_score >= 0 && !l.required_skills?.length)
+      ).length,
+    [listings]
+  );
 
   if (needsMigration) {
     return (
@@ -284,13 +332,27 @@ export default function JobFeed({
             title="Score unscored listings against your profile"
           >
             <FiZap size={13} className={scoring ? "animate-pulse" : ""} />
-            {/* The route scores SCORE_BATCH at a time; promising the full
-                unscored count made one click look like it had failed. */}
+            {/* Now loops until the server says nothing is left, so the label can
+                promise the whole queue rather than a single batch. */}
             {scoring
-              ? "Scoring…"
+              ? scoreProgress
+                ? `Scored ${scoreProgress}…`
+                : "Scoring…"
               : unscored
-                ? `Score ${Math.min(unscored, SCORE_BATCH)}${unscored > SCORE_BATCH ? ` of ${unscored}` : ""}`
+                ? `Score ${unscored}`
                 : "Score with AI"}
+          </button>
+        )}
+
+        {scoring && (
+          <button
+            onClick={() => {
+              stopRef.current = true;
+            }}
+            className="px-3 py-2 rounded-lg border border-[var(--admin-border)] text-[var(--admin-text-muted)] text-sm font-semibold hover:border-rose-500 hover:text-rose-500 transition-colors"
+            title="Finish the batch in flight, then stop"
+          >
+            Stop
           </button>
         )}
 

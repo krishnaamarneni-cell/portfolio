@@ -259,10 +259,14 @@ async function scoreUntil(
   const PER_JOB_ALLOWANCE = 9_000;
 
   while (Date.now() + PER_JOB_ALLOWANCE < deadline) {
+    // "Unfinished" means never scored OR scored before the structured fields
+    // existed. Without that second case, listings scored by an older build keep
+    // an empty facts grid forever. match_score = -1 is the parked value for an
+    // unparseable posting and must stay excluded, or it gets re-picked forever.
     const { data: batch, error } = await db
       .from("job_listings")
       .select("id, title, company, location, work_type, description, salary_range")
-      .is("match_score", null)
+      .or("match_score.is.null,and(match_score.gte.0,required_skills.is.null)")
       .in("status", ["new", "saved"])
       .order("created_at", { ascending: false })
       .limit(1);

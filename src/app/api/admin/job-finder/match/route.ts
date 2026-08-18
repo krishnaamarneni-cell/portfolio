@@ -36,7 +36,11 @@ export async function POST(request: Request) {
   if (body.ids?.length) {
     query = query.in("id", body.ids.slice(0, 15));
   } else {
-    if (!body.rescore) query = query.is("match_score", null);
+    // Scored-but-missing-metadata counts as unscored, so listings processed by
+    // an older build can still gain the structured fields.
+    if (!body.rescore) {
+      query = query.or("match_score.is.null,and(match_score.gte.0,required_skills.is.null)");
+    }
     query = query.in("status", ["new", "saved"]).order("created_at", { ascending: false }).limit(10);
   }
 
