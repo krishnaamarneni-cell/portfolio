@@ -25,11 +25,17 @@ function inferWorkType(location: string | null): string | null {
   return null;
 }
 
+/**
+ * Workday reports age as a phrase, not a date: "Posted Today",
+ * "Posted 3 Days Ago", "Posted 30+ Days Ago". The `\+?` matters — without it
+ * the very common "30+ Days Ago" fell through and the posting looked undated.
+ */
 function parsePostedOn(postedOn: string | null): string | null {
   if (!postedOn) return null;
-  // Workday returns phrases like "Posted 3 Days Ago" / "Posted Today".
-  const m = postedOn.match(/(\d+)\s*day/i);
-  if (m) return new Date(Date.now() - Number(m[1]) * 86_400_000).toISOString();
+  const days = postedOn.match(/(\d+)\s*\+?\s*day/i);
+  if (days) return new Date(Date.now() - Number(days[1]) * 86_400_000).toISOString();
+  const months = postedOn.match(/(\d+)\s*\+?\s*month/i);
+  if (months) return new Date(Date.now() - Number(months[1]) * 30 * 86_400_000).toISOString();
   if (/today|just posted/i.test(postedOn)) return new Date().toISOString();
   if (/yesterday/i.test(postedOn)) return new Date(Date.now() - 86_400_000).toISOString();
   const parsed = Date.parse(postedOn);

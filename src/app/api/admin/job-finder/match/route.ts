@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
-import { runAgent } from "@/lib/agents";
+import { resolveAgentModel, runAgent } from "@/lib/agents";
 import { getJobFinderSettings } from "@/lib/job-finder";
 
 export const dynamic = "force-dynamic";
@@ -128,7 +128,9 @@ export async function POST(request: Request) {
 
     const result = await runAgent({
       apiKey,
-      model: "llama-3.3-70b-versatile",
+      // Never pin a model ID here — Groq retires them. resolveAgentModel gives
+      // the configured default and runAgent drops any ID Groq no longer serves.
+      model: resolveAgentModel(null),
       systemPrompt: SYSTEM,
       userPrompt: `CANDIDATE\n${candidateBlock}\n\nJOB POSTING\n${jobBlock}`,
       maxTokens: 900,

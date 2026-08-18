@@ -75,6 +75,39 @@ export function scoreTone(score: number | null): { label: string; className: str
   return { label: "Skip", className: "bg-rose-500/10 text-rose-500 border-rose-500/30" };
 }
 
+/**
+ * How old a posting is, stated honestly.
+ *
+ * Two traps this avoids: showing when WE found a listing as though it were the
+ * posting date, and implying a precise date when Workday only reports "30+
+ * Days Ago" — its ceiling, so 30 days is a floor rather than a real date.
+ */
+export function postedAge(
+  postedAt: string | null,
+  createdAt: string
+): { label: string; title: string; atCap: boolean } {
+  if (!postedAt) {
+    return {
+      label: `found ${relativeDate(createdAt)}`,
+      title: "The source didn't report a posting date — this is when it was found",
+      atCap: false,
+    };
+  }
+  const days = Math.floor((Date.now() - new Date(postedAt).getTime()) / 86_400_000);
+  if (days >= 30) {
+    return {
+      label: "posted 30d+ ago",
+      title: "Source reported “30+ days ago”; the exact date isn't published",
+      atCap: true,
+    };
+  }
+  return {
+    label: `posted ${relativeDate(postedAt)}`,
+    title: `Posted ${new Date(postedAt).toLocaleDateString()}`,
+    atCap: false,
+  };
+}
+
 export function relativeDate(iso: string | null): string {
   if (!iso) return "";
   const then = new Date(iso).getTime();

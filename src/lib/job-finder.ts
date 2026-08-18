@@ -178,10 +178,13 @@ export async function upsertListing(
   const db = requireSupabaseAdmin();
   const now = new Date().toISOString();
 
+  // Match on the URL exactly as stored. Lowercasing here (while inserting the
+  // original case) made this lookup always miss, so every re-run fell through
+  // to an insert that then tripped the unique index on lower(application_url).
   const { data: existing } = await db
     .from("job_listings")
     .select("id")
-    .eq("application_url", listing.application_url.toLowerCase())
+    .eq("application_url", listing.application_url)
     .maybeSingle();
 
   if (existing) {
@@ -194,11 +197,16 @@ export async function upsertListing(
 
   const { data, error } = await db
     .from("job_listings")
-    .insert({ ...listing, application_url: listing.application_url, created_at: now, updated_at: now })
+    .insert({ ...listing, created_at: now, updated_at: now })
     .select("id")
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // 23505 = the same posting under different URL casing. It is already
+    // stored, and nothing about a re-discovered listing needs updating.
+    if (error.code === "23505") return { id: "", isNew: false };
+    throw new Error(error.message);
+  }
   return { id: data.id, isNew: true };
 }
 

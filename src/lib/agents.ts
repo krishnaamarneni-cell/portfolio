@@ -180,7 +180,7 @@ export async function runAgent(opts: {
   maxTokens?: number;
 }): Promise<{ ok: boolean; content?: string; error?: string; modelUsed?: string }> {
   const tried: Array<{ model: string; error: string }> = [];
-  const fallbacks = buildFallbackChain(opts.model);
+  const fallbacks = await resolveFallbackChain(opts.apiKey, opts.model);
   for (const m of fallbacks) {
     const res = await runOnce({
       apiKey: opts.apiKey,
@@ -280,4 +280,69 @@ function buildFallbackChain(requested: string): string[] {
   }
   // De-dupe while preserving order.
   return Array.from(new Set(chain));
+}
+
+/**
+ * Groq retires model IDs, and a retired one 404s with "model_not_found" — which
+ * is how every agent broke at once when llama-3.3-70b-versatile went away.
+ * Rather than hardcode replacements that will rot the same way, ask Groq what
+ * it actually serves and keep only chain entries that exist.
+ */
+let modelCache: { at: number; ids: Set<string> } | null = null;
+const MODEL_CACHE_MS = 10 * 60_000;
+
+/** Renames Groq has done. Tried when the original ID is gone. */
+const RENAMES: Record<string, string[]> = {
+  "compound-beta": ["groq/compound"],
+  "compound-beta-mini": ["groq/compound-mini"],
+};
+
+/** Preference order when nothing in the requested chain still exists. */
+const PREFERRED = [
+  "groq/compound",
+  "groq/compound-mini",
+  "llama-3.3-70b-versatile",
+  "openai/gpt-oss-120b",
+  "meta-llama/llama-4-maverick-17b-128e-instruct",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
+  "openai/gpt-oss-20b",
+  "qwen/qwen3-32b",
+  "llama-3.1-8b-instant",
+];
+
+async function availableModels(apiKey: string): Promise<Set<string> | null> {
+  if (modelCache && Date.now() - modelCache.at < MODEL_CACHE_MS) return modelCache.ids;
+  try {
+    const r = await fetch("https://api.groq.com/openai/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { data?: Array<{ id?: string }> };
+    const ids = new Set((j.data ?? []).map((m) => String(m.id)).filter(Boolean));
+    if (!ids.size) return null;
+    modelCache = { at: Date.now(), ids };
+    return ids;
+  } catch {
+    // Offline or the endpoint changed — fall through to the static chain.
+    return null;
+  }
+}
+
+async function resolveFallbackChain(apiKey: string, requested: string): Promise<string[]> {
+  const chain = buildFallbackChain(requested);
+  const available = await availableModels(apiKey);
+  if (!available) return chain;
+
+  const out: string[] = [];
+  for (const m of chain) {
+    if (available.has(m)) out.push(m);
+    else for (const alt of RENAMES[m] ?? []) if (available.has(alt)) out.push(alt);
+  }
+  // Nothing from the requested chain survives — use whatever Groq does serve.
+  if (!out.length) out.push(...PREFERRED.filter((m) => available.has(m)));
+  if (!out.length) out.push(...[...available].slice(0, 3));
+
+  return Array.from(new Set(out));
 }

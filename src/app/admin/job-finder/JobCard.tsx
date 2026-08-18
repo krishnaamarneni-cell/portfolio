@@ -13,7 +13,7 @@ import {
   FiCopy,
   FiCheck,
 } from "react-icons/fi";
-import { scoreTone, relativeDate, type Listing } from "./types";
+import { scoreTone, postedAge, type Listing } from "./types";
 
 type Props = {
   listing: Listing;
@@ -28,6 +28,8 @@ export default function JobCard({ listing, busy, onStatus, onDelete }: Props) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const tone = scoreTone(listing.match_score);
+
+  const age = postedAge(listing.posted_at, listing.created_at);
 
   const copyKeywords = async () => {
     const kw = listing.resume_keywords ?? [];
@@ -87,8 +89,12 @@ export default function JobCard({ listing, busy, onStatus, onDelete }: Props) {
                   {listing.source_type.replace(/_/g, " ")}
                 </span>
               )}
-              <span className="text-[10px] text-[var(--admin-text-muted)] ml-auto">
-                {relativeDate(listing.posted_at ?? listing.created_at)}
+              {/* Never label discovery time as posting time — say which it is. */}
+              <span
+                className={`text-[10px] ml-auto ${age.atCap ? "text-amber-500" : "text-[var(--admin-text-muted)]"}`}
+                title={age.title}
+              >
+                {age.label}
               </span>
             </div>
 
