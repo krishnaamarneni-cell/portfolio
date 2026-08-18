@@ -17,6 +17,7 @@ import { search, searchResultsToContext, whichSearchProvider, type SearchResult 
 import { fetchTickerNews, FINANCE_FEEDS, TECH_FEEDS, INDIA_FEEDS, GEOPOLITICS_FEEDS, JOB_MARKET_FEEDS, fetchManyFeeds, filterByQuery, type RssItem } from "@/lib/rss";
 import { sendEmailUnified } from "@/lib/resend";
 import { buildFactsContext } from "@/lib/facts";
+import { isDue } from "@/lib/note-parser";
 import { habitsWithStreaks } from "@/lib/habits";
 
 export type AdminSettings = {
@@ -791,11 +792,10 @@ export async function buildReflection(): Promise<ReflectionPayload> {
   ]);
 
   const recentNotes = notes.filter((n) => n.created_at >= weekAgoISO);
-  const upcomingNotes = notes.filter((n) => {
-    if (!n.event_date) return false;
-    const d = daysUntil(n, now) ?? -999;
-    return d >= 0 && d <= 30;
-  });
+  // A note surfaces inside its OWN reminder window, not a blanket 30 days.
+  // Treating a birthday eight months out the same as a filing due next week is
+  // what turned this digest into a list nobody reads.
+  const upcomingNotes = notes.filter((n) => isDue(n, now));
 
   const habitsBlock = habits
     .map(

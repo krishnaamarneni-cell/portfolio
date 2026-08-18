@@ -17,7 +17,6 @@ import TwoFactorCard from "./TwoFactorCard";
 import FaceLockCard from "./FaceLockCard";
 import LucyImportCard from "./LucyImportCard";
 import SignOutCard from "./SignOutCard";
-import { MorningBriefingCard, SundayReflectionCard } from "./PersonalTab";
 import AutoReplyCard from "./personal/AutoReplyCard";
 import { getToolsForDisplay } from "@/lib/mcp-tools";
 
@@ -195,13 +194,10 @@ export default function ConnectorsEditor({ onSuccess, onError, sessionEmail }: P
       {/* Lucy vault import + knowledge library */}
       <LucyImportCard onSuccess={onSuccess} onError={onError} />
 
-      {/* Morning Briefing + Sunday Reflection */}
-      <div className="mt-6">
-        <MorningBriefingCard onError={onError} onSuccess={onSuccess} />
-      </div>
-      <div className="mt-4">
-        <SundayReflectionCard onError={onError} onSuccess={onSuccess} />
-      </div>
+      {/* Morning Briefing and Sunday Reflection used to sit here as well as on
+          Life. They are about the day, not about configuration, so Life is the
+          only place they belong — two copies of the same controls was a large
+          part of why this page felt crowded. */}
       <div className="mt-4">
         <AutoReplyCard onError={onError} onSuccess={onSuccess} />
       </div>
