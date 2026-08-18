@@ -10,11 +10,65 @@ import {
   FiAlertTriangle,
   FiSearch,
   FiInfo,
+  FiClock,
 } from "react-icons/fi";
 import type { DirectoryEntry, Source } from "./types";
 import { relativeDate } from "./types";
 
 type Props = { onSuccess: (m: string) => void; onError: (m: string) => void };
+
+type HealthRow = {
+  company: string;
+  kind: string;
+  status: string | null;
+  last_checked_at: string | null;
+  last_jobs_found: number | null;
+  total_jobs_found: number | null;
+  last_error: string | null;
+  consecutive_failures: number | null;
+};
+
+/**
+ * The five source states.
+ *
+ * `no_matches` is the one that matters: a source returning zero jobs is healthy,
+ * not broken. Nine sources here are tech boards being queried with SAP keywords
+ * — showing them as failures would invite switching off sources that work.
+ */
+const STATE_META: Record<string, { label: string; dot: string; chip: string; blurb: string }> = {
+  producing: {
+    label: "Producing",
+    dot: "bg-emerald-500",
+    chip: "bg-emerald-500/10 text-emerald-500 border-emerald-500/30",
+    blurb: "returning matching jobs",
+  },
+  no_matches: {
+    label: "No matches",
+    dot: "bg-sky-500",
+    chip: "bg-sky-500/10 text-sky-500 border-sky-500/30",
+    blurb: "healthy — nothing matched your keywords",
+  },
+  failing: {
+    label: "Failing",
+    dot: "bg-rose-500",
+    chip: "bg-rose-500/10 text-rose-500 border-rose-500/30",
+    blurb: "errored on the last crawl",
+  },
+  unverified: {
+    label: "Unverified",
+    dot: "bg-amber-500",
+    chip: "bg-amber-500/10 text-amber-500 border-amber-500/30",
+    blurb: "registered but not yet crawled",
+  },
+  inactive: {
+    label: "Inactive",
+    dot: "bg-[var(--admin-text-muted)]",
+    chip: "bg-[var(--admin-bg)] text-[var(--admin-text-muted)] border-[var(--admin-border)]",
+    blurb: "switched off",
+  },
+};
+
+const STATE_ORDER = ["producing", "no_matches", "unverified", "failing", "inactive"];
 
 export default function SourcesPanel({ onSuccess, onError }: Props) {
   const [sources, setSources] = useState<Source[]>([]);
@@ -25,6 +79,8 @@ export default function SourcesPanel({ onSuccess, onError }: Props) {
   const [dirSearch, setDirSearch] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [liveSources, setLiveSources] = useState<Array<{ company: string; ats: string }>>([]);
+  const [health, setHealth] = useState<HealthRow[]>([]);
+  const [lastCrawlAt, setLastCrawlAt] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -49,6 +105,8 @@ export default function SourcesPanel({ onSuccess, onError }: Props) {
       setSources(data.sources ?? []);
       setDirectory(data.directory ?? []);
       setLiveSources(data.liveSources ?? []);
+      setHealth(data.health ?? []);
+      setLastCrawlAt(data.lastCrawlAt ?? null);
     } catch {
       cb.current.onError("Could not load sources.");
     } finally {
@@ -134,6 +192,23 @@ export default function SourcesPanel({ onSuccess, onError }: Props) {
     (d) => !d.added && d.name.toLowerCase().includes(dirSearch.trim().toLowerCase())
   );
 
+  /** Health row for one registry entry; undefined until first crawled. */
+  const healthFor = (company: string, kind: string) =>
+    health.find(
+      (h) => h.company === company && h.kind.toLowerCase() === kind.toLowerCase()
+    );
+
+  // Every registry source is counted, defaulting to unverified — so a source the
+  // cursor has never reached is visible rather than simply absent.
+  const stateCounts = (() => {
+    const byState: Record<string, number> = {};
+    for (const s of liveSources) {
+      const state = healthFor(s.company, s.ats)?.status ?? "unverified";
+      byState[state] = (byState[state] || 0) + 1;
+    }
+    return { byState, total: liveSources.length };
+  })();
+
   if (needsMigration) {
     return (
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5 flex gap-3">
@@ -166,21 +241,55 @@ export default function SourcesPanel({ onSuccess, onError }: Props) {
           </span>
         </div>
 
-        {liveSources.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-3.5">
-            {liveSources.map((s) => (
-              <span
-                key={`${s.ats}-${s.company}`}
-                title={`Live via ${s.ats}`}
-                className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
-                  s.ats === "Workday"
-                    ? "bg-sky-500/10 text-sky-500 border-sky-500/30"
-                    : "bg-violet-500/10 text-violet-500 border-violet-500/30"
-                }`}
-              >
-                {s.company}
+        {/* Status summary. Counts, not adjectives — "9 no matches" should read
+            as information, not as nine things to go and fix. */}
+        {stateCounts.total > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mt-3.5">
+            {STATE_ORDER.filter((k) => stateCounts.byState[k]).map((k) => {
+              const meta = STATE_META[k];
+              return (
+                <span
+                  key={k}
+                  title={meta.blurb}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${meta.chip}`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+                  {stateCounts.byState[k]} {meta.label.toLowerCase()}
+                </span>
+              );
+            })}
+            {lastCrawlAt && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-[var(--admin-text-muted)] ml-auto">
+                <FiClock size={11} />
+                last crawl {relativeDate(lastCrawlAt)}
               </span>
-            ))}
+            )}
+          </div>
+        )}
+
+        {liveSources.length > 0 && (
+          <div className="grid gap-1.5 mt-3.5 sm:grid-cols-2 lg:grid-cols-3">
+            {liveSources.map((s) => {
+              const h = healthFor(s.company, s.ats);
+              const state = h?.status ?? "unverified";
+              const meta = STATE_META[state] ?? STATE_META.unverified;
+              return (
+                <div
+                  key={`${s.ats}-${s.company}`}
+                  title={h?.last_error ? `${meta.label}: ${h.last_error}` : `${meta.label} — ${meta.blurb}`}
+                  className="flex items-center gap-2 bg-[var(--admin-bg)] rounded-lg border border-[var(--admin-border)] px-2.5 py-1.5"
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot}`} />
+                  <span className="text-[11px] font-semibold text-[var(--admin-text)] truncate">
+                    {s.company}
+                  </span>
+                  <span className="text-[9px] text-[var(--admin-text-muted)] shrink-0">{s.ats}</span>
+                  <span className="ml-auto text-[10px] text-[var(--admin-text-muted)] tabular-nums shrink-0">
+                    {h?.total_jobs_found ?? 0}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

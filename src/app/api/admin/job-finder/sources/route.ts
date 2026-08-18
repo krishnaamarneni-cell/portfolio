@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
 import { CAREER_SITES } from "@/lib/company-careers";
-import { WORKDAY_TENANTS, GREENHOUSE_BOARDS } from "@/lib/job-sources";
+import { ATS_SOURCES } from "@/lib/ats";
 import type { JobSource } from "@/lib/job-finder";
 
 export const dynamic = "force-dynamic";
@@ -51,12 +51,40 @@ export async function GET() {
     // The companies "Find jobs" actually searches. Hardcoded in job-sources.ts
     // and entirely independent of the job_sources table — surfaced here because
     // otherwise nothing in the UI shows what discovery really covers.
-    const liveSources = [
-      ...WORKDAY_TENANTS.map((t) => ({ company: t.company, ats: "Workday" })),
-      ...GREENHOUSE_BOARDS.map((b) => ({ company: b.company, ats: "Greenhouse" })),
-    ].sort((a, b) => a.company.localeCompare(b.company));
+    // Read from the crawler's own registry so this can never drift from what is
+    // actually searched — the earlier hand-built list silently omitted Lever,
+    // Ashby and SmartRecruiters.
+    const liveSources = ATS_SOURCES.map((s) => ({ company: s.company, ats: s.kind })).sort(
+      (a, b) => a.company.localeCompare(b.company)
+    );
 
-    return NextResponse.json({ sources: (data ?? []) as JobSource[], directory, liveSources });
+    // Health for the live sources, so "Sources" can show what each one is
+    // actually doing rather than implying the registry is the truth.
+    let health: unknown[] = [];
+    let lastCrawlAt: string | null = null;
+    try {
+      const { data: h } = await db
+        .from("job_source_health")
+        .select("company,kind,status,last_checked_at,last_jobs_found,total_jobs_found,last_error,consecutive_failures")
+        .order("total_jobs_found", { ascending: false })
+        .limit(200);
+      health = h ?? [];
+      for (const row of (h ?? []) as Array<{ last_checked_at: string | null }>) {
+        if (row.last_checked_at && (!lastCrawlAt || row.last_checked_at > lastCrawlAt)) {
+          lastCrawlAt = row.last_checked_at;
+        }
+      }
+    } catch {
+      // Health is additive; the tab still works without it.
+    }
+
+    return NextResponse.json({
+      sources: (data ?? []) as JobSource[],
+      directory,
+      liveSources,
+      health,
+      lastCrawlAt,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to load";
     return NextResponse.json(

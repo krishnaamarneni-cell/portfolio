@@ -20,6 +20,16 @@ type Props = {
   freshHours?: number;
 };
 
+/** Platforms the crawler can produce, with display labels. */
+const PLATFORMS: Array<{ id: string; label: string }> = [
+  { id: "workday", label: "Workday" },
+  { id: "greenhouse", label: "Greenhouse" },
+  { id: "ashby", label: "Ashby" },
+  { id: "smartrecruiters", label: "SmartRecruiters" },
+  { id: "lever", label: "Lever" },
+  { id: "email", label: "Recruiter email" },
+];
+
 const SORTS = [
   { id: "newest", label: "Newest" },
   { id: "match", label: "Best match" },
@@ -52,6 +62,8 @@ export default function JobFeed({
   const [debounced, setDebounced] = useState("");
   const [sort, setSort] = useState("newest");
   const [minScore, setMinScore] = useState(0);
+  const [platform, setPlatform] = useState("");
+  const [platformCounts, setPlatformCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 350);
@@ -70,6 +82,7 @@ export default function JobFeed({
       if (debounced) params.set("search", debounced);
       if (minScore > 0) params.set("min_score", String(minScore));
       if (freshHours) params.set("fresh_hours", String(freshHours));
+      if (platform) params.set("source_type", platform);
 
       const res = await fetch(`/api/admin/job-finder?${params}`);
       const data = await res.json();
@@ -87,12 +100,13 @@ export default function JobFeed({
       setListings(data.listings ?? []);
       setTotal(data.total ?? 0);
       if (data.stats) cb.current.onStats?.(data.stats);
+      if (data.platforms) setPlatformCounts(data.platforms);
     } catch {
       cb.current.onError("Could not load job listings.");
     } finally {
       setLoading(false);
     }
-  }, [scope, sort, debounced, minScore, freshHours]);
+  }, [scope, sort, debounced, minScore, freshHours, platform]);
 
   useEffect(() => {
     load();
@@ -294,6 +308,21 @@ export default function JobFeed({
           {SORTS.map((s) => (
             <option key={s.id} value={s.id}>
               {s.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Source filter. Counts come from active listings only, so an option
+            never promises results that a filter then hides. */}
+        <select
+          value={platform}
+          onChange={(e) => setPlatform(e.target.value)}
+          className="px-3 py-2 rounded-lg bg-[var(--admin-surface)] border border-[var(--admin-border)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[#ff6b00]"
+        >
+          <option value="">All sources</option>
+          {PLATFORMS.filter((p) => (platformCounts[p.id] ?? 0) > 0 || p.id === platform).map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label} ({platformCounts[p.id] ?? 0})
             </option>
           ))}
         </select>

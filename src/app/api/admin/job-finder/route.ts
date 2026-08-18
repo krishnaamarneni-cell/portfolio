@@ -6,6 +6,7 @@ import {
   updateListingStatus,
   upsertListing,
   getListingStats,
+  getPlatformCounts,
   type ListingsQuery,
 } from "@/lib/job-finder";
 
@@ -52,12 +53,12 @@ export async function GET(request: Request) {
         error: missing ? MIGRATION_HINT : error,
       });
     }
-    const stats = await getListingStats();
-    return NextResponse.json({ listings, total, stats });
+    const [stats, platforms] = await Promise.all([getListingStats(), getPlatformCounts()]);
+    return NextResponse.json({ listings, total, stats, platforms });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to load";
     return NextResponse.json(
-      { listings: [], total: 0, stats: {}, needsMigration: isMissingTable(message), error: message },
+      { listings: [], total: 0, stats: {}, platforms: {}, needsMigration: isMissingTable(message), error: message },
       { status: isMissingTable(message) ? 200 : 500 }
     );
   }

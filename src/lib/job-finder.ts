@@ -351,3 +351,25 @@ export async function getListingStats() {
   }
   return counts;
 }
+
+/**
+ * Active listings per platform, for the source filter.
+ *
+ * Counted over new+saved only: a filter offering "Lever (1)" when that one
+ * listing was ignored months ago would send the user to an empty view.
+ */
+export async function getPlatformCounts(): Promise<Record<string, number>> {
+  const db = requireSupabaseAdmin();
+  const { data } = await db
+    .from("job_listings")
+    .select("source_type")
+    .in("status", ["new", "saved"])
+    .limit(10000);
+
+  const counts: Record<string, number> = {};
+  for (const r of data ?? []) {
+    const k = r.source_type || "unknown";
+    counts[k] = (counts[k] || 0) + 1;
+  }
+  return counts;
+}
