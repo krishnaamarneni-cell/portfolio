@@ -80,6 +80,39 @@ function parseMatch(raw: string): ScoredMatch | null {
 /** Workday's stand-ins for "we aren't saying where" — not a real mismatch. */
 const AMBIGUOUS_LOCATION = /^\s*(\d+\s+locations?|multiple\s+locations?|location\s+negotiable|various)\s*$/i;
 
+/**
+ * Country and region tokens the matcher can actually reason about.
+ *
+ * The point is knowing when we DON'T know. A bare city — "Maplewood" (3M's
+ * Minnesota HQ), "Warren Plant" — carries no country signal, and treating an
+ * unrecognised string as a mismatch silently discarded real US roles. So a
+ * location is only judged when something here appears in it; otherwise it is
+ * unknown, kept, and flagged for the human to confirm.
+ */
+const COUNTRY_SIGNAL =
+  /\b(usa?|u\.s\.a?\.?|united states|america|canada|can|mexico|mex|brazil|bra|colombia|col|peru|costa rica|cri|argentina|chile|india|ind|china|chn|japan|jpn|korea|kor|singapore|sgp|malaysia|mys|indonesia|idn|thailand|tha|vietnam|vnm|philippines|phl|australia|aus|new zealand|nzl|united kingdom|uk|gbr|england|scotland|ireland|irl|france|fra|germany|deu|ger|spain|esp|portugal|prt|italy|ita|netherlands|nld|holland|belgium|bel|switzerland|che|austria|aut|poland|pol|czech|cze|slovak|svk|hungary|hun|romania|rou|bulgaria|bgr|greece|grc|turkey|tur|israel|isr|egypt|egy|south africa|zaf|nigeria|nga|kenya|ken|uae|saudi|qatar|kazakhstan|kaz|russia|rus|ukraine|ukr|sweden|swe|norway|nor|denmark|dnk|finland|fin|taiwan|twn|hong kong|hkg)\b/i;
+
+/** Cities that appear bare but are unambiguous enough to judge. */
+const KNOWN_FOREIGN_CITY =
+  /\b(bangkok|jakarta|taguig|manila|shanghai|beijing|shenzhen|mumbai|delhi|bengaluru|bangalore|hyderabad|chennai|pune|kolkata|gurgaon|noida|kuala lumpur|singapore|seoul|tokyo|osaka|sydney|melbourne|auckland|wellington|london|manchester|dublin|paris|lyon|berlin|munich|hilden|frankfurt|hamburg|madrid|barcelona|lisbon|milan|rome|amsterdam|rotterdam|brussels|zurich|geneva|vienna|warsaw|krakow|prague|budapest|bucharest|sofia|athens|istanbul|dubai|cairo|johannesburg|lagos|nairobi|monterrey|guadalajara|bogota|bogotá|lima|santiago|sao paulo|são paulo|camacari|buenos aires|toronto|vancouver|montreal)\b/i;
+
+/**
+ * Workday frequently prefixes an ISO country code — "MX, Potosi Sl",
+ * "US - New Jersey - Rahway", "IND - Telangana". A leading two/three-letter
+ * code is a country statement, so these strings are judgeable even when the
+ * city itself is unfamiliar.
+ */
+const ISO_PREFIX = /^\s*([A-Z]{2,3})\s*[,\-–]/;
+
+/** Can this string be judged at all, or is the country genuinely unstated? */
+function hasGeographicSignal(location: string): boolean {
+  return (
+    COUNTRY_SIGNAL.test(location) ||
+    KNOWN_FOREIGN_CITY.test(location) ||
+    ISO_PREFIX.test(location)
+  );
+}
+
 /** Ceiling for a posting outside every preferred location. */
 export const OUT_OF_AREA_CAP = 35;
 
@@ -90,7 +123,23 @@ export function locationVerdict(
   if (!preferred.length) return { ok: true, unknown: false };
   if (!location?.trim() || AMBIGUOUS_LOCATION.test(location)) return { ok: true, unknown: true };
   if (/remote|anywhere|work from home|virtual/i.test(location)) return { ok: true, unknown: false };
-  return { ok: preferred.some((p) => matchesLocation(location, p)), unknown: false };
+
+  // A positive match settles it regardless of how sparse the string is.
+  if (preferred.some((p) => matchesLocation(location, p))) return { ok: true, unknown: false };
+
+  // "US, Austin" style — a US ISO prefix that the country rules, which expect
+  // "US - ", don't catch.
+  const iso = location.match(ISO_PREFIX)?.[1]?.toUpperCase();
+  if (iso && ["US", "USA"].includes(iso) && preferred.some((p) => /^(us|usa|united states|america)$/i.test(p.trim()))) {
+    return { ok: true, unknown: false };
+  }
+
+  // No match — but only call that a rejection when the string actually names a
+  // place we recognise. Otherwise we are guessing, and guessing wrong here
+  // throws away real roles.
+  if (!hasGeographicSignal(location)) return { ok: true, unknown: true };
+
+  return { ok: false, unknown: false };
 }
 
 export function buildCandidateBlock(settings: JobFinderSettings): string {

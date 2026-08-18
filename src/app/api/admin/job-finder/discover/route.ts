@@ -2,18 +2,21 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { fetchWorkdayJobs, fetchGreenhouseBoards, type SourcedJob } from "@/lib/job-sources";
 import { getJobFinderSettings, bulkUpsertListings } from "@/lib/job-finder";
+import { locationVerdict } from "@/lib/job-scoring";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 /**
  * Pull live postings into job_listings.
  *
- * Discovery is deliberately BROAD — no location filter unless the caller asks
- * for one. Preferences (location, work type, target roles) are applied at
- * scoring time by /api/admin/job-finder/match, so narrowing here would throw
- * away postings before the AI ever weighs them.
+ * Discovery is broad on keywords but NOT on geography: postings outside the
+ * preferred locations are discarded before they are stored. Keeping them meant
+ * Discover filled with roles in countries the search excludes, and each one
+ * still consumed a scoring call only to be capped afterwards. Postings whose
+ * location the source didn't state are kept — they may be in area, and the
+ * scorer flags them for confirmation.
  */
 
 /** Workday location strings are free text; this is the only signal we get. */
@@ -103,7 +106,13 @@ export async function POST(request: Request) {
   }
   found.push(...(await greenhouse));
 
-  const rows = found
+  // Postings outside the preferred locations are dropped here rather than
+  // stored and capped later — otherwise Discover fills with roles in countries
+  // the search excludes, and each one still costs a scoring call.
+  const inArea = found.filter((j) => locationVerdict(j.location, settings.locations).ok);
+  const skippedOutOfArea = found.length - inArea.length;
+
+  const rows = inArea
     .filter((j) => j.title?.trim() && j.url?.trim())
     .map((job) => ({
       title: job.title.trim(),
@@ -136,6 +145,7 @@ export async function POST(request: Request) {
     ok: true,
     searched: keywords,
     found: rows.length,
+    outOfArea: skippedOutOfArea,
     added: result.added,
     updated: result.skipped,
     errors: [...searchErrors, ...result.errors].slice(0, 3),

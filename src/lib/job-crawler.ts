@@ -19,13 +19,15 @@ import {
   getJobFinderSettings,
   type JobFinderSettings,
 } from "@/lib/job-finder";
-import { buildCandidateBlock, scoreJob } from "@/lib/job-scoring";
+import { buildCandidateBlock, locationVerdict, scoreJob } from "@/lib/job-scoring";
 import type { SourcedJob } from "@/lib/job-sources";
 
 export type CrawlResult = {
   sourcesChecked: number;
   jobsSeen: number;
   jobsAdded: number;
+  /** Postings discarded for being outside the preferred locations. */
+  outOfArea: number;
   jobsScored: number;
   relevantFound: number;
   cursorStart: number;
@@ -154,6 +156,7 @@ export async function runCrawlCycle(opts: {
   let sourcesChecked = 0;
   let jobsSeen = 0;
   let jobsAdded = 0;
+  let outOfArea = 0;
 
   // ── Phase 1: sweep a slice of the source list ──
   if (!opts.scoreOnly && ATS_SOURCES.length) {
@@ -174,10 +177,19 @@ export async function runCrawlCycle(opts: {
     }
 
     jobsSeen = collected.length;
+    outOfArea = collected.filter(
+      (j) => !locationVerdict(j.location, settings.locations).ok
+    ).length;
 
     if (collected.length) {
+      // Drop out-of-area postings before they are stored. Keeping them meant
+      // Discover filled with roles in countries the search excludes, and every
+      // one of them still consumed a scoring call just to be capped. Postings
+      // whose location the source didn't state are kept — they may well be
+      // in area, and the scorer flags them for confirmation.
       const rows = collected
         .filter((j) => j.title?.trim() && j.url?.trim())
+        .filter((j) => locationVerdict(j.location, settings.locations).ok)
         .map((j) => ({
           title: j.title.trim(),
           application_url: j.url.trim(),
@@ -209,6 +221,7 @@ export async function runCrawlCycle(opts: {
     sourcesChecked,
     jobsSeen,
     jobsAdded,
+    outOfArea,
     jobsScored: scored.count,
     relevantFound: scored.relevant,
     cursorStart,
