@@ -12,6 +12,7 @@ import {
   FiMapPin,
   FiCopy,
   FiCheck,
+  FiClipboard,
 } from "react-icons/fi";
 import { scoreTone, postedAge, type Listing } from "./types";
 
@@ -20,11 +21,12 @@ type Props = {
   busy: boolean;
   onStatus: (id: string, status: string) => void;
   onDelete: (id: string) => void;
+  onPrepare?: (listing: Listing) => void;
 };
 
 const CHIP = "px-2 py-0.5 rounded-md text-[10px] font-semibold border";
 
-export default function JobCard({ listing, busy, onStatus, onDelete }: Props) {
+export default function JobCard({ listing, busy, onStatus, onDelete, onPrepare }: Props) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const tone = scoreTone(listing.match_score);
@@ -114,6 +116,17 @@ export default function JobCard({ listing, busy, onStatus, onDelete }: Props) {
             <FiExternalLink size={12} />
             Open posting
           </a>
+
+          {onPrepare && (
+            <button
+              onClick={() => onPrepare(listing)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#ff6b00] text-[#ff6b00] text-xs font-semibold hover:bg-[#ff6b00]/10 transition-colors"
+              title="Open the application packet — every answer ready to paste"
+            >
+              <FiClipboard size={12} />
+              Prepare
+            </button>
+          )}
 
           {listing.status !== "saved" && (
             <button

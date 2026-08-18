@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiSearch, FiRefreshCw, FiZap, FiInbox, FiAlertTriangle, FiDownloadCloud } from "react-icons/fi";
 import JobCard from "./JobCard";
+import ApplicationPacket from "./ApplicationPacket";
 import type { Listing, Stats } from "./types";
 
 type Props = {
@@ -42,6 +43,7 @@ export default function JobFeed({
   const [finding, setFinding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [needsMigration, setNeedsMigration] = useState(false);
+  const [packet, setPacket] = useState<Listing | null>(null);
 
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -321,10 +323,21 @@ export default function JobFeed({
                 busy={busyId === l.id}
                 onStatus={setStatus}
                 onDelete={remove}
+                onPrepare={setPacket}
               />
             ))}
           </div>
         </>
+      )}
+
+      {packet && (
+        <ApplicationPacket
+          listing={packet}
+          onClose={() => setPacket(null)}
+          onApplied={(id) => setListings((rows) => rows.filter((r) => r.id !== id))}
+          onSuccess={onSuccess}
+          onError={onError}
+        />
       )}
     </div>
   );
