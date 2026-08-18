@@ -421,38 +421,57 @@ export default function JobFeed({
         {showScoring && (
           <button
             onClick={toggleAutoScore}
-            className={`px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
-              autoScore
-                ? "border-[#ff6b00] text-[#ff6b00]"
-                : "border-[var(--admin-border)] text-[var(--admin-text-muted)]"
-            }`}
+            role="switch"
+            aria-checked={autoScore}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--admin-border)] text-sm font-semibold text-[var(--admin-text)] hover:border-[#ff6b00] transition-colors"
             title={
               autoScore
-                ? "Scoring runs automatically as jobs arrive — click to turn off"
-                : "Auto-scoring is off — click to turn on"
+                ? "New jobs are scored automatically as they arrive"
+                : "Jobs are only scored when you press Score"
             }
           >
-            Auto {autoScore ? "on" : "off"}
+            {/* A labelled switch, not a button whose text flips. "Auto off" read
+                as both "auto is off" and "click to turn auto off". */}
+            <span className="text-[var(--admin-text-muted)] font-medium">Auto-score</span>
+            <span
+              className={`relative w-8 h-4 rounded-full transition-colors shrink-0 ${
+                autoScore ? "bg-[#ff6b00]" : "bg-[var(--admin-border)]"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${
+                  autoScore ? "left-[18px]" : "left-0.5"
+                }`}
+              />
+            </span>
           </button>
         )}
 
         {showScoring && (
           <button
             onClick={scoreAll}
-            disabled={scoring}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--admin-border)] text-[var(--admin-text)] text-sm font-semibold hover:border-[#ff6b00] transition-colors disabled:opacity-50"
-            title="Score unscored listings against your profile"
+            disabled={scoring || !unscored}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--admin-border)] text-[var(--admin-text)] text-sm font-semibold hover:border-[#ff6b00] transition-colors disabled:opacity-40"
+            title={
+              unscored
+                ? `${unscored} listing${unscored === 1 ? "" : "s"} still to score`
+                : "Everything in this view is scored"
+            }
           >
             <FiZap size={13} className={scoring ? "animate-pulse" : ""} />
-            {/* Now loops until the server says nothing is left, so the label can
-                promise the whole queue rather than a single batch. */}
+            {/* Loops until the server says nothing is left, so the label can
+                promise the whole queue rather than a single batch. When auto is
+                on this is only an "impatient" button — the count alone read as a
+                demand, so the wording says it is optional. */}
             {scoring
               ? scoreProgress
                 ? `Scored ${scoreProgress}…`
                 : "Scoring…"
-              : unscored
-                ? `Score ${unscored}`
-                : "Score with AI"}
+              : !unscored
+                ? "All scored"
+                : autoScore
+                  ? `Score ${unscored} now`
+                  : `Score ${unscored}`}
           </button>
         )}
 
