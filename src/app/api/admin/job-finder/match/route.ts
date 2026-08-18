@@ -82,7 +82,11 @@ export async function POST(request: Request) {
         missing_skills: m.missing_skills,
         match_summary: m.summary,
         resume_keywords: m.resume_keywords,
-        required_skills: m.required_skills.length ? m.required_skills : null,
+        // Always an array, never null. Storing null when the model found no
+        // skills made "required_skills IS NULL" mean both "never processed" and
+        // "processed, nothing found" — so 85 already-scored listings were
+        // re-picked on every pass and the unscored count never fell.
+        required_skills: m.required_skills,
         seniority: m.seniority,
         work_type: m.work_mode ?? undefined,
         employment_type: m.employment_type,

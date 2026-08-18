@@ -308,7 +308,7 @@ export default function JobFeed({
   const unscored = useMemo(
     () =>
       listings.filter(
-        (l) => l.match_score === null || (l.match_score >= 0 && !l.required_skills?.length)
+        (l) => l.match_score === null || (l.match_score >= 0 && l.required_skills === null)
       ).length,
     [listings]
   );
@@ -447,7 +447,9 @@ export default function JobFeed({
           </button>
         )}
 
-        {showScoring && (
+        {/* Only offered when auto is off, or while a run is in flight so its
+            progress stays visible. With auto on it is redundant. */}
+        {showScoring && (!autoScore || scoring) && (
           <button
             onClick={scoreAll}
             disabled={scoring || !unscored}
@@ -469,9 +471,7 @@ export default function JobFeed({
                 : "Scoring…"
               : !unscored
                 ? "All scored"
-                : autoScore
-                  ? `Score ${unscored} now`
-                  : `Score ${unscored}`}
+                : `Score all ${unscored} now`}
           </button>
         )}
 
