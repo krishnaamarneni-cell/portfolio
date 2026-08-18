@@ -62,6 +62,37 @@ export default function JobFeed({
   const [mobileOpen, setMobileOpen] = useState(false);
   /** Read inside the scoring loop, so an abort is seen mid-run. */
   const stopRef = useRef(false);
+  /**
+   * Auto-score, remembered across visits.
+   *
+   * Reads once on mount rather than on every render — localStorage during
+   * render would make the component non-deterministic, and this only needs to
+   * be read at startup.
+   */
+  const [autoScore, setAutoScore] = useState(true);
+  const [autoScoreReady, setAutoScoreReady] = useState(false);
+  /** One auto-run per batch of unscored work, so it cannot loop. */
+  const autoRanRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      setAutoScore(localStorage.getItem("jobFinderAutoScore") !== "off");
+    } catch {
+      // Private mode or blocked storage — the default stands.
+    }
+    setAutoScoreReady(true);
+  }, []);
+
+  const toggleAutoScore = () => {
+    setAutoScore((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("jobFinderAutoScore", next ? "on" : "off");
+      } catch {}
+      if (!next) stopRef.current = true;
+      return next;
+    });
+  };
 
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -282,6 +313,26 @@ export default function JobFeed({
     [listings]
   );
 
+  /**
+   * Start scoring on its own when unscored work appears.
+   *
+   * Scoring is what makes a listing useful, so requiring a click meant the feed
+   * routinely sat full of grey rings. Gated on `showScoring` so it only runs on
+   * the discovery feeds, and on a ref so a completed run does not immediately
+   * restart — the flag clears only once the queue is empty.
+   */
+  useEffect(() => {
+    if (!showScoring || !autoScore || !autoScoreReady) return;
+    if (loading || scoring) return;
+    if (unscored === 0) {
+      autoRanRef.current = false;
+      return;
+    }
+    if (autoRanRef.current) return;
+    autoRanRef.current = true;
+    scoreAll();
+  }, [showScoring, autoScore, autoScoreReady, loading, scoring, unscored, scoreAll]);
+
   if (needsMigration) {
     return (
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5 flex gap-3">
@@ -364,6 +415,24 @@ export default function JobFeed({
           >
             <FiDownloadCloud size={13} className={finding ? "animate-pulse" : ""} />
             {finding ? "Searching…" : "Find jobs"}
+          </button>
+        )}
+
+        {showScoring && (
+          <button
+            onClick={toggleAutoScore}
+            className={`px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
+              autoScore
+                ? "border-[#ff6b00] text-[#ff6b00]"
+                : "border-[var(--admin-border)] text-[var(--admin-text-muted)]"
+            }`}
+            title={
+              autoScore
+                ? "Scoring runs automatically as jobs arrive — click to turn off"
+                : "Auto-scoring is off — click to turn on"
+            }
+          >
+            Auto {autoScore ? "on" : "off"}
           </button>
         )}
 

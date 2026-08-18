@@ -1,8 +1,8 @@
 "use client";
 
-import { FiMapPin, FiClock } from "react-icons/fi";
+import { FiMapPin, FiClock, FiMail } from "react-icons/fi";
 import MatchRing from "./MatchRing";
-import { postedAge, type Listing } from "./types";
+import { postedAge, sourceBadge, type Listing } from "./types";
 
 /**
  * One row in the job list.
@@ -22,6 +22,7 @@ export default function JobRow({
   onSelect: () => void;
 }) {
   const age = postedAge(listing.posted_at, listing.created_at);
+  const badge = sourceBadge(listing.source_type);
   const skills = listing.required_skills ?? [];
   const missing = listing.missing_skills ?? [];
 
@@ -52,9 +53,22 @@ export default function JobRow({
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold text-[var(--admin-text-muted)] truncate">
-            {listing.company ?? "Unknown company"}
-          </p>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <p className="text-[11px] font-semibold text-[var(--admin-text-muted)] truncate">
+              {listing.company ?? "Unknown company"}
+            </p>
+            <span
+              title={
+                badge.isEmail
+                  ? "From a recruiter email — reply to apply"
+                  : `Found on ${badge.label}`
+              }
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border shrink-0 ${badge.className}`}
+            >
+              {badge.isEmail && <FiMail size={8} />}
+              {badge.label}
+            </span>
+          </div>
           <h3 className="font-semibold text-[var(--admin-text)] text-sm leading-snug mt-0.5 line-clamp-2">
             {listing.title}
           </h3>

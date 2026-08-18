@@ -21,7 +21,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import MatchRing from "./MatchRing";
-import { postedAge, factTone, type Listing, type WarmContact } from "./types";
+import { postedAge, factTone, sourceBadge, type Listing, type WarmContact } from "./types";
 
 type Props = {
   listing: Listing;
@@ -73,6 +73,7 @@ export default function JobDetail({
   const [loadingContacts, setLoadingContacts] = useState(false);
 
   const age = postedAge(listing.posted_at, listing.created_at);
+  const badge = sourceBadge(listing.source_type);
 
   // Reset to overview when a different job is selected, so the pane never opens
   // on a tab that made sense for the previous role.
@@ -192,11 +193,13 @@ export default function JobDetail({
                   {listing.employment_type}
                 </span>
               )}
-              {listing.source_type && (
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[var(--admin-bg)] text-[var(--admin-text-muted)] border border-[var(--admin-border)]">
-                  {listing.source_type.replace(/_/g, " ")}
-                </span>
-              )}
+              <span
+                title={badge.isEmail ? "From a recruiter email" : `Found on ${badge.label}`}
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${badge.className}`}
+              >
+                {badge.isEmail && <FiMail size={8} />}
+                {badge.label}
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -213,6 +216,13 @@ export default function JobDetail({
           </div>
         </div>
 
+        {badge.isEmail && (
+          <p className="text-[10px] text-violet-400 mt-2">
+            Sourced from your inbox — applying means replying to the recruiter, and the company shown
+            may be the agency rather than the end client.
+          </p>
+        )}
+
         <div className="flex gap-2 mt-3">
           <a
             href={listing.application_url}
@@ -221,7 +231,7 @@ export default function JobDetail({
             className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-[#ff6b00] text-white text-xs font-semibold hover:bg-[#e55d00] transition-colors"
           >
             <FiExternalLink size={13} />
-            Open posting
+            {badge.isEmail ? "Reply to recruiter" : "Open posting"}
           </a>
           <button
             onClick={() => onPrepare(listing)}

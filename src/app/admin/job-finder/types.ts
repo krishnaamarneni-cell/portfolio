@@ -151,3 +151,39 @@ export function factTone(kind: "sponsorship" | "clearance", value: string | null
   }
   return "text-[var(--admin-text)]";
 }
+
+/**
+ * How a listing reached us, as a badge.
+ *
+ * Email requirements behave differently from board postings — you reply to a
+ * recruiter rather than filling a form, and the "company" may be the agency
+ * rather than the employer. That distinction has to be visible while scanning,
+ * not only after opening a role.
+ */
+export function sourceBadge(sourceType: string | null): {
+  label: string;
+  className: string;
+  isEmail: boolean;
+} {
+  const s = (sourceType ?? "").toLowerCase();
+  if (s === "email") {
+    return {
+      label: "Recruiter email",
+      className: "bg-violet-500/15 text-violet-400 border-violet-500/40",
+      isEmail: true,
+    };
+  }
+  const labels: Record<string, string> = {
+    workday: "Workday",
+    greenhouse: "Greenhouse",
+    ashby: "Ashby",
+    lever: "Lever",
+    smartrecruiters: "SmartRecruiters",
+    usajobs: "USAJOBS",
+  };
+  return {
+    label: labels[s] ?? (sourceType ? sourceType.replace(/_/g, " ") : "Unknown"),
+    className: "bg-[var(--admin-bg)] text-[var(--admin-text-muted)] border-[var(--admin-border)]",
+    isEmail: false,
+  };
+}
