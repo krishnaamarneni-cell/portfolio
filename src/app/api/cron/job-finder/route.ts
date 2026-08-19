@@ -17,8 +17,17 @@ export const maxDuration = 60;
  * list, so overlapping or extra runs just advance the cursor further.
  */
 
-/** Leave headroom under maxDuration so the run log always gets written. */
-const BUDGET_MS = 48_000;
+/**
+ * Deliberately well under maxDuration.
+ *
+ * 48s left no room: the deadline is only checked BEFORE starting a unit of
+ * work, so one slow source (12s timeout) or one slow model call can overshoot
+ * it, and a cold start eats a couple more seconds. The run then passes 60s,
+ * Vercel returns 504, and the whole tick is lost — which is exactly how the
+ * scheduled job started failing. Doing less per tick costs nothing, because
+ * the cursor means the next tick continues from the same place.
+ */
+const BUDGET_MS = 32_000;
 
 export async function GET(request: Request) {
   const expected = process.env.CRON_SECRET;

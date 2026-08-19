@@ -146,7 +146,7 @@ async function recordCrawlResult(source: AtsSource, outcome: CrawlOutcome): Prom
 }
 
 /** How many sources to sweep per tick before switching to scoring. */
-const SOURCES_PER_RUN = 12;
+const SOURCES_PER_RUN = 8;
 /**
  * Scan recruiter mail once per this many cursor positions — roughly one full
  * pass of the source list, so about every two hours at a 15-minute cadence.
@@ -261,8 +261,11 @@ export async function runCrawlCycle(opts: {
         const scan = await scanRequirementEmails({
           apiKey,
           days: 2,
-          maxEmails: 12,
-          deadline: start + opts.budgetMs * 0.7,
+          // Small on purpose: one model call per message, and a single
+          // overshooting call is enough to push the whole tick past the
+          // platform limit. Mail is re-read every couple of hours anyway.
+          maxEmails: 5,
+          deadline: start + opts.budgetMs * 0.5,
         });
         if (scan.rows.length) {
           const res = await bulkUpsertListings(scan.rows);

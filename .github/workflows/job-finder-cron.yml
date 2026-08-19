@@ -6,7 +6,7 @@
 #
 # Vercel Hobby crons only fire once a day, which is why this lives here.
 #
-# Setup: add CRON_SECRET as a GitHub repo secret
+# Setup for manual dispatch: add CRON_SECRET as a GitHub repo secret
 #   (Settings → Secrets and variables → Actions → New repository secret)
 #   using the same value as the Vercel CRON_SECRET env var.
 #
@@ -16,9 +16,17 @@
 
 name: Job Finder Cron
 
+# The 15-minute schedule is DISABLED. Scheduling moved to Postgres —
+# supabase/job_cron.sql — because GitHub delays and drops scheduled runs when
+# its queue is busy, and every failure emailed rather than being visible where
+# the work is. Manual dispatch is kept as a way to force a run.
+#
+# To hand scheduling back to GitHub, uncomment the schedule block and run
+# `SELECT cron.unschedule('job-finder-crawl');` in Supabase so both are not
+# firing at once.
 on:
-  schedule:
-    - cron: "*/15 * * * *"
+  # schedule:
+  #   - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       mode:
