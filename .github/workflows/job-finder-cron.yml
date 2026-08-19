@@ -16,17 +16,20 @@
 
 name: Job Finder Cron
 
-# The 15-minute schedule is DISABLED. Scheduling moved to Postgres —
-# supabase/job_cron.sql — because GitHub delays and drops scheduled runs when
-# its queue is busy, and every failure emailed rather than being visible where
-# the work is. Manual dispatch is kept as a way to force a run.
+# Re-enabled. The earlier failures were the endpoint exceeding the 60s function
+# limit and returning 504 — a wrong secret would have failed in about two
+# seconds, not the 1m4s that was actually observed. The budget is now 32s, so
+# this works with the CRON_SECRET already stored in GitHub and needs no new
+# configuration.
 #
-# To hand scheduling back to GitHub, uncomment the schedule block and run
-# `SELECT cron.unschedule('job-finder-crawl');` in Supabase so both are not
-# firing at once.
+# supabase/job_cron.sql does the same job from Postgres and is more reliable,
+# since GitHub delays and drops scheduled runs when its queue is busy. It needs
+# a secret value you can read back, which is why it is optional rather than the
+# default. If you switch to it, comment the schedule below out again so both are
+# not firing at once.
 on:
-  # schedule:
-  #   - cron: "*/15 * * * *"
+  schedule:
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       mode:
