@@ -25,10 +25,17 @@ CREATE EXTENSION IF NOT EXISTS pg_net;
 -- ─── 2. Store the secret out of the schedule ───────────────────────────────
 -- Keeping the token in Vault rather than inline means it is not sitting in
 -- plaintext inside cron.job, which anyone with database access can read.
--- Replace REPLACE_WITH_YOUR_CRON_SECRET with the same value as the Vercel
--- CRON_SECRET environment variable.
+--
+-- Use a NEW value of your own choosing, and add it to Vercel as
+-- JOB_FINDER_CRON_SECRET. Do not reuse CRON_SECRET: six routes read that one,
+-- and Vercel's own scheduler and the agents workflow both hold copies, so
+-- rotating it to set this job up would break them as collateral. This endpoint
+-- accepts JOB_FINDER_CRON_SECRET first and falls back to CRON_SECRET, so
+-- nothing else has to change.
+--
+-- Generate one with:  openssl rand -hex 32
 SELECT vault.create_secret(
-  'REPLACE_WITH_YOUR_CRON_SECRET',
+  'REPLACE_WITH_A_NEW_SECRET',
   'job_finder_cron_secret',
   'Bearer token for /api/cron/job-finder'
 )

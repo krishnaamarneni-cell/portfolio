@@ -30,7 +30,15 @@ export const maxDuration = 60;
 const BUDGET_MS = 32_000;
 
 export async function GET(request: Request) {
-  const expected = process.env.CRON_SECRET;
+  /**
+   * Own secret first, shared one as fallback.
+   *
+   * CRON_SECRET is read by six routes and held by Vercel's scheduler, a GitHub
+   * workflow, and anything else pointed at them — so rotating it to set this
+   * job up would break the agents workflow as collateral. A credential scoped
+   * to one consumer can be issued and revoked without touching the rest.
+   */
+  const expected = process.env.JOB_FINDER_CRON_SECRET || process.env.CRON_SECRET;
   if (expected) {
     const auth = request.headers.get("authorization") || "";
     const secret = new URL(request.url).searchParams.get("secret") || "";
