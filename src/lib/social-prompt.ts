@@ -38,18 +38,42 @@ ENDING:
 Tone: confident, educational, professional but relatable
 Audience: professionals who should feel "this is about me"
 
-Hook line (max 120 chars) — the ONLY line before "see more"
+THE HOOK IS THE WHOLE POST. LinkedIn cuts everything after roughly the first
+line behind "see more", so that line has one job: make stopping cheaper than
+scrolling. It must open a loop the reader cannot close without expanding.
+
+Hook line (max 100 chars) — the ONLY line before "see more". It must do one of:
+  - state a specific outcome and withhold the method
+    "I cut a 6-hour research task to 20 minutes. The tool wasn't the hard part."
+  - name a belief the reader holds, then contradict it
+    "Everyone's optimising their resume. That stopped mattering 18 months ago."
+  - open mid-story, at the moment something went wrong
+    "Three recruiters ghosted me the same week. The fourth told me why."
+  - state a number that shouldn't be possible
+    "80 employers, 15 minutes, zero applications sent. Here's the trade."
+
+The hook must NOT:
+  - announce the topic ("Meta's AI push is a game-changer")
+  - describe how the writer feels about it ("the cheat code I didn't know I needed")
+  - be a definition, a greeting, or a throat-clear
+  If the line would still make sense above a different post, it is not a hook.
+
 Empty line
-3-5 short readable paragraphs (1-2 sentences each). Use "I" and "you". Include one specific number or real example.
+3-5 short readable paragraphs (1-2 sentences each). Use "I" and "you". Include
+one specific number or real example.
+Deliver the thing the hook promised. A hook that opens a loop and never closes
+it reads as clickbait and costs trust.
 1 clear insight or takeaway
 Question or CTA that drives comments
-3-5 hashtags on the last line
+
+NO HASHTAGS. Not one. LinkedIn's own reach no longer depends on them, and on a
+professional post they read as dated. End on the question, not on tags.
 
 === X / TWITTER (max 270 chars) ===
 Tone: contrarian, punchy, concise
 ONE sharp thought that makes people retweet. No threads. No "1/x".
 One strong idea, minimal fluff.
-Zero or one hashtag. Conversational, memorable.
+NO hashtags. They add nothing to reach here and make a post look automated.
 Formats that work:
   "Unpopular opinion: [contrarian take]"
   "[Surprising stat]. Let that sink in."
@@ -64,7 +88,10 @@ Personal story opener (1-2 sentences about YOUR experience)
 2-3 short paragraphs with the insight/lesson — caption-style formatting
 End with a question or CTA to drive comments
 2-3 emojis placed naturally (not forced)
-Separate last line: 8-12 hashtags (mix big + niche)
+Separate last line: 3-5 hashtags, specific to the subject.
+Instagram is the one platform where tags still aid discovery, so they stay —
+but a wall of 12 broad tags reads as engagement-farming. Prefer narrow tags a
+real audience follows over #motivation-tier ones.
 
 === CRITICAL RULES ===
 - NEVER use ** or any markdown formatting. Plain text only.
@@ -72,6 +99,9 @@ Separate last line: 8-12 hashtags (mix big + niche)
 - Each platform version must feel GENUINELY DIFFERENT — not the same text reformatted or cross-posted.
 - LinkedIn = thought leadership. X = hot take. Instagram = personal story.
 - No throat-clearing intros. Hook FIRST, always.
+- NO hashtags on LinkedIn or X. Instagram gets 3-5, specific ones only.
+- Never open with the topic's name. "Meta's AI push is a game-changer" announces
+  a subject; it does not make anyone read the second line.
 - Make every post feel human, useful, and engaging — not generic AI output.
 - Avoid: "excited about", "leverage my expertise", "in today's fast-paced world", "game changer", "at the end of the day"
 
@@ -115,6 +145,27 @@ export type PostJson = {
  * object in prose or code fences, or get cut off — this recovers the object
  * whenever possible so a single hiccup doesn't fail the whole compose.
  */
+/**
+ * Remove hashtags from a post body.
+ *
+ * The prompt already forbids them on LinkedIn and X, but a rule that can be
+ * checked should not be left to the model — it reliably slips a "#AI
+ * #CareerGrowth" line back on when the topic feels technical. Same reasoning as
+ * every other verifiable constraint here: state it in the prompt, enforce it in
+ * code.
+ *
+ * Only tags beginning with a letter are stripped, so "#1 priority" survives and
+ * "C#" is untouched — it requires whitespace or line start before the hash.
+ */
+export function stripHashtags(text: string): string {
+  return text
+    .replace(/(^|\s)#[A-Za-z][\w-]*/g, "$1")
+    // Tidy the trailing whitespace and blank line the tag block leaves behind.
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function extractPostJson(raw: string): PostJson | null {
   if (!raw) return null;
   const tryParse = (s: string): PostJson | null => {
@@ -124,15 +175,25 @@ export function extractPostJson(raw: string): PostJson | null {
       return null;
     }
   };
+  /** LinkedIn and X carry no tags; Instagram keeps its own. */
+  const clean = (p: PostJson | null): PostJson | null => {
+    if (!p) return null;
+    return {
+      ...p,
+      linkedin: p.linkedin ? stripHashtags(p.linkedin) : p.linkedin,
+      x: p.x ? stripHashtags(p.x) : p.x,
+    };
+  };
+
   const direct = tryParse(raw);
-  if (direct) return direct;
+  if (direct) return clean(direct);
   const stripped = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
   const fenced = tryParse(stripped);
-  if (fenced) return fenced;
+  if (fenced) return clean(fenced);
   const start = stripped.indexOf("{");
   const end = stripped.lastIndexOf("}");
   if (start >= 0 && end > start) {
-    return tryParse(stripped.slice(start, end + 1));
+    return clean(tryParse(stripped.slice(start, end + 1)));
   }
   return null;
 }
