@@ -1,0 +1,44 @@
+# Social Autopilot + drip queue.
+#
+# Calls /api/cron/social-drip every 15 minutes. That endpoint does two things:
+#   • runs the Autopilot generator when its post window is reached
+#   • flushes social_queue — any post whose due_at has passed goes to Buffer
+#
+# Why it exists: social-drip had no schedule at all. Autopilot only ran when
+# "Post now" was pressed by hand, and the queue was only flushed by the daily
+# social-queue cron at 12:00 UTC — so a post due at 10:00 America/Chicago
+# (15:00 UTC) waited until the next day's run, roughly 21 hours late.
+#
+# Fifteen minutes is the right cadence because due_at is a specific time of day;
+# a daily flush cannot honour it.
+#
+# Vercel cron is not an option here — the Hobby plan fires once a day.
+#
+# Setup: CRON_SECRET must exist as a GitHub repo secret. It already does, and
+# is the same value the Job Finder workflow uses.
+
+name: Social Cron
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  drip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run social drip and autopilot
+        run: |
+          RESPONSE=$(curl -s --max-time 120 -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://krishnaamarneni.com/api/cron/social-drip?trigger=github")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Social cron failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
