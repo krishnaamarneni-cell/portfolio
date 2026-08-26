@@ -448,6 +448,7 @@ export async function runAutopilot(opts?: { force?: boolean }): Promise<Autopilo
   const dueAt = computeDueAt(settings.post_time, settings.timezone);
   const db = requireSupabaseAdmin();
   const queuedPlatforms: string[] = [];
+  const queueErrors: string[] = [];
   const posts: Record<string, string> = {};
 
   for (const channel of gen.channels) {
@@ -459,7 +460,11 @@ export async function runAutopilot(opts?: { force?: boolean }): Promise<Autopilo
       : null;
     if (!text) continue;
 
-    await db.from("social_queue").insert({
+    // The result MUST be checked. supabase-js returns { error } rather than
+    // throwing, so an unchecked insert that failed still fell through to the
+    // success log below — which is how a missing social_queue table produced
+    // twelve "recent posts" that had never been queued anywhere.
+    const { error: queueError } = await db.from("social_queue").insert({
       text,
       platform: svc,
       channel_id: channel.id,
@@ -468,11 +473,28 @@ export async function runAutopilot(opts?: { force?: boolean }): Promise<Autopilo
       due_at: dueAt,
       status: "pending",
     });
+
+    if (queueError) {
+      queueErrors.push(`${svc}: ${queueError.message}`);
+      continue;
+    }
     posts[svc] = text;
     queuedPlatforms.push(svc);
   }
 
-  if (queuedPlatforms.length === 0) return { posted: false, reason: "No posts to queue" };
+  if (queuedPlatforms.length === 0) {
+    const missingTable = queueErrors.some((e) =>
+      /does not exist|schema cache|relation/i.test(e)
+    );
+    return {
+      posted: false,
+      reason: missingTable
+        ? "Nothing was queued — the social_queue table is missing. Run supabase/social_queue.sql in Supabase."
+        : queueErrors.length
+          ? `Nothing was queued: ${queueErrors[0]}`
+          : "No posts to queue",
+    };
+  }
 
   // Mark this date as generated
   await db
