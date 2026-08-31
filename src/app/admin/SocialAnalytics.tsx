@@ -81,7 +81,8 @@ export default function SocialAnalytics({
   const [data, setData] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [playbook, setPlaybook] = useState<Playbook | null>(null);
+  const [playbookMeta, setPlaybookMeta] = useState<{ posts: number; metrics: boolean } | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
 
   async function load() {
@@ -116,7 +117,11 @@ export default function SocialAnalytics({
       });
       const j = await r.json();
       if (!r.ok) onError(j.error || "Analysis failed");
-      else setAnalysis(j.markdown || "");
+      else {
+        setPlaybook(j.playbook ?? null);
+        setPlaybookMeta({ posts: j.postsAnalyzed ?? 0, metrics: Boolean(j.metricsAvailable) });
+        if (j.saveError) setErr(j.saveError);
+      }
     } catch {
       onError("Network error");
     }
@@ -255,14 +260,15 @@ export default function SocialAnalytics({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 disabled:opacity-50"
               >
                 <FiZap size={12} />
-                {analyzing ? "Analyzing…" : analysis ? "Re-analyze" : "Analyze my content"}
+                {analyzing ? "Analyzing…" : playbook ? "Re-analyze" : "Analyze my content"}
               </button>
             </div>
-            {analysis ? (
-              <Markdown text={analysis} />
+            {playbook ? (
+              <PlaybookView playbook={playbook} meta={playbookMeta} />
             ) : (
               <p className="text-[11px] text-[var(--admin-text-muted)]">
-                Run an AI review of your themes, tone, format patterns, and what&apos;s working per platform.
+                Reviews what you have posted and works out which hooks and themes actually reached
+                people. The result is saved and used when writing your next post.
               </p>
             )}
           </div>
@@ -341,91 +347,163 @@ function Stat({ label, value, icon }: { label: string; value: string; icon?: Rea
   );
 }
 
-/** Minimal markdown — ## / ### headings, ** bold, - bullets, [text](url) links. */
-function Markdown({ text }: { text: string }) {
-  if (!text) return null;
-  const lines = text.split("\n");
-  const out: React.ReactNode[] = [];
-  let list: string[] = [];
-  const flush = () => {
-    if (!list.length) return;
-    out.push(
-      <ul key={out.length} className="list-disc pl-5 my-2 space-y-1 text-[13px] text-[var(--admin-text-secondary)]">
-        {list.map((b, i) => (
-          <li key={i}>{inline(b)}</li>
-        ))}
-      </ul>
-    );
-    list = [];
-  };
-  for (const raw of lines) {
-    const line = raw.replace(/\r$/, "");
-    if (/^\s*[-*]\s+/.test(line)) {
-      list.push(line.replace(/^\s*[-*]\s+/, ""));
-      continue;
-    }
-    flush();
-    if (/^##\s+/.test(line)) {
-      out.push(
-        <h3 key={out.length} className="text-sm font-bold text-[var(--admin-text)] mt-4 first:mt-0 mb-1.5">
-          {inline(line.replace(/^##\s+/, ""))}
-        </h3>
-      );
-    } else if (/^###\s+/.test(line)) {
-      out.push(
-        <h4 key={out.length} className="text-[13px] font-semibold text-[var(--admin-text)] mt-2 mb-1">
-          {inline(line.replace(/^###\s+/, ""))}
-        </h4>
-      );
-    } else if (line.trim() === "") {
-      // skip
-    } else {
-      out.push(
-        <p key={out.length} className="text-[13px] text-[var(--admin-text-secondary)] my-1.5 leading-relaxed">
-          {inline(line)}
+type PlatformFinding = {
+  platform: string;
+  posts: number;
+  avgImpressions: number | null;
+  winningPattern: string;
+  bestHook: string | null;
+  bestImpressions: number | null;
+  losingPattern: string | null;
+  verdict: string;
+};
+
+type Playbook = {
+  headline: string;
+  platforms: PlatformFinding[];
+  doMore: string[];
+  doLess: string[];
+  winningThemes: string[];
+  biggestLever: string | null;
+};
+
+/**
+ * The analysis as components rather than prose.
+ *
+ * It used to be markdown, and the model reached for tables — which this app's
+ * minimal renderer does not support, so they arrived as raw pipes. Rendering
+ * fields directly means the layout is the app's job and the model only has to
+ * be right about the content.
+ */
+function PlaybookView({
+  playbook,
+  meta,
+}: {
+  playbook: Playbook;
+  meta: { posts: number; metrics: boolean } | null;
+}) {
+  const active = playbook.platforms.filter((p) => p.posts > 0);
+
+  return (
+    <div className="space-y-3">
+      {playbook.headline && (
+        <p className="text-sm text-[var(--admin-text)] leading-relaxed font-medium">
+          {playbook.headline}
         </p>
-      );
-    }
-  }
-  flush();
-  return <div>{out}</div>;
+      )}
+
+      {meta && (
+        <p className="text-[10px] text-[var(--admin-text-muted)]">
+          {meta.posts} post{meta.posts === 1 ? "" : "s"} analysed
+          {meta.metrics ? " with reach data" : " — no reach data, so these are hypotheses"}
+          {meta.posts < 10 && meta.metrics ? " · small sample, treat as directional" : ""}
+        </p>
+      )}
+
+      {active.length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {active.map((f) => (
+            <div
+              key={f.platform}
+              className="rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] p-3"
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-[var(--admin-text)]">
+                  {f.platform}
+                </span>
+                <span className="text-[10px] text-[var(--admin-text-muted)] tabular-nums">
+                  {f.posts} posts
+                  {f.avgImpressions !== null ? ` · ${f.avgImpressions} avg` : ""}
+                </span>
+              </div>
+              {f.winningPattern && (
+                <p className="text-[11px] text-[var(--admin-text)] leading-relaxed mt-1.5">
+                  {f.winningPattern}
+                </p>
+              )}
+              {f.bestHook && (
+                <p className="text-[11px] text-emerald-500 leading-relaxed mt-1.5 border-l-2 border-emerald-500/40 pl-2">
+                  &ldquo;{f.bestHook}&rdquo;
+                  {f.bestImpressions !== null && (
+                    <span className="text-[var(--admin-text-muted)]"> — {f.bestImpressions} impressions</span>
+                  )}
+                </p>
+              )}
+              {f.losingPattern && (
+                <p className="text-[10px] text-amber-500 leading-relaxed mt-1.5">Avoid: {f.losingPattern}</p>
+              )}
+              {f.verdict && (
+                <p className="text-[10px] text-[var(--admin-text-muted)] leading-relaxed mt-1.5">{f.verdict}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {playbook.winningThemes.length > 0 && (
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--admin-text-muted)] mb-1.5">
+            Themes that reached people
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {playbook.winningThemes.map((t) => (
+              <span
+                key={t}
+                className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/30"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {playbook.doMore.length > 0 && (
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 mb-1.5">
+              Do more
+            </p>
+            <ul className="space-y-1">
+              {playbook.doMore.map((d) => (
+                <li key={d} className="text-[11px] text-[var(--admin-text)] leading-relaxed flex gap-1.5">
+                  <span className="text-emerald-500 shrink-0">+</span>
+                  {d}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {playbook.doLess.length > 0 && (
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-1.5">
+              Do less
+            </p>
+            <ul className="space-y-1">
+              {playbook.doLess.map((d) => (
+                <li key={d} className="text-[11px] text-[var(--admin-text)] leading-relaxed flex gap-1.5">
+                  <span className="text-amber-500 shrink-0">–</span>
+                  {d}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {playbook.biggestLever && (
+        <div className="rounded-xl border border-[#ff6b00]/40 bg-[#ff6b00]/5 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[#ff6b00] mb-1">
+            Biggest lever
+          </p>
+          <p className="text-[11px] text-[var(--admin-text)] leading-relaxed">{playbook.biggestLever}</p>
+        </div>
+      )}
+
+      <p className="text-[10px] text-[var(--admin-text-muted)] leading-relaxed">
+        Saved and applied automatically when Autopilot and the Composer write your next post.
+      </p>
+    </div>
+  );
 }
 
-function inline(s: string): React.ReactNode {
-  const nodes: React.ReactNode[] = [];
-  let i = 0;
-  let key = 0;
-  while (i < s.length) {
-    const link = /\[([^\]]+)\]\(([^)]+)\)/.exec(s.slice(i));
-    const bold = /\*\*([^*]+)\*\*/.exec(s.slice(i));
-    let next = s.length;
-    let kind: "link" | "bold" | null = null;
-    if (link && link.index < next) {
-      next = link.index;
-      kind = "link";
-    }
-    if (bold && bold.index < next) {
-      next = bold.index;
-      kind = "bold";
-    }
-    if (next > 0) nodes.push(s.slice(i, i + next));
-    if (kind === "link" && link) {
-      nodes.push(
-        <a key={key++} href={link[2]} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">
-          {link[1]}
-        </a>
-      );
-      i += next + link[0].length;
-    } else if (kind === "bold" && bold) {
-      nodes.push(
-        <strong key={key++} className="font-semibold text-[var(--admin-text)]">
-          {bold[1]}
-        </strong>
-      );
-      i += next + bold[0].length;
-    } else {
-      i = s.length;
-    }
-  }
-  return <>{nodes}</>;
-}

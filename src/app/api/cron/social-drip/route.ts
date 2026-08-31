@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { getDripSettings, processNextDripImage } from "@/lib/social-drip";
 import { flushDueSocialQueue } from "@/lib/social-queue";
 import { runAutopilot } from "@/lib/social-autopilot";
+import { getPlaybook } from "@/lib/social-playbook";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -50,6 +51,36 @@ export async function GET(request: Request) {
     }
     try {
       await runAutopilot();
+
+      // Refresh what-works at most once a day.
+      //
+      // Not after every post, despite the temptation: impressions accrue over
+      // hours and days, so analysing a post the moment it goes out measures
+      // noise and would teach the writer the wrong lesson. Daily is the
+      // shortest interval where the numbers have actually moved.
+      try {
+        const existing = await getPlaybook();
+        const ageMs = existing ? Date.now() - Date.parse(existing.analyzedAt) : Infinity;
+        if (!Number.isFinite(ageMs) || ageMs > 20 * 60 * 60 * 1000) {
+          const base =
+            process.env.NEXT_PUBLIC_SITE_URL ||
+            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+          if (base) {
+            await fetch(`${base}/api/admin/social/analytics`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                // Same secret the cron itself was called with.
+                Authorization: request.headers.get("authorization") ?? "",
+              },
+              body: JSON.stringify({}),
+              signal: AbortSignal.timeout(45_000),
+            });
+          }
+        }
+      } catch {
+        // Learning is a bonus; never fail the posting run over it.
+      }
     } catch {
       // Logged in social_autopilot_log; no-op if disabled or outside window.
     }

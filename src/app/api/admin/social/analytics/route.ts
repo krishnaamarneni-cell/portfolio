@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { fetchConnector } from "@/lib/content";
 import { getAllSentPosts, aggregateMetrics, type BufferSentPost } from "@/lib/buffer";
 import { runAgent, resolveAgentModel } from "@/lib/agents";
+import { parsePlaybook, savePlaybook } from "@/lib/social-playbook";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -198,31 +199,63 @@ export async function POST(request: Request) {
     return `### ${svc.toUpperCase()} — ${posts.length} posts · ~${cs.postsPerWeek}/wk · avg ${cs.avgChars} chars · ${cs.avgHashtags} hashtags/post · ${cs.pctWithLink}% links · ${cs.pctWithEmoji}% emoji\n${lines.join("\n")}`;
   }).join("\n\n");
 
+  // Structured, not prose. The previous version asked for markdown tables,
+  // which rendered as raw pipes in the UI and — more importantly — could not be
+  // read back by the post generator. Findings only compound if something can
+  // consume them.
   const system = metricsAvailable
-    ? `You are a social media growth strategist reviewing Krishna Amarneni's posting history across LinkedIn, X, and Instagram. Each post is labelled with its REACH ([impressions N, engagement N]). Your job is to figure out WHAT KIND OF CONTENT REACHES THE MOST PEOPLE and tell him what to post more of.
+    ? `You analyse Krishna Amarneni's social posts to work out what actually reaches people.
 
-For EACH platform that has posts:
-- Name the themes/topics he posts about.
-- Identify which content types/themes got the HIGHEST impressions vs the lowest — cite the actual impression numbers as evidence.
-- Describe the pattern of the high-reach posts (hook style, topic, length, format, hashtags/links/emoji) — what do the winners have in common?
+Every post is labelled with its real reach: [impressions N, engagement N].
 
-Then, most important:
-## 🚀 Post more of this
-Rank the specific content types he should post MORE of to grow reach. For each, name the content type, why (cite his own high-impression posts as proof), and which platform it works best on. Be concrete — "personal money-lesson stories with a bold one-line hook" beats "engaging content".
+Return ONLY a JSON object. No prose, no markdown, no fences.
 
-## Overall
-How the 3 platforms differ, whether he's just cross-posting, ideal cadence, and the single highest-leverage change to increase reach.
+{
+  "headline": "one sentence: what he should write more of, and the number that proves it",
+  "platforms": [{
+    "platform": "linkedin | x | instagram",
+    "posts": number,
+    "avgImpressions": number or null,
+    "winningPattern": "what the highest-reach posts share — hook style, topic, length, format",
+    "bestHook": "the opening line of his best post, quoted exactly",
+    "bestImpressions": number or null,
+    "losingPattern": "what the lowest-reach posts did differently, or null",
+    "verdict": "one sentence on whether this platform is working"
+  }],
+  "winningThemes": ["themes that reached people, most reach first"],
+  "doMore": ["specific, writeable instructions — 'open with a personal outcome and a number', not 'be engaging'"],
+  "doLess": ["specific things that measurably underperformed"],
+  "biggestLever": "the single change worth making, with the number that justifies it"
+}
 
-Rules: Use markdown (## headings, ** bold, - bullets). Ground EVERY claim in the impression numbers given — no generic advice. If a platform has no posts, say "No posts yet."`
-    : `You are a social media strategist reviewing Krishna Amarneni's posting history across LinkedIn, X, and Instagram. Analyse WHAT KIND of content he posts.
+Every claim must cite his own impression numbers. If a platform has no posts,
+give it posts: 0 and say so in the verdict rather than inventing analysis.
 
-IMPORTANT: Impression/engagement numbers are NOT available for this account — treat performance as UNKNOWN. Do NOT claim posts got "0 engagement", "underperformed", or are "misaligned". Instead analyse content TYPES and, using best practices + his patterns, recommend which topics/formats to post MORE of to grow reach, framed as hypotheses to confirm once analytics connect.
+Be careful with small samples: with only a handful of posts, differences are
+often noise. Say so in the verdict instead of overclaiming a pattern.`
+    : `You analyse Krishna Amarneni's social posts to describe WHAT he posts.
 
-For EACH platform with posts: name the themes, the tone/format patterns, and which content types he should double down on. Then a "## 🚀 Post more of this" section and a "## Overall" section with cadence + 3 prioritised actions.
+Reach numbers are NOT available for this account. Treat performance as unknown.
+Never say a post "underperformed" or got "0 engagement" — you cannot know that.
 
-Rules: markdown (## headings, ** bold, - bullets). No fluff. If a platform has no posts, say "No posts yet."`;
+Return ONLY a JSON object, same shape as below, with avgImpressions,
+bestImpressions null and patterns framed as hypotheses to test once analytics
+connect.
 
-  const userPrompt = `Here is the posting data (top posts by engagement per platform):\n\n${digest}`;
+{
+  "headline": "one sentence on what he posts about",
+  "platforms": [{ "platform": "...", "posts": number, "avgImpressions": null,
+    "winningPattern": "...", "bestHook": null, "bestImpressions": null,
+    "losingPattern": null, "verdict": "..." }],
+  "winningThemes": ["..."],
+  "doMore": ["..."],
+  "doLess": ["..."],
+  "biggestLever": "..."
+}`;
+
+  const userPrompt = `Here is the posting data (top posts by engagement per platform):
+
+${digest}`;
 
   const model = resolveAgentModel(body.model);
   const result = await runAgent({
@@ -235,5 +268,26 @@ Rules: markdown (## headings, ** bold, - bullets). No fluff. If a platform has n
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
-  return NextResponse.json({ markdown: result.content, modelUsed: result.modelUsed });
+
+  const playbook = parsePlaybook(result.content ?? "");
+  if (!playbook) {
+    return NextResponse.json({ error: "Could not read the analysis. Try again." }, { status: 502 });
+  }
+
+  // Persisted so the writer can use it, not just this screen.
+  const saveError = await savePlaybook({
+    playbook,
+    postsAnalyzed: loaded.posts.length,
+    metricsAvailable,
+    modelUsed: result.modelUsed ?? model,
+  });
+
+  return NextResponse.json({
+    playbook,
+    postsAnalyzed: loaded.posts.length,
+    metricsAvailable,
+    analyzedAt: new Date().toISOString(),
+    modelUsed: result.modelUsed,
+    saveError,
+  });
 }

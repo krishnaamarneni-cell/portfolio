@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { resolveModel } from "@/lib/groq-models";
 import { COMPOSE_SYSTEM_PROMPT, extractPostJson } from "@/lib/social-prompt";
+import { getPlaybook, playbookToPrompt } from "@/lib/social-playbook";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,20 @@ type ComposeRequest = {
 };
 
 const SYSTEM_PROMPT = COMPOSE_SYSTEM_PROMPT;
+
+/**
+ * The base rules plus whatever this account has actually learned.
+ *
+ * Returns the base prompt unchanged when there is no playbook yet or the
+ * sample is too small to mean anything — better to write from general rules
+ * than to chase a pattern drawn from three posts.
+ */
+async function systemPromptWithPlaybook(): Promise<string> {
+  const learned = playbookToPrompt(await getPlaybook());
+  return learned ? `${SYSTEM_PROMPT}
+
+${learned}` : SYSTEM_PROMPT;
+}
 
 export async function POST(request: Request) {
   if (!(await getSession())) {
@@ -56,6 +71,8 @@ export async function POST(request: Request) {
   try {
     const { default: Groq } = await import("groq-sdk");
     const groq = new Groq({ apiKey });
+    // Base rules plus whatever reach has actually taught this account.
+    const systemPrompt = await systemPromptWithPlaybook();
     const model = resolveModel("writing", body.model);
 
     const run = (json: boolean) =>
@@ -67,7 +84,7 @@ export async function POST(request: Request) {
         max_tokens: 4096,
         ...(json ? { response_format: { type: "json_object" as const } } : {}),
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           { role: "user", content: userMsg },
         ],
       });

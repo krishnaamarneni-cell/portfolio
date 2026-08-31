@@ -5,6 +5,7 @@ import { getChannels, createBufferPost, getAllSentPosts, type BufferSentPost } f
 import { runAgent } from "@/lib/agents";
 import { getContentProfile } from "@/lib/content-curator";
 import { extractPostJson } from "@/lib/social-prompt";
+import { getPlaybook, playbookToPrompt } from "@/lib/social-playbook";
 import { nowInTimezone, isWithinWindow } from "@/lib/social-drip";
 export { nowInTimezone };
 
@@ -264,7 +265,15 @@ function computeDueAt(postTime: string, timezone: string): string {
 }
 
 async function generatePosts(settings: AutopilotSettings, token: string, apiKey: string) {
-  const analyticsCtx = await buildAnalyticsGuidance(token, settings.platforms);
+  // Raw top-posts give the model examples; the playbook gives it the conclusion
+  // already drawn from them. Without this the analysis was written, displayed,
+  // and then ignored by the thing writing the next post.
+  const [rawAnalytics, storedPlaybook] = await Promise.all([
+    buildAnalyticsGuidance(token, settings.platforms),
+    getPlaybook(),
+  ]);
+  const learned = playbookToPrompt(storedPlaybook);
+  const analyticsCtx = [learned, rawAnalytics].filter(Boolean).join("\n\n");
   const { topic, fromCustomList } = await pickTopic(settings, analyticsCtx, apiKey);
   const postType = settings.post_types[Math.floor(Math.random() * settings.post_types.length)] || "text";
 
