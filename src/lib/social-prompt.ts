@@ -9,8 +9,16 @@
 
 const PERSONA = `You are a top-tier social media content strategist writing for Krishna Amarneni. Krishna is a SAP consultant at Coca-Cola, AI agent builder, author of "Drive to Freedom", creator of WealthClaude and Lucy AI. Voice: candid, smart, contrarian, first-person.`;
 
-/** The load-bearing part: per-platform anatomy + rules + output shape. */
-export const POST_ANATOMY = `=== UNIVERSAL POST ANATOMY ===
+/**
+ * The writing rules, with no output shape attached.
+ *
+ * Autopilot emits a different JSON shape (only the platforms it is posting to
+ * that day), so it needs the rules without the fixed three-platform envelope.
+ * Keeping them separate is what stops the two writers drifting apart again —
+ * Autopilot previously carried its own two-line summary of this file and was
+ * still asking for LinkedIn hashtags months after they were removed here.
+ */
+export const POST_RULES = `=== UNIVERSAL POST ANATOMY ===
 
 HOOK (first 1-2 lines):
 - Must work as a stand-alone line before the "see more" cutoff
@@ -38,25 +46,51 @@ ENDING:
 Tone: confident, educational, professional but relatable
 Audience: professionals who should feel "this is about me"
 
-THE HOOK IS THE WHOLE POST. LinkedIn cuts everything after roughly the first
-line behind "see more", so that line has one job: make stopping cheaper than
-scrolling. It must open a loop the reader cannot close without expanding.
+THE HOOK IS THE WHOLE POST. LinkedIn hides everything after the first line
+behind "...see more" — on mobile that is roughly 140 characters. For most of
+the feed, that one line IS the post. Its only job is to plant a specific
+question in the reader's head that they cannot answer without expanding.
 
-Hook line (max 100 chars) — the ONLY line before "see more". It must do one of:
-  - state a specific outcome and withhold the method
-    "I cut a 6-hour research task to 20 minutes. The tool wasn't the hard part."
-  - name a belief the reader holds, then contradict it
-    "Everyone's optimising their resume. That stopped mattering 18 months ago."
-  - open mid-story, at the moment something went wrong
-    "Three recruiters ghosted me the same week. The fourth told me why."
-  - state a number that shouldn't be possible
-    "80 employers, 15 minutes, zero applications sent. Here's the trade."
+THE TEST — apply it to every hook before you keep it:
+After the line alone, the reader must be able to say ONE specific question out
+loud. "How?" "What happened next?" "Why would that work?"
+  "AI is rewriting how we work."       -> question: none. NOT A HOOK. Delete it.
+  "I stopped applying to jobs in March. I have three offers."
+                                       -> question: "How?" THAT is a hook.
+If you cannot name the question the line provokes, rewrite the line.
 
-The hook must NOT:
-  - announce the topic ("Meta's AI push is a game-changer")
-  - describe how the writer feels about it ("the cheat code I didn't know I needed")
-  - be a definition, a greeting, or a throat-clear
-  If the line would still make sense above a different post, it is not a hook.
+Hook length: under 90 characters. It has to survive alone above the fold.
+
+PATTERNS THAT WORK — pick ONE, never blend them:
+  a) Result stated, method withheld
+     "We cut a 6-hour research task to 20 minutes. The tool wasn't the hard part."
+  b) Contradict a belief the reader is holding right now
+     "Your resume isn't the problem."
+  c) Open mid-scene, ideally on quoted speech
+     "'We went with someone else.' Then he called back."
+  d) Name what it cost
+     "That one assumption cost me 40 hours and $2,000."
+  e) Arithmetic that shouldn't be possible
+     "47 interviews. 0 offers. Then I changed one sentence."
+  f) Forbidden instruction
+     "Stop tailoring your resume."
+
+BANNED HOOK CONSTRUCTIONS — every one of these reads as machine-written:
+  - "X isn't just Y, it's Z" / "not just X, but Y"  <- the most obvious tell there is
+  - opening on "Here's the thing:" or closing line 1 with "Let that sink in."
+  - announcing the subject ("Meta's AI push is a game-changer")
+  - how you feel about it ("this blew my mind", "the cheat code I didn't know I needed")
+  - a rhetorical question with an obvious answer ("Want to grow your career?")
+  - a definition, a greeting, a throat-clear, or a statistic with nothing at stake
+  - abstract nouns doing the work: future, landscape, journey, era, revolution
+If the line would sit equally well on top of a different post, it is not a hook.
+
+LINE 2 DOES NOT RESOLVE THE GAP. It widens it with one concrete detail. The
+body resolves it.
+
+CLOSE THE LOOP. The hook makes a promise and the body must pay it — name the
+method, the sentence, the number. A gap that never closes is clickbait, and it
+costs more trust than the attention is worth.
 
 Empty line
 3-5 short readable paragraphs (1-2 sentences each). Use "I" and "you". Include
@@ -103,7 +137,10 @@ real audience follows over #motivation-tier ones.
 - Never open with the topic's name. "Meta's AI push is a game-changer" announces
   a subject; it does not make anyone read the second line.
 - Make every post feel human, useful, and engaging — not generic AI output.
-- Avoid: "excited about", "leverage my expertise", "in today's fast-paced world", "game changer", "at the end of the day"
+- Avoid: "excited about", "leverage my expertise", "in today's fast-paced world", "game changer", "at the end of the day"`;
+
+/** The rules plus the fixed three-platform JSON envelope. */
+export const POST_ANATOMY = `${POST_RULES}
 
 Image fields:
 - "image_query" -> 2-4 concrete words for Unsplash (e.g., "trader desk monitors")
@@ -164,6 +201,72 @@ export function stripHashtags(text: string): string {
     .replace(/[ \t]+$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/**
+ * Mechanical faults in a LinkedIn post's opening line.
+ *
+ * Every one of these is already forbidden in the prompt, which is exactly why
+ * they are checked here: the model reproduces them anyway. The "X isn't just Y,
+ * it's Z" construction came back on nearly every generation and is the single
+ * clearest tell that no human wrote the line.
+ *
+ * Returns the specific complaints rather than a boolean so a retry can name
+ * what was wrong instead of asking again and hoping for a different roll.
+ *
+ * Deliberately narrow: it only catches things that are wrong on their face. No
+ * checker can tell whether a line opens a curiosity gap — that stays the
+ * prompt's job.
+ */
+export function hookIssues(post: string): string[] {
+  const first = (post ?? "").split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  if (!first) return ["The post has no opening line."];
+
+  const issues: string[] = [];
+  if (first.length > 100) {
+    issues.push(
+      `The opening line is ${first.length} characters. It must stand alone above "see more" — cut it under 90.`
+    );
+  }
+
+  const banned: Array<[RegExp, string]> = [
+    [
+      /\b(is|are|was|were|do|does)n['’]?t just\b/i,
+      `Uses the "isn't just X, it's Y" construction — the most recognisable machine-written opener there is. Rewrite it completely.`,
+    ],
+    [
+      /\bnot just\b[^.!?]*\b(it['’]s|but|they['’]re|we['’]re)\b/i,
+      `Uses the "not just X, but Y" construction. Rewrite it completely.`,
+    ],
+    [/here['’]?s the thing/i, `Opens on "Here's the thing" — filler that says nothing.`],
+    [/let that sink in/i, `Uses "Let that sink in" — tells the reader how to feel instead of making them curious.`],
+    [/^(in today|in this day|as a |as an )/i, `Throat-clearing opener.`],
+    [
+      /\b(i wanted to share|i['’]m excited|excited to (share|announce))\b/i,
+      `Announcement voice, not a hook.`,
+    ],
+    [
+      /\b(blew my mind|cheat code|game.?changer)\b/i,
+      `Describes your reaction to the topic instead of provoking a question.`,
+    ],
+    [/^(want|do you want|are you (tired|ready))\b/i, `Rhetorical question with an obvious answer.`],
+  ];
+  for (const [re, message] of banned) {
+    if (re.test(first)) issues.push(message);
+  }
+  return issues;
+}
+
+/** The retry instruction for a hook that failed {@link hookIssues}. */
+export function hookRetryNote(issues: string[]): string {
+  return [
+    "Your previous draft's LinkedIn opening line was rejected:",
+    ...issues.map((i) => `- ${i}`),
+    "",
+    "Rewrite all three posts. The LinkedIn opening line must be under 90 characters",
+    "and must leave the reader with one specific unanswered question. Name that",
+    "question to yourself before you write the line.",
+  ].join("\n");
 }
 
 export function extractPostJson(raw: string): PostJson | null {

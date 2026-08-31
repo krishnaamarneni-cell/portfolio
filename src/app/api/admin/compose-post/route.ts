@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { resolveModel } from "@/lib/groq-models";
-import { COMPOSE_SYSTEM_PROMPT, extractPostJson } from "@/lib/social-prompt";
+import {
+  COMPOSE_SYSTEM_PROMPT,
+  extractPostJson,
+  hookIssues,
+  hookRetryNote,
+} from "@/lib/social-prompt";
 import { getPlaybook, playbookToPrompt } from "@/lib/social-playbook";
 
 export const runtime = "nodejs";
@@ -75,7 +80,7 @@ export async function POST(request: Request) {
     const systemPrompt = await systemPromptWithPlaybook();
     const model = resolveModel("writing", body.model);
 
-    const run = (json: boolean) =>
+    const run = (json: boolean, extra?: string) =>
       groq.chat.completions.create({
         model,
         temperature: 0.5,
@@ -85,27 +90,39 @@ export async function POST(request: Request) {
         ...(json ? { response_format: { type: "json_object" as const } } : {}),
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: userMsg },
+          { role: "user", content: extra ? `${userMsg}\n\n${extra}` : userMsg },
         ],
       });
 
     // Strict JSON mode is cleaner, but small models occasionally overrun it and
     // Groq hard-fails the request. Fall back to a plain call + tolerant parse.
-    let raw = "";
-    try {
-      const completion = await run(true);
-      raw = completion.choices[0]?.message?.content ?? "";
-    } catch {
-      const completion = await run(false);
-      raw = completion.choices[0]?.message?.content ?? "";
-    }
+    const generate = async (extra?: string) => {
+      try {
+        const completion = await run(true, extra);
+        return completion.choices[0]?.message?.content ?? "";
+      } catch {
+        const completion = await run(false, extra);
+        return completion.choices[0]?.message?.content ?? "";
+      }
+    };
 
-    const parsed = extractPostJson(raw);
+    let parsed = extractPostJson(await generate());
     if (!parsed) {
       return NextResponse.json(
         { error: "The model couldn't produce a clean draft. Try again or pick a stronger model." },
         { status: 502 }
       );
+    }
+
+    // One retry when the opening line trips a mechanical rule, naming the exact
+    // fault. Only one: a second failure means the model can't do better on this
+    // topic, and a weak hook beats another round trip the user has to wait out.
+    const issues = hookIssues(parsed.linkedin ?? "");
+    if (issues.length > 0) {
+      const retried = extractPostJson(await generate(hookRetryNote(issues)));
+      if (retried && hookIssues(retried.linkedin ?? "").length < issues.length) {
+        parsed = retried;
+      }
     }
     return NextResponse.json({
       linkedin: (parsed.linkedin ?? "").slice(0, 3000),

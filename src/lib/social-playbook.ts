@@ -116,7 +116,10 @@ export function playbookToPrompt(stored: StoredPlaybook | null): string {
   const lines: string[] = [
     "=== WHAT ACTUALLY WORKS FOR THIS ACCOUNT ===",
     `Learned from ${stored.postsAnalyzed} posts with real reach data.`,
-    "Follow this over generic best practice — it is measured, not assumed.",
+    "This tells you WHAT to write about — the topics and formats that reached people.",
+    "It does NOT tell you how to open. Reach data cannot rank hooks unless the posts",
+    "actually used different hook styles, and so far they have not. Where anything",
+    "below conflicts with the hook rules, THE HOOK RULES WIN.",
   ];
 
   if (p.headline) lines.push("", p.headline);
@@ -128,8 +131,13 @@ export function playbookToPrompt(stored: StoredPlaybook | null): string {
       const avg = f.avgImpressions !== null ? `${f.avgImpressions} avg impressions` : "no reach data";
       lines.push(`- ${f.platform} (${f.posts} posts, ${avg}): ${f.winningPattern}`);
       if (f.bestHook) {
+        // Deliberately NOT labelled "best hook". The top post's opening line is
+        // evidence that its SUBJECT landed; it is not evidence that its wording
+        // did, and calling it a best hook taught the writer to reproduce the
+        // aphorism it happened to open with.
         lines.push(
-          `  Best hook so far${f.bestImpressions !== null ? ` (${f.bestImpressions} impressions)` : ""}: "${f.bestHook}"`
+          `  Best-reaching post${f.bestImpressions !== null ? ` (${f.bestImpressions} impressions)` : ""} opened: "${f.bestHook}"`,
+          "  ^ evidence of a topic that landed, NOT a line to imitate. Rewrite the opener to the hook rules."
         );
       }
       if (f.losingPattern) lines.push(`  Avoid: ${f.losingPattern}`);

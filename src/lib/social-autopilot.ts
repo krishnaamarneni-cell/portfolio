@@ -4,7 +4,7 @@ import { fetchConnector } from "@/lib/content";
 import { getChannels, createBufferPost, getAllSentPosts, type BufferSentPost } from "@/lib/buffer";
 import { runAgent } from "@/lib/agents";
 import { getContentProfile } from "@/lib/content-curator";
-import { extractPostJson } from "@/lib/social-prompt";
+import { extractPostJson, hookIssues, hookRetryNote, POST_RULES } from "@/lib/social-prompt";
 import { getPlaybook, playbookToPrompt } from "@/lib/social-playbook";
 import { nowInTimezone, isWithinWindow } from "@/lib/social-drip";
 export { nowInTimezone };
@@ -301,16 +301,7 @@ ${profile}
 
 ${analyticsCtx}
 
-CRITICAL RULES:
-- Write ONLY about the given topic. Do NOT insert Krishna's bio, job history, or resume into the post.
-- Each platform must feel genuinely DIFFERENT — not the same text reformatted.
-- LinkedIn = thought leadership (max 3000 chars). Hook line first, short paragraphs, 3-5 hashtags at end.
-- X = sharp punchy take (max 270 chars). One idea, conversational, 0-1 hashtag.
-- Instagram = storytelling caption (max 2000 chars). Personal angle, 2-3 emojis, 8-12 hashtags at end.
-- NEVER use ** or markdown formatting. Plain text only.
-- NEVER throat-clear ("In today's world...", "I wanted to share...")
-- Hook FIRST, always. Make it stop the scroll.
-- BANNED phrases: "excited about", "leverage my expertise", "game changer", "at the end of the day"
+${POST_RULES}
 
 ${postType === "image" ? 'Also generate an "image_query" field (2-4 concrete words for Unsplash that MATCH the topic, not generic stock).' : ""}
 
@@ -324,18 +315,35 @@ Output STRICT JSON (no markdown fences):
 
 Only include fields for platforms: ${platformList}`;
 
-  const result = await runAgent({
-    apiKey,
-    model: "llama-3.3-70b-versatile",
-    systemPrompt,
-    userPrompt: `Topic: ${topic}\nPost type: ${postType}\nPlatforms: ${platformList}`,
-    maxTokens: 3000,
-  });
+  const userPrompt = `Topic: ${topic}\nPost type: ${postType}\nPlatforms: ${platformList}`;
+  const write = (extra?: string) =>
+    runAgent({
+      apiKey,
+      model: "llama-3.3-70b-versatile",
+      systemPrompt,
+      userPrompt: extra ? `${userPrompt}\n\n${extra}` : userPrompt,
+      maxTokens: 3000,
+    });
 
+  const result = await write();
   if (!result.ok || !result.content) return null;
 
-  const parsed = extractPostJson(result.content);
+  let parsed = extractPostJson(result.content);
   if (!parsed) return null;
+
+  // Autopilot posts without anyone reading it first, so the mechanical hook
+  // check matters more here than in the Composer — there is no human to catch
+  // an "AI isn't just X, it's Y" opener before it ships.
+  if (parsed.linkedin) {
+    const issues = hookIssues(parsed.linkedin);
+    if (issues.length > 0) {
+      const retry = await write(hookRetryNote(issues));
+      const reparsed = retry.ok && retry.content ? extractPostJson(retry.content) : null;
+      if (reparsed?.linkedin && hookIssues(reparsed.linkedin).length < issues.length) {
+        parsed = reparsed;
+      }
+    }
+  }
 
   let imageUrl: string | null = null;
   if ((postType === "image" || postType === "image+text") && parsed.image_query) {
