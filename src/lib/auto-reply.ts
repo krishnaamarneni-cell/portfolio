@@ -491,6 +491,24 @@ ${factsBlock ? `\n${factsBlock}` : ""}${voiceBlock ? `\n${voiceBlock}` : ""}`,
       continue;
     }
 
+    // The resume is the point of the reply, so fetch it BEFORE reserving the
+    // message. A send that silently drops the attachment is worse than no send:
+    // it burns the one reply this sender gets and looks careless doing it.
+    let resumeBuffer: Buffer | null = null;
+    let resumeType = "application/pdf";
+    try {
+      const r = await fetch(resumeLink);
+      if (r.ok) {
+        resumeBuffer = Buffer.from(await r.arrayBuffer());
+        resumeType = r.headers.get("content-type")?.split(";")[0] || resumeType;
+      }
+    } catch {}
+    if (!resumeBuffer?.length) {
+      result.errors.push(`resume unavailable at ${resumeLink} — not sending to ${email}`);
+      continue;
+    }
+    const resumeExt = /\.docx?(\?|$)/i.test(resumeLink) ? "docx" : "pdf";
+
     const subject = `Re: ${msg.subject || verdict.role || "Opportunity"}`;
     const rowId = await reserveSend({
       messageId: msg.id,
@@ -505,20 +523,6 @@ ${factsBlock ? `\n${factsBlock}` : ""}${voiceBlock ? `\n${voiceBlock}` : ""}`,
       continue;
     }
 
-    // Type from the actual file, not a hardcoded guess — the stored resume moved
-    // from .docx to .pdf and a mislabelled attachment fails to open for the
-    // recruiter without failing here.
-    let resumeBuffer: Buffer | null = null;
-    let resumeType = "application/pdf";
-    try {
-      const r = await fetch(resumeLink);
-      if (r.ok) {
-        resumeBuffer = Buffer.from(await r.arrayBuffer());
-        resumeType = r.headers.get("content-type")?.split(";")[0] || resumeType;
-      }
-    } catch {}
-    const resumeExt = /\.docx?(\?|$)/i.test(resumeLink) ? "docx" : "pdf";
-
     const firstName = name.split(" ")[0] || "there";
     const html = `<p>Hi ${firstName},</p>
 <p>${verdict.reply.replace(/\n/g, "<br>")}</p>
@@ -532,17 +536,13 @@ ${SIGNATURE_HTML}`;
       html,
       text,
       replyTo: REPLY_TO,
-      ...(resumeBuffer
-        ? {
-            attachments: [
-              {
-                filename: `Krishna_Amarneni_Resume.${resumeExt}`,
-                content: resumeBuffer,
-                contentType: resumeType,
-              },
-            ],
-          }
-        : {}),
+      attachments: [
+        {
+          filename: `Krishna_Amarneni_Resume.${resumeExt}`,
+          content: resumeBuffer,
+          contentType: resumeType,
+        },
+      ],
     });
 
     if (send.ok) {
