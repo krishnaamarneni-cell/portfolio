@@ -16,16 +16,32 @@
 export const MATCH_THRESHOLD = 70;
 
 /**
- * Never exchange more than this with one sender.
+ * Never send more than this into one conversation.
  *
- * The pipeline once looped for six weeks producing "Re: Re: Re:" subjects
- * because nothing counted prior replies. Two is enough for a real recruiter
- * thread and short enough that a loop dies immediately.
+ * This is the cap that matters. The pipeline once looped for six weeks
+ * producing "Re: Re: Re:" subjects because nothing counted prior replies. Two
+ * is enough for a real recruiter exchange and short enough that a loop dies
+ * immediately.
  */
-export const MAX_REPLIES_PER_SENDER = 2;
+export const MAX_REPLIES_PER_THREAD = 2;
 
-/** Hard ceiling per calendar day across all senders. */
-export const MAX_SENDS_PER_DAY = 2;
+/**
+ * Backstop so a single address cannot monopolise the pipeline across many
+ * separate threads. Deliberately loose — a genuine recruiter pitching several
+ * roles should not be silenced after the second one.
+ */
+export const MAX_REPLIES_PER_SENDER = 6;
+
+/**
+ * Circuit breaker, not a throttle.
+ *
+ * There is deliberately no daily quota: if eight good recruiters write on the
+ * same day, all eight should get an answer — throttling that would work against
+ * the entire point of the feature. This number exists only to bound a runaway,
+ * such as a mailing-list burst being misclassified, and sits far above any
+ * plausible real day so it never binds in normal use.
+ */
+export const DAILY_RUNAWAY_LIMIT = 25;
 
 /**
  * Replies only leave during New York business hours.
@@ -185,7 +201,10 @@ export function senderBlockReason(
   opts: {
     ownEmails: string[];
     ownDomains: string[];
-    repliesSoFar: number;
+    /** Replies already sent into THIS conversation. */
+    repliesInThread: number;
+    /** Replies already sent to this address across all conversations. */
+    repliesToSender: number;
     doNotContact?: boolean;
     bounced?: boolean;
   }
@@ -202,8 +221,11 @@ export function senderBlockReason(
 
   if (opts.doNotContact) return "marked do_not_contact";
   if (opts.bounced) return "address previously bounced";
-  if (opts.repliesSoFar >= MAX_REPLIES_PER_SENDER) {
-    return `already replied ${opts.repliesSoFar}x (cap ${MAX_REPLIES_PER_SENDER})`;
+  if (opts.repliesInThread >= MAX_REPLIES_PER_THREAD) {
+    return `already sent ${opts.repliesInThread} replies in this thread (cap ${MAX_REPLIES_PER_THREAD})`;
+  }
+  if (opts.repliesToSender >= MAX_REPLIES_PER_SENDER) {
+    return `already sent ${opts.repliesToSender} replies to this address (cap ${MAX_REPLIES_PER_SENDER})`;
   }
   return null;
 }

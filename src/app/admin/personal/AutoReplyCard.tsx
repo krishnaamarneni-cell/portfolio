@@ -87,8 +87,9 @@ export default function AutoReplyCard({
             Conversations.
           </p>
           <p className="text-[11px] text-[var(--admin-text-muted)] mt-1.5">
-            Limits: max <strong className="text-[var(--admin-text)]">2 per day</strong>, max{" "}
-            <strong className="text-[var(--admin-text)]">2 per sender</strong>, and only between{" "}
+            No daily quota — every genuine match gets an answer. Limits are{" "}
+            <strong className="text-[var(--admin-text)]">2 replies per conversation</strong> so nothing loops, and only
+            between{" "}
             <strong className="text-[var(--admin-text)]">9am–6pm New York</strong>. Personal mail, referral requests,
             job-board digests and interview scheduling are never answered.
           </p>
@@ -114,9 +115,9 @@ export default function AutoReplyCard({
         <div className="mt-3 flex items-start gap-2 text-[11px] text-red-400 bg-red-500/[0.06] border border-red-500/20 rounded-lg px-3 py-2">
           <FiAlertTriangle size={13} className="mt-0.5 shrink-0" />
           <span>
-            Auto-reply is live — emails go out from your Gmail with no review, up to 2 a day during 9am–6pm New York.
-            Every reply is logged in full under <strong>replied_emails.body_sent</strong>. Turn this off if you want to
-            approve each one yourself.
+            Auto-reply is live — emails go out from your Gmail with no review during 9am–6pm New York. Every reply is
+            logged in full under <strong>replied_emails.body_sent</strong>. Turn this off if you want to approve each
+            one yourself.
           </span>
         </div>
       )}

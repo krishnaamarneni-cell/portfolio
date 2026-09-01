@@ -30,7 +30,7 @@ import { upsertContact } from "@/lib/contacts";
 import { isUnsendable } from "@/lib/unsendable";
 import {
   MATCH_THRESHOLD,
-  MAX_SENDS_PER_DAY,
+  DAILY_RUNAWAY_LIMIT,
   makeNonce,
   parseFrom,
   replyIssues,
@@ -144,16 +144,33 @@ async function contactFlags(email: string): Promise<{ doNotContact: boolean; bou
   }
 }
 
-/** How many times we have already written to this address. */
-async function repliesToSender(email: string): Promise<number> {
+/**
+ * Replies already sent into this conversation, and to this address overall.
+ *
+ * The thread count is the one that enforces "two responses to one email"; the
+ * sender count is only a loose backstop against one address monopolising the
+ * pipeline through many separate threads.
+ */
+async function replyHistory(
+  email: string,
+  threadId: string
+): Promise<{ inThread: number; toSender: number }> {
   const db = requireSupabaseAdmin();
-  const { count, error } = await db
-    .from(TABLE)
-    .select("id", { count: "exact", head: true })
-    .eq("sender_email", email)
-    .neq("status", "failed");
-  if (error) throw new Error(`cannot read sender history: ${error.message}`);
-  return count ?? 0;
+  const [thread, sender] = await Promise.all([
+    db
+      .from(TABLE)
+      .select("id", { count: "exact", head: true })
+      .eq("thread_id", threadId)
+      .neq("status", "failed"),
+    db
+      .from(TABLE)
+      .select("id", { count: "exact", head: true })
+      .eq("sender_email", email)
+      .neq("status", "failed"),
+  ]);
+  if (thread.error) throw new Error(`cannot read thread history: ${thread.error.message}`);
+  if (sender.error) throw new Error(`cannot read sender history: ${sender.error.message}`);
+  return { inThread: thread.count ?? 0, toSender: sender.count ?? 0 };
 }
 
 /**
@@ -367,8 +384,12 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
     );
     return result;
   }
-  if (todayCount >= MAX_SENDS_PER_DAY) {
-    result.skipped.push(`daily cap reached (${todayCount}/${MAX_SENDS_PER_DAY})`);
+  // Not a quota. Eight genuine recruiters on one day should get eight answers;
+  // this only stops a runaway, such as a misclassified mailing-list burst.
+  if (todayCount >= DAILY_RUNAWAY_LIMIT) {
+    result.errors.push(
+      `runaway guard tripped: ${todayCount} sent today (limit ${DAILY_RUNAWAY_LIMIT}) — check what is being classified as a job`
+    );
     return result;
   }
 
@@ -419,8 +440,8 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
   } catch {}
 
   for (const msg of candidates) {
-    if (result.sent + todayCount >= MAX_SENDS_PER_DAY) {
-      result.skipped.push(`daily cap reached mid-run (${MAX_SENDS_PER_DAY})`);
+    if (result.sent + todayCount >= DAILY_RUNAWAY_LIMIT) {
+      result.errors.push(`runaway guard tripped mid-run at ${DAILY_RUNAWAY_LIMIT}`);
       break;
     }
 
@@ -428,18 +449,19 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
 
     // Identity and history checks first — they are free and they are what stops
     // the loop. Note these run before any model call.
-    let repliesSoFar: number;
+    let history: { inThread: number; toSender: number };
     try {
-      repliesSoFar = await repliesToSender(email);
+      history = await replyHistory(email, msg.threadId);
     } catch (err) {
-      result.errors.push(err instanceof Error ? err.message : "sender history unreadable");
+      result.errors.push(err instanceof Error ? err.message : "reply history unreadable");
       break; // fail closed
     }
     const flags = await contactFlags(email);
     const blocked = senderBlockReason(email, {
       ownEmails: own.emails,
       ownDomains: own.domains,
-      repliesSoFar,
+      repliesInThread: history.inThread,
+      repliesToSender: history.toSender,
       doNotContact: flags.doNotContact,
       bounced: flags.bounced,
     });
