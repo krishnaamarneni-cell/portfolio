@@ -137,7 +137,7 @@ export function untrustedBlock(label: string, text: string, nonce: string): stri
  */
 export function replyIssues(
   reply: string,
-  opts: { allowedHosts: string[]; ownEmails: string[] }
+  opts: { allowedHosts: string[]; ownEmails: string[]; ownPhones?: string[] }
 ): string[] {
   const text = (reply ?? "").trim();
   const issues: string[] = [];
@@ -183,6 +183,18 @@ export function replyIssues(
   for (const addr of text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) ?? []) {
     if (!own.has(addr.toLowerCase())) {
       issues.push(`Contains an unexpected email address: ${addr}`);
+    }
+  }
+
+  // A phone number that is not Krishna's is either a real third party whose
+  // details he did not choose to share, or — more likely, since the pipeline
+  // gives the model no reference data — an invented person being sent to a real
+  // recruiter over his name. Neither is recoverable once the mail leaves.
+  const ownDigits = new Set((opts.ownPhones ?? []).map((p) => p.replace(/\D/g, "")).filter(Boolean));
+  for (const phone of text.match(/(?:\+?\d{1,2}[\s.‐-―-]?)?\(?\d{3}\)?[\s.‐-―-]?\d{3}[\s.‐-―-]?\d{4}/g) ?? []) {
+    const d = phone.replace(/\D/g, "");
+    if (d.length >= 10 && !ownDigits.has(d) && !ownDigits.has(d.slice(-10))) {
+      issues.push(`Contains a phone number that is not Krishna's: ${phone.trim()}`);
     }
   }
 

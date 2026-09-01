@@ -283,6 +283,12 @@ STEP 3 — only when category is "job" AND match is ${MATCH_THRESHOLD} or above,
   - Plain text only. No markdown, no asterisks, no bullet characters.
   - No greeting line and no signature — both are added automatically.
   - Do not include any URL or email address. They are added automatically.
+  - NEVER include references, referees, or anyone else's name, employer or phone
+    number. Krishna supplies references himself, in his own time, after he has
+    decided the role is worth it. You have no real reference data, so anything
+    you write in that shape would be invented people sent to a real recruiter.
+    Do not offer them, do not list them, do not promise them.
+  - The only phone number that may appear is Krishna's own.
   - Never leave a {placeholder} unfilled.
   - Banned: "excited about the opportunity", "leverage my expertise", "confident in my ability", "drive business growth".
   - End by proposing a short call.
@@ -539,6 +545,7 @@ ${factsBlock ? `\n${factsBlock}` : ""}${voiceBlock ? `\n${voiceBlock}` : ""}`,
     const issues = replyIssues(verdict.reply, {
       allowedHosts,
       ownEmails: [OWN_MAILBOX, ...own.emails],
+      ownPhones: ["(203) 804-9291"],
     });
     if (issues.length > 0) {
       result.skipped.push(`${email}: unsafe draft — ${issues[0]}`);

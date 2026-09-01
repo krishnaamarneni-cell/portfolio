@@ -83,6 +83,15 @@ export function sanitizeVoicePrompt(raw: string, own: OwnContacts): SanitizeResu
   // still names a private individual and their employer.
   const kept: string[] = [];
   for (const line of text.split("\n")) {
+    // Any instruction to supply references has to go. Krishna sends those
+    // himself, and the sanitiser has just removed the only real ones the model
+    // had — so an instruction to "list references" that survives here does not
+    // produce a shorter email, it produces invented people with invented phone
+    // numbers, sent to a recruiter under his name.
+    if (/\breferences?\b/i.test(line)) {
+      removed.push("instruction to include references");
+      continue;
+    }
     const foreignPhone = (line.match(PHONE_RX) ?? []).find((p) => {
       const d = digits(p);
       return d.length >= 10 && !ownPhones.has(d) && !ownPhones.has(d.slice(-10));
