@@ -19,6 +19,7 @@ import LucyImportCard from "./LucyImportCard";
 import SignOutCard from "./SignOutCard";
 import AutoReplyCard from "./personal/AutoReplyCard";
 import LearnVoiceCard from "./personal/LearnVoiceCard";
+import WarmOutreachCard from "./personal/WarmOutreachCard";
 import { getToolsForDisplay } from "@/lib/mcp-tools";
 
 type Props = {
@@ -204,6 +205,7 @@ export default function ConnectorsEditor({ onSuccess, onError, sessionEmail }: P
       <div className="mt-4 space-y-4">
         <LearnVoiceCard onError={onError} onSuccess={onSuccess} />
         <AutoReplyCard onError={onError} onSuccess={onSuccess} />
+        <WarmOutreachCard onError={onError} onSuccess={onSuccess} />
       </div>
 
       {/* Lucy MCP Hub — connection info for external agents */}

@@ -33,6 +33,7 @@ export type AdminSettings = {
   sunday_reflection_last_status: string | null;
   sunday_reflection_last_subject: string | null;
   auto_reply_enabled: boolean;
+  warm_outreach_enabled: boolean;
   updated_at: string;
 };
 
@@ -63,6 +64,7 @@ export async function getSettings(): Promise<AdminSettings> {
     sunday_reflection_last_status: null,
     sunday_reflection_last_subject: null,
     auto_reply_enabled: false,
+    warm_outreach_enabled: false,
     updated_at: new Date().toISOString(),
   };
 }

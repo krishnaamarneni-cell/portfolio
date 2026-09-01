@@ -23,6 +23,7 @@ export async function PUT(request: Request) {
     sunday_reflection_enabled?: boolean;
     sunday_reflection_to?: string | null;
     auto_reply_enabled?: boolean;
+    warm_outreach_enabled?: boolean;
   };
   const settings = await updateSettings({
     morning_briefing_enabled: body.morning_briefing_enabled,
@@ -30,6 +31,7 @@ export async function PUT(request: Request) {
     sunday_reflection_enabled: body.sunday_reflection_enabled,
     sunday_reflection_to: body.sunday_reflection_to,
     auto_reply_enabled: body.auto_reply_enabled,
+    warm_outreach_enabled: body.warm_outreach_enabled,
   });
   return NextResponse.json({ settings });
 }
