@@ -106,7 +106,12 @@ export async function GET(request: Request) {
   try {
     const { runAutoReplyPipeline } = await import("@/lib/auto-reply");
     const autoReply = await runAutoReplyPipeline();
-    results.autoReply = `scanned ${autoReply.scanned}, ${autoReply.jobEmails} job emails, ${autoReply.matched} matched, ${autoReply.sent} sent, ${autoReply.skippedDuplicate} skipped (already replied)`;
+    results.autoReply = `scanned ${autoReply.scanned}, ${autoReply.jobEmails} candidates, ${autoReply.matched} job-classified, ${autoReply.sent} sent, ${autoReply.skippedDuplicate} already handled`;
+    // Why something was NOT sent is the more useful half of this report: it is
+    // how you tell "nothing matched" from "the classifier rejected everything".
+    if (autoReply.skipped.length > 0) {
+      results.autoReplySkipped = autoReply.skipped.slice(0, 20).join("; ");
+    }
     if (autoReply.errors.length > 0) {
       results.autoReplyErrors = autoReply.errors.join("; ");
     }
