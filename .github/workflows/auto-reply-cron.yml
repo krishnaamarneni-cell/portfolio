@@ -4,10 +4,18 @@
 # different position from one answered tomorrow morning. On the shared 4x/day
 # agents schedule, mail arriving just after a tick waited up to ~17 hours.
 #
-# Every 15 minutes is nearly free here. The pipeline checks the kill switch, the
+# Every 5 minutes is cheap here. The pipeline checks the kill switch, the
 # 9am-6pm New York window and the runaway breaker BEFORE touching Gmail or Groq,
-# so the ~68 ticks a day that fall outside business hours cost one database read
-# each and return. Actions minutes are free on a public repo.
+# so any tick outside business hours costs one database read and returns.
+# 132 runs a day, and Actions minutes are free on a public repo.
+#
+# This is what makes Gmail Pub/Sub push unnecessary. Push would buy roughly two
+# and a half minutes of average latency in exchange for a Cloud project, a
+# public webhook on a site that emails a resume, and a watch registration that
+# expires every 7 days and fails silently when it lapses.
+#
+# Note: GitHub schedules are best effort and can be delayed under load,
+# especially on the hour, so treat 5 minutes as typical rather than guaranteed.
 #
 # Setup: CRON_SECRET must exist as a GitHub repo secret
 #   (Settings → Secrets → Actions), matching the Vercel CRON_SECRET.
@@ -16,7 +24,13 @@ name: Auto-Reply Cron
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Every 5 minutes — GitHub's shortest allowed interval — but only across the
+    # UTC band that contains 09:00-17:59 New York in both halves of the year:
+    #   EDT (UTC-4) needs UTC 13-21
+    #   EST (UTC-5) needs UTC 14-22
+    # 13-23 covers all nine hours in both, verified against each. Ticking
+    # overnight would just be ~180 daily no-ops on hours that can never send.
+    - cron: "*/5 13-23 * * *"
   workflow_dispatch: # Manual trigger from the GitHub UI
 
 # A slow run must never overlap the next tick — two pipelines scanning the same

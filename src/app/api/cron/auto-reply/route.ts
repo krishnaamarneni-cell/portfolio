@@ -12,10 +12,10 @@ export const maxDuration = 60;
  * whole value depends on answering quickly. Sharing a schedule meant a
  * recruiter emailing just after a tick waited up to a full day.
  *
- * Running this every 15 minutes is nearly free by construction. The pipeline
- * checks the kill switch, the business-hours window and the runaway breaker
- * BEFORE it touches Gmail or Groq, so a tick outside 9am-6pm New York costs a
- * single settings read and returns.
+ * Running this every 5 minutes is cheap by construction. The pipeline checks
+ * the kill switch, the business-hours window and the runaway breaker BEFORE it
+ * touches Gmail or Groq, so a tick outside 9am-6pm New York costs a single
+ * settings read and returns.
  *
  * Auth: CRON_SECRET, same as every other cron here — this route can send email,
  * so it must never be publicly triggerable.
