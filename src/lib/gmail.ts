@@ -203,6 +203,10 @@ export async function sendEmail(opts: {
   html: string;
   text?: string;
   attachments?: EmailAttachment[];
+  /** Gmail thread to attach this message to, so it shows as part of the conversation. */
+  threadId?: string;
+  /** The original message's Message-ID header, for RFC-5322 threading. */
+  inReplyTo?: string;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   const access = await getAccessToken();
   if (!access) return { ok: false, error: "Gmail not connected" };
@@ -210,6 +214,13 @@ export async function sendEmail(opts: {
   const from = row?.email || "me";
   const rand = Math.random().toString(36).slice(2);
   const textPart = opts.text || opts.html.replace(/<[^>]+>/g, "").trim();
+
+  // RFC-5322 threading. Gmail's own UI groups by threadId, but every other mail
+  // client threads on In-Reply-To/References — without these a "reply" arrives
+  // in the recipient's inbox as an unrelated new message.
+  const replyHeaders = opts.inReplyTo
+    ? [`In-Reply-To: ${opts.inReplyTo}`, `References: ${opts.inReplyTo}`]
+    : [];
 
   let mime: string;
   if (opts.attachments?.length) {
@@ -220,6 +231,7 @@ export async function sendEmail(opts: {
       `From: ${from}`,
       `To: ${opts.to}`,
       `Subject: ${opts.subject}`,
+      ...replyHeaders,
       "MIME-Version: 1.0",
       `Content-Type: multipart/mixed; boundary="${mixed}"`,
       "",
@@ -261,6 +273,7 @@ export async function sendEmail(opts: {
       `From: ${from}`,
       `To: ${opts.to}`,
       `Subject: ${opts.subject}`,
+      ...replyHeaders,
       "MIME-Version: 1.0",
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
       "",
@@ -289,7 +302,7 @@ export async function sendEmail(opts: {
         Authorization: `Bearer ${access}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ raw }),
+      body: JSON.stringify(opts.threadId ? { raw, threadId: opts.threadId } : { raw }),
       cache: "no-store",
     }
   );
@@ -313,6 +326,8 @@ export type GmailThreadMessage = {
   snippet: string;
   bodyText: string;
   bodyHtml: string;
+  /** The RFC-5322 Message-ID header, needed to reply into this thread. */
+  messageIdHeader?: string;
 };
 
 export type GmailThread = {
@@ -595,6 +610,7 @@ export async function getMessageFull(
       snippet: m.snippet ?? "",
       bodyText: text,
       bodyHtml: html,
+      messageIdHeader: header("Message-ID") || undefined,
     };
   } catch {
     return null;
