@@ -223,7 +223,11 @@ export type ContactRelationship = {
   name?: string | null;
   company?: string | null;
   rolePitched?: string | null;
-  timesContacted: number;
+  /** When Krishna last actually emailed them. Null means he never has. */
+  emailedAt?: string | null;
+  /** Replies this pipeline has already sent. Authoritative — we wrote the rows. */
+  autoRepliesSent: number;
+  /** Replies received from them, detected by the response tracker. */
   repliedCount: number;
   lastRepliedAt?: string | null;
   starred?: boolean;
@@ -232,6 +236,19 @@ export type ContactRelationship = {
 
 export type RelationshipTier = "new" | "pending" | "active" | "dormant";
 
+/**
+ * Note what is deliberately NOT used here: recruiter_contacts.times_contacted.
+ *
+ * That column is incremented by upsertContact on every upsert, so it counts
+ * times the contact was SEEN in the mailbox, not times Krishna wrote to them.
+ * 296 of 702 contacts have times_contacted above zero with emailed_at null —
+ * 42% — so reading it as an outreach count tells the writer that Krishna has
+ * emailed people he has never once emailed, and the reply then opens on a
+ * relationship that does not exist.
+ *
+ * emailed_at and replied_count each answer exactly one question, so they are
+ * what this reads.
+ */
 export function relationshipTier(
   c: ContactRelationship,
   now: Date = new Date()
@@ -241,7 +258,8 @@ export function relationshipTier(
     const days = (now.getTime() - new Date(c.lastRepliedAt).getTime()) / 86_400_000;
     return days > 180 ? "dormant" : "active";
   }
-  return c.timesContacted > 0 ? "pending" : "new";
+  const weWrote = Boolean(c.emailedAt) || c.autoRepliesSent > 0;
+  return weWrote ? "pending" : "new";
 }
 
 /**
@@ -265,13 +283,22 @@ No prior record of this person. Treat as a first contact: a brief line on who Kr
   if (c.name) lines.push(`Name: ${c.name}`);
   if (c.company) lines.push(`Company: ${c.company}`);
   if (c.rolePitched) lines.push(`Previously pitched: ${c.rolePitched}`);
+  const daysSince = (iso: string) =>
+    Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000);
+
   lines.push(
-    `History: Krishna has emailed them ${c.timesContacted} time(s); they have replied ${c.repliedCount} time(s).`
+    c.emailedAt
+      ? `Krishna last emailed them ${daysSince(c.emailedAt)} day(s) ago.`
+      : "Krishna has never emailed them."
   );
-  if (c.lastRepliedAt) {
-    const days = Math.floor((now.getTime() - new Date(c.lastRepliedAt).getTime()) / 86_400_000);
-    lines.push(`Last reply from them: ${days} day(s) ago.`);
+  if (c.autoRepliesSent > 0) {
+    lines.push(`This pipeline has already sent them ${c.autoRepliesSent} repl(y/ies).`);
   }
+  lines.push(
+    c.repliedCount > 0
+      ? `They have replied ${c.repliedCount} time(s)${c.lastRepliedAt ? `, last ${daysSince(c.lastRepliedAt)} day(s) ago` : ""}.`
+      : "They have never replied."
+  );
   if (c.starred) lines.push("Krishna has starred this contact as important.");
   if (c.notes?.trim()) lines.push(`Krishna's note: ${c.notes.trim().slice(0, 300)}`);
 

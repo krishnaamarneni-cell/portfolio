@@ -137,7 +137,10 @@ async function sentToday(): Promise<number> {
  * like a person from one that sounds like a form, and it was all sitting there
  * unread.
  */
-async function contactContext(email: string): Promise<{
+async function contactContext(
+  email: string,
+  autoRepliesSent: number
+): Promise<{
   doNotContact: boolean;
   bounced: boolean;
   relationship: ContactRelationship | null;
@@ -146,8 +149,10 @@ async function contactContext(email: string): Promise<{
     const db = requireSupabaseAdmin();
     const { data } = await db
       .from("recruiter_contacts")
+      // times_contacted is deliberately not selected — it counts mailbox
+      // sightings, not outreach. See relationshipTier.
       .select(
-        "name,company,role_pitched,times_contacted,replied_count,last_replied_at,starred,notes,do_not_contact,bounced"
+        "name,company,role_pitched,emailed_at,replied_count,last_replied_at,starred,notes,do_not_contact,bounced"
       )
       .eq("email", email)
       .maybeSingle();
@@ -159,7 +164,8 @@ async function contactContext(email: string): Promise<{
         name: data.name,
         company: data.company,
         rolePitched: data.role_pitched,
-        timesContacted: Number(data.times_contacted ?? 0),
+        emailedAt: data.emailed_at,
+        autoRepliesSent,
         repliedCount: Number(data.replied_count ?? 0),
         lastRepliedAt: data.last_replied_at,
         starred: Boolean(data.starred),
@@ -494,7 +500,7 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
       result.errors.push(err instanceof Error ? err.message : "reply history unreadable");
       break; // fail closed
     }
-    const contact = await contactContext(email);
+    const contact = await contactContext(email, history.toSender);
     const blocked = senderBlockReason(email, {
       ownEmails: own.emails,
       ownDomains: own.domains,
