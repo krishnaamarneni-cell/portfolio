@@ -175,13 +175,32 @@ export function parsePlaybook(raw: string): Playbook | null {
     const platforms = Array.isArray(o.platforms)
       ? o.platforms.map((raw) => {
           const f = raw as Record<string, unknown>;
+          const avgImpressions = num(f.avgImpressions);
+          const bestImpressions = num(f.bestImpressions);
+
+          // Two ways a quoted "best hook" is not evidence, both seen in real
+          // output and both checkable here rather than trusted to the model:
+          //
+          //   - the platform has no reach at all. Asked for the best post on a
+          //     platform where every post got 0-1 impressions, the model still
+          //     quotes one, and the UI renders it as an exemplar to imitate.
+          //   - the quoted post is below that platform's own average, so it is
+          //     not the best-reaching post regardless of what it is labelled.
+          //
+          // Suppressing the quote is right in both cases: no example beats a
+          // misleading one, and the writer falls back to the general rules.
+          const hookHasSignal =
+            bestImpressions !== null &&
+            bestImpressions >= 10 &&
+            (avgImpressions === null || bestImpressions >= avgImpressions);
+
           return {
             platform: str(f.platform, 40) ?? "unknown",
             posts: num(f.posts) ?? 0,
-            avgImpressions: num(f.avgImpressions),
+            avgImpressions,
             winningPattern: str(f.winningPattern) ?? "",
-            bestHook: str(f.bestHook, 200),
-            bestImpressions: num(f.bestImpressions),
+            bestHook: hookHasSignal ? str(f.bestHook, 200) : null,
+            bestImpressions: hookHasSignal ? bestImpressions : null,
             losingPattern: str(f.losingPattern),
             verdict: str(f.verdict) ?? "",
           } satisfies PlatformFinding;

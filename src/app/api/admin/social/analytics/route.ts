@@ -217,9 +217,9 @@ Return ONLY a JSON object. No prose, no markdown, no fences.
     "posts": number,
     "avgImpressions": number or null,
     "winningPattern": "what the highest-reach posts share — hook style, topic, length, format",
-    "bestHook": "the opening line of his best post, quoted exactly",
-    "bestImpressions": number or null,
-    "losingPattern": "what the lowest-reach posts did differently, or null",
+    "bestHook": "opening line of the HIGHEST-IMPRESSION post on this platform, quoted exactly — or null if this platform has no meaningful reach. Do not quote a post from a platform where everything got 0-2 impressions; there is no best post there, only a least-bad one.",
+    "bestImpressions": "impressions of that exact post, or null",
+    "losingPattern": "an OBSERVABLE FEATURE the lowest-reach posts share — something visible in the draft before publishing, like 'opens with an abstract claim' or 'no number in the first line'. Never define them by their result: 'posts with lower engagement lacked engagement' is circular and unusable. Null if there is no visible difference.",
     "verdict": "one sentence on whether this platform is working"
   }],
   "winningThemes": ["themes that reached people, most reach first"],
@@ -231,8 +231,18 @@ Return ONLY a JSON object. No prose, no markdown, no fences.
 Every claim must cite his own impression numbers. If a platform has no posts,
 give it posts: 0 and say so in the verdict rather than inventing analysis.
 
+USE IMPRESSIONS AS THE PRIMARY METRIC and always name the unit. Mixing
+"engagements" into one sentence and "impressions" into the next makes two
+analyses impossible to compare across runs. If you cite engagement, say
+"engagement" explicitly and give the impression figure alongside it.
+
 Be careful with small samples: with only a handful of posts, differences are
-often noise. Say so in the verdict instead of overclaiming a pattern.`
+often noise. Say so in the verdict instead of overclaiming a pattern.
+
+Do not restate the same finding as both a winning and a losing pattern. "Posts
+with a personal story did better" and "posts without a personal story did worse"
+are one observation, not two — the second slot should either add something new
+or be null.`
     : `You analyse Krishna Amarneni's social posts to describe WHAT he posts.
 
 Reach numbers are NOT available for this account. Treat performance as unknown.
