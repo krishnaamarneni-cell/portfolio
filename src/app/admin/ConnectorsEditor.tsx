@@ -18,6 +18,7 @@ import FaceLockCard from "./FaceLockCard";
 import LucyImportCard from "./LucyImportCard";
 import SignOutCard from "./SignOutCard";
 import AutoReplyCard from "./personal/AutoReplyCard";
+import LearnVoiceCard from "./personal/LearnVoiceCard";
 import { getToolsForDisplay } from "@/lib/mcp-tools";
 
 type Props = {
@@ -198,7 +199,10 @@ export default function ConnectorsEditor({ onSuccess, onError, sessionEmail }: P
           Life. They are about the day, not about configuration, so Life is the
           only place they belong — two copies of the same controls was a large
           part of why this page felt crowded. */}
-      <div className="mt-4">
+      {/* Voice sits directly above the auto-reply toggle on purpose: those
+          replies send unreviewed, so the voice wants learning first. */}
+      <div className="mt-4 space-y-4">
+        <LearnVoiceCard onError={onError} onSuccess={onSuccess} />
         <AutoReplyCard onError={onError} onSuccess={onSuccess} />
       </div>
 

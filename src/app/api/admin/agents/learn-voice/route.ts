@@ -135,9 +135,11 @@ Output ONLY the voice prompt — a paragraph that starts with "Write emails in K
 
   const voicePrompt = (result.content || "").trim();
 
-  // Step 4: Store in admin_settings
+  // Step 4: Store in admin_settings. Checked, because the whole point is that
+  // the voice persists — returning the prompt from a failed write would show a
+  // success screen for something the auto-reply pipeline can never read back.
   const db = requireSupabaseAdmin();
-  await db
+  const { error: saveError } = await db
     .from("admin_settings")
     .upsert({
       id: "singleton",
@@ -145,6 +147,12 @@ Output ONLY the voice prompt — a paragraph that starts with "Write emails in K
       voice_prompt_updated_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
+  if (saveError) {
+    return NextResponse.json(
+      { error: `Voice extracted but not saved: ${saveError.message}` },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json({
     voicePrompt,

@@ -35,6 +35,7 @@ import {
   parseFrom,
   replyIssues,
   senderBlockReason,
+  sendWindowBlockReason,
   untrustedBlock,
   type EmailCategory,
 } from "@/lib/auto-reply-guards";
@@ -334,6 +335,15 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
   const settings = await getSettings().catch(() => null);
   if (!settings?.auto_reply_enabled) {
     result.errors.push("auto-reply disabled (turn it on in Settings)");
+    return result;
+  }
+
+  // Business hours, before anything else costs money. Nothing is marked when we
+  // hold, and the scan looks back two days, so held mail is answered on the
+  // first tick inside the window rather than dropped.
+  const closed = sendWindowBlockReason();
+  if (closed) {
+    result.skipped.push(closed);
     return result;
   }
 

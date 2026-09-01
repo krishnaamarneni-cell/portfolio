@@ -28,6 +28,41 @@ export const MAX_REPLIES_PER_SENDER = 2;
 export const MAX_SENDS_PER_DAY = 2;
 
 /**
+ * Replies only leave during New York business hours.
+ *
+ * A reply timestamped 03:14 is the clearest possible tell that nobody read the
+ * email. Held messages are not lost: nothing is marked until it is actually
+ * sent, and the mailbox scan looks back two days, so a 3am arrival is still
+ * waiting at 9am.
+ *
+ * "America/New_York" rather than a fixed UTC-5 so the window tracks EST/EDT.
+ */
+export const SEND_WINDOW = {
+  startHour: 9,
+  endHour: 18,
+  timeZone: "America/New_York",
+} as const;
+
+/** The hour (0-23) in a given IANA zone. */
+export function localHourIn(timeZone: string, now: Date): number {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(now);
+  return Number(hour);
+}
+
+/** Why sending is closed right now, or null when the window is open. */
+export function sendWindowBlockReason(now: Date = new Date()): string | null {
+  const hour = localHourIn(SEND_WINDOW.timeZone, now);
+  if (hour < SEND_WINDOW.startHour || hour >= SEND_WINDOW.endHour) {
+    return `outside send window — ${String(hour).padStart(2, "0")}:00 in New York, sends run ${SEND_WINDOW.startHour}:00-${SEND_WINDOW.endHour}:00`;
+  }
+  return null;
+}
+
+/**
  * What an incoming email is. Only `job` is ever replied to.
  *
  * `personal` exists as its own category rather than as "not job" so the model
