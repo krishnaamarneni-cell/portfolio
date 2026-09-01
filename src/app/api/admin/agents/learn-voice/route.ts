@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { listRecentMessages, getThread } from "@/lib/gmail";
 import { runAgent } from "@/lib/agents";
 import { requireSupabaseAdmin } from "@/lib/supabase";
+import { sanitizeVoicePrompt } from "@/lib/voice-prompt";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -133,7 +134,20 @@ Output ONLY the voice prompt — a paragraph that starts with "Write emails in K
   if (!result.ok)
     return NextResponse.json({ error: result.error }, { status: 502 });
 
-  const voicePrompt = (result.content || "").trim();
+  // The model's output is a draft, not the artefact. It has returned analysis
+  // tables, a worked example, and a reference list carrying two private mobile
+  // numbers — all of which would then be injected into the system prompt of
+  // every auto-reply that goes to a stranger.
+  const { prompt: voicePrompt, removed } = sanitizeVoicePrompt(result.content || "", {
+    phones: ["(203) 804-9291"],
+    emails: [process.env.GMAIL_USER || "krishna.amarneni@gmail.com"],
+  });
+  if (!voicePrompt) {
+    return NextResponse.json(
+      { error: "Nothing usable was left after sanitising the model's output. Try again." },
+      { status: 502 }
+    );
+  }
 
   // Step 4: Store in admin_settings. Checked, because the whole point is that
   // the voice persists — returning the prompt from a failed write would show a
@@ -159,5 +173,8 @@ Output ONLY the voice prompt — a paragraph that starts with "Write emails in K
     emailsAnalyzed: replies.length,
     threadsScanned: Math.min(uniqueThreadIds.length, 40),
     model: result.modelUsed,
+    // Reported rather than scrubbed silently — if third-party details keep
+    // appearing, that is worth seeing.
+    removed,
   });
 }
