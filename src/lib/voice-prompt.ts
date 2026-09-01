@@ -92,6 +92,18 @@ export function sanitizeVoicePrompt(raw: string, own: OwnContacts): SanitizeResu
       removed.push("instruction to include references");
       continue;
     }
+    // Same reasoning for immigration status. Raising CPT early is Krishna's
+    // real habit and the model correctly observed it, but a habit he chooses
+    // per-recruiter is not a rule that should fire automatically before he has
+    // seen the company. The first reply is about the role; if they ask, the
+    // pipeline answers.
+    // "work-authorization" arrives with a unicode non-breaking hyphen as often
+    // as a space, so the separator has to be optional and must include the
+    // U+2010-U+2015 dash range — matching only a literal space missed it.
+    if (/\b(cpt|opt|h[\s‐-―-]?1[\s‐-―-]?b|visa|sponsor(?:ship)?|work[\s‐-―-]?authoris?z?)/i.test(line)) {
+      removed.push("instruction to volunteer visa status");
+      continue;
+    }
     const foreignPhone = (line.match(PHONE_RX) ?? []).find((p) => {
       const d = digits(p);
       return d.length >= 10 && !ownPhones.has(d) && !ownPhones.has(d.slice(-10));

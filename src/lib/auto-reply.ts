@@ -33,10 +33,13 @@ import {
   DAILY_RUNAWAY_LIMIT,
   makeNonce,
   parseFrom,
+  relationshipBlock,
   replyIssues,
   senderBlockReason,
   sendWindowBlockReason,
   untrustedBlock,
+  visaDisclosureIssue,
+  type ContactRelationship,
   type EmailCategory,
 } from "@/lib/auto-reply-guards";
 
@@ -125,22 +128,48 @@ async function sentToday(): Promise<number> {
  * maintained by the outreach tooling. Auto-reply must respect the same list —
  * an address someone opted out of is opted out however the mail is triggered.
  */
-async function contactFlags(email: string): Promise<{ doNotContact: boolean; bounced: boolean }> {
+/**
+ * Everything the CRM knows about this sender.
+ *
+ * Previously this read two boolean columns. The rest of the row — how often
+ * Krishna has written, how often they answered, when they last replied, what
+ * they pitched before, his own notes — is what separates a reply that sounds
+ * like a person from one that sounds like a form, and it was all sitting there
+ * unread.
+ */
+async function contactContext(email: string): Promise<{
+  doNotContact: boolean;
+  bounced: boolean;
+  relationship: ContactRelationship | null;
+}> {
   try {
     const db = requireSupabaseAdmin();
     const { data } = await db
       .from("recruiter_contacts")
-      .select("do_not_contact,bounced")
+      .select(
+        "name,company,role_pitched,times_contacted,replied_count,last_replied_at,starred,notes,do_not_contact,bounced"
+      )
       .eq("email", email)
       .maybeSingle();
+    if (!data) return { doNotContact: false, bounced: false, relationship: null };
     return {
-      doNotContact: Boolean(data?.do_not_contact),
-      bounced: Boolean(data?.bounced),
+      doNotContact: Boolean(data.do_not_contact),
+      bounced: Boolean(data.bounced),
+      relationship: {
+        name: data.name,
+        company: data.company,
+        rolePitched: data.role_pitched,
+        timesContacted: Number(data.times_contacted ?? 0),
+        repliedCount: Number(data.replied_count ?? 0),
+        lastRepliedAt: data.last_replied_at,
+        starred: Boolean(data.starred),
+        notes: data.notes,
+      },
     };
   } catch {
     // Unknown contact or unreadable table: fall through to the other guards
     // rather than blocking every send on a lookup failure.
-    return { doNotContact: false, bounced: false };
+    return { doNotContact: false, bounced: false, relationship: null };
   }
 }
 
@@ -289,6 +318,9 @@ STEP 3 — only when category is "job" AND match is ${MATCH_THRESHOLD} or above,
     you write in that shape would be invented people sent to a real recruiter.
     Do not offer them, do not list them, do not promise them.
   - The only phone number that may appear is Krishna's own.
+  - Do NOT raise visa, CPT, OPT, H-1B, sponsorship or work authorisation unless
+    the incoming email asked about it. The first reply is about the role. If
+    they did ask, answer plainly and briefly.
   - Never leave a {placeholder} unfilled.
   - Banned: "excited about the opportunity", "leverage my expertise", "confident in my ability", "drive business growth".
   - End by proposing a short call.
@@ -462,14 +494,14 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
       result.errors.push(err instanceof Error ? err.message : "reply history unreadable");
       break; // fail closed
     }
-    const flags = await contactFlags(email);
+    const contact = await contactContext(email);
     const blocked = senderBlockReason(email, {
       ownEmails: own.emails,
       ownDomains: own.domains,
       repliesInThread: history.inThread,
       repliesToSender: history.toSender,
-      doNotContact: flags.doNotContact,
-      bounced: flags.bounced,
+      doNotContact: contact.doNotContact,
+      bounced: contact.bounced,
     });
     if (blocked) {
       result.skipped.push(`${email}: ${blocked}`);
@@ -500,6 +532,8 @@ KRISHNA'S RESUME (trusted):
 ${experience}
 
 Skills: ${skills.join(", ")}
+
+${relationshipBlock(contact.relationship)}
 ${factsBlock ? `\n${factsBlock}` : ""}${voiceBlock ? `\n${voiceBlock}` : ""}`,
       maxTokens: 1400,
     });
@@ -547,6 +581,10 @@ ${factsBlock ? `\n${factsBlock}` : ""}${voiceBlock ? `\n${voiceBlock}` : ""}`,
       ownEmails: [OWN_MAILBOX, ...own.emails],
       ownPhones: ["(203) 804-9291"],
     });
+    // Checked against the email that actually arrived, so answering a direct
+    // question is allowed while volunteering it is not.
+    const visaIssue = visaDisclosureIssue(verdict.reply, `${msg.subject ?? ""}\n${body}`);
+    if (visaIssue) issues.push(visaIssue);
     if (issues.length > 0) {
       result.skipped.push(`${email}: unsafe draft — ${issues[0]}`);
       continue;

@@ -207,6 +207,131 @@ export function replyIssues(
   return issues;
 }
 
+/**
+ * What the CRM knows about a sender, in a shape the writer can use.
+ *
+ * The relationship data has been accumulating in recruiter_contacts all along —
+ * 83 of 695 contacts have replied at least once, some dozens of times — and the
+ * reply pipeline read two boolean columns of it. So a recruiter Krishna had
+ * traded two dozen emails with received the same cold opener as a stranger,
+ * which is the single most obvious tell that nobody is really there.
+ *
+ * This is Krishna's own data, not the incoming email, so it is stated as
+ * trusted context rather than fenced as untrusted input.
+ */
+export type ContactRelationship = {
+  name?: string | null;
+  company?: string | null;
+  rolePitched?: string | null;
+  timesContacted: number;
+  repliedCount: number;
+  lastRepliedAt?: string | null;
+  starred?: boolean;
+  notes?: string | null;
+};
+
+export type RelationshipTier = "new" | "pending" | "active" | "dormant";
+
+export function relationshipTier(
+  c: ContactRelationship,
+  now: Date = new Date()
+): RelationshipTier {
+  if (c.repliedCount > 0) {
+    if (!c.lastRepliedAt) return "active";
+    const days = (now.getTime() - new Date(c.lastRepliedAt).getTime()) / 86_400_000;
+    return days > 180 ? "dormant" : "active";
+  }
+  return c.timesContacted > 0 ? "pending" : "new";
+}
+
+/**
+ * The relationship as prompt text, plus how to use it.
+ *
+ * The instruction matters as much as the facts. Given only "they have replied
+ * 143 times", a model will manufacture warmth — inventing shared history it
+ * cannot possibly know. Saying what NOT to claim is what keeps it honest.
+ */
+export function relationshipBlock(
+  c: ContactRelationship | null,
+  now: Date = new Date()
+): string {
+  if (!c) {
+    return `=== RELATIONSHIP (from Krishna's CRM) ===
+No prior record of this person. Treat as a first contact: a brief line on who Krishna is, then the role.`;
+  }
+
+  const tier = relationshipTier(c, now);
+  const lines = ["=== RELATIONSHIP (from Krishna's CRM, trusted) ==="];
+  if (c.name) lines.push(`Name: ${c.name}`);
+  if (c.company) lines.push(`Company: ${c.company}`);
+  if (c.rolePitched) lines.push(`Previously pitched: ${c.rolePitched}`);
+  lines.push(
+    `History: Krishna has emailed them ${c.timesContacted} time(s); they have replied ${c.repliedCount} time(s).`
+  );
+  if (c.lastRepliedAt) {
+    const days = Math.floor((now.getTime() - new Date(c.lastRepliedAt).getTime()) / 86_400_000);
+    lines.push(`Last reply from them: ${days} day(s) ago.`);
+  }
+  if (c.starred) lines.push("Krishna has starred this contact as important.");
+  if (c.notes?.trim()) lines.push(`Krishna's note: ${c.notes.trim().slice(0, 300)}`);
+
+  lines.push("", "How to use this:");
+  switch (tier) {
+    case "active":
+      lines.push(
+        "- An ESTABLISHED contact you are already in conversation with. Do NOT reintroduce Krishna or restate his whole background; they know it.",
+        "- Open as a continuing thread would: acknowledge them by name and go straight to this role.",
+        "- Shorter than a cold reply. Warm, but not familiar in ways you cannot back up."
+      );
+      break;
+    case "dormant":
+      lines.push(
+        "- A real contact who has gone quiet for a long time. A light re-connection is right: acknowledge it has been a while, then the role.",
+        "- Do not imply recent contact, and do not apologise for the gap."
+      );
+      break;
+    case "pending":
+      lines.push(
+        "- Krishna has written before and they have never replied. Do NOT act familiar and do NOT mention the unanswered emails — that reads as pressure.",
+        "- Write it as a fresh, brief approach."
+      );
+      break;
+    default:
+      lines.push("- First contact. One brief line on who Krishna is, then the role.");
+  }
+
+  lines.push(
+    "- Never invent shared history: no past meetings, calls, projects or conversations beyond the counts above.",
+    "- Never quote these numbers back to them. 'You have replied 143 times' is not something a person writes."
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Immigration status is Krishna's to disclose, on his timing.
+ *
+ * His own habit is to raise CPT early, and the learned voice picked that up —
+ * but a habit he chooses per-recruiter is different from a rule that fires
+ * automatically at every 70% match before he has looked at the company. Many
+ * recruiters filter the moment they see it, and it cannot be taken back.
+ *
+ * The policy: the first reply is about the job. If the recruiter asks, the
+ * answer is theirs to have. That is checkable — the incoming email is right
+ * here — so it is checked rather than left to the prompt.
+ */
+// The separator between "work" and "authorization" is a space as often as a
+// unicode non-breaking hyphen, so it is optional and spans the U+2010-U+2015
+// dash range. An ASCII-only pattern let "work‑authorization" straight through.
+const VISA_RX =
+  /\b(cpt|opt|h[\s‐-―-]?1[\s‐-―-]?b|visa|sponsor(?:ship|ing|ed)?|work(?:ing)?[\s‐-―-]?authoris?z?|green[\s‐-―-]?card|permanent resident|citizenship status)/i;
+
+export function visaDisclosureIssue(reply: string, incomingEmailText: string): string | null {
+  const match = (reply ?? "").match(VISA_RX);
+  if (!match) return null;
+  if (VISA_RX.test(incomingEmailText ?? "")) return null; // they raised it; answering is fine
+  return `Volunteers work-authorisation status ("${match[0]}") when the recruiter did not ask. First reply is about the role only.`;
+}
+
 /** Why this sender is off-limits, or null when replying is allowed. */
 export function senderBlockReason(
   email: string,
