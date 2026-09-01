@@ -1,0 +1,47 @@
+# Auto-reply to recruiters — its own schedule, separate from the agents cron.
+#
+# Speed is the whole point: a recruiter who gets an answer the same hour is in a
+# different position from one answered tomorrow morning. On the shared 4x/day
+# agents schedule, mail arriving just after a tick waited up to ~17 hours.
+#
+# Every 15 minutes is nearly free here. The pipeline checks the kill switch, the
+# 9am-6pm New York window and the runaway breaker BEFORE touching Gmail or Groq,
+# so the ~68 ticks a day that fall outside business hours cost one database read
+# each and return. Actions minutes are free on a public repo.
+#
+# Setup: CRON_SECRET must exist as a GitHub repo secret
+#   (Settings → Secrets → Actions), matching the Vercel CRON_SECRET.
+
+name: Auto-Reply Cron
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: # Manual trigger from the GitHub UI
+
+# A slow run must never overlap the next tick — two pipelines scanning the same
+# unread mail at once is how one recruiter gets two copies. The reserve-row in
+# replied_emails would catch it, but not racing at all is cheaper than relying
+# on that.
+concurrency:
+  group: auto-reply-cron
+  cancel-in-progress: false
+
+jobs:
+  auto-reply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Trigger auto-reply
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://krishnaamarneni.com/api/cron/auto-reply")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Auto-reply cron failed with HTTP $HTTP_CODE"
+            exit 1
+          fi

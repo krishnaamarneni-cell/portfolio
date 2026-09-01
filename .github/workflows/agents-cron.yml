@@ -12,17 +12,13 @@ name: Agent Cron
 
 on:
   schedule:
-    # Four runs a day, positioned so every one lands inside the auto-reply
-    # window of 09:00-18:00 America/New_York.
-    #
-    # GitHub cron is UTC and has no DST, so the hours are chosen to hold in both
-    # halves of the year:
+    # Four runs a day across US working hours.
     #   EDT (UTC-4): 10:00 12:00 14:00 16:00 New York
     #   EST (UTC-5): 09:00 11:00 13:00 15:00 New York
     #
-    # The previous 0,6,12,18 UTC put only ONE of the four inside that window,
-    # so a recruiter email arriving just after it could wait nearly a full day.
-    # Same number of runs, same cost — only the hours moved.
+    # Auto-reply no longer runs here — it has its own 15-minute schedule in
+    # auto-reply-cron.yml, because its value depends on answering quickly while
+    # these agents are expensive and do not.
     - cron: "0 14,16,18,20 * * *"
   workflow_dispatch: # Allow manual trigger from GitHub UI
 

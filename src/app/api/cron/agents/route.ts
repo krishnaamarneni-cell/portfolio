@@ -102,22 +102,12 @@ export async function GET(request: Request) {
     results.inbox = `error: ${err instanceof Error ? err.message : "unknown"}`;
   }
 
-  // Auto-reply pipeline — send personalized replies to >70% matches with resume attached.
-  try {
-    const { runAutoReplyPipeline } = await import("@/lib/auto-reply");
-    const autoReply = await runAutoReplyPipeline();
-    results.autoReply = `scanned ${autoReply.scanned}, ${autoReply.jobEmails} candidates, ${autoReply.matched} job-classified, ${autoReply.sent} sent, ${autoReply.skippedDuplicate} already handled`;
-    // Why something was NOT sent is the more useful half of this report: it is
-    // how you tell "nothing matched" from "the classifier rejected everything".
-    if (autoReply.skipped.length > 0) {
-      results.autoReplySkipped = autoReply.skipped.slice(0, 20).join("; ");
-    }
-    if (autoReply.errors.length > 0) {
-      results.autoReplyErrors = autoReply.errors.join("; ");
-    }
-  } catch (err) {
-    results.autoReply = `error: ${err instanceof Error ? err.message : "unknown"}`;
-  }
+  // Auto-reply moved to /api/cron/auto-reply on a 15-minute schedule. Speed is
+  // its whole value and this cron runs four times a day; sharing it meant mail
+  // arriving just after a tick waited up to ~17 hours. Deliberately NOT left
+  // here as a backstop — two schedules running one pipeline is how the two
+  // copies drift, and the reserve-row dedup should not be load-bearing for
+  // something this easy to keep single.
 
   // Bulk-email response tracking — who replied, which addresses are dead.
   try {
