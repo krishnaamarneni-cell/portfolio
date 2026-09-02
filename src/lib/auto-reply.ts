@@ -261,6 +261,55 @@ async function finishSend(
   if (error) console.error(`[auto-reply] could not finalise row ${rowId}: ${error.message}`);
 }
 
+/** One evaluated email and what was decided about it. */
+type Decision = {
+  gmail_message_id?: string | null;
+  from_email?: string | null;
+  subject?: string | null;
+  category?: string | null;
+  match_pct?: number | null;
+  decision: "sent" | "skipped" | "failed";
+  reason: string;
+};
+
+/**
+ * Persist the reasoning.
+ *
+ * The pipeline has always computed a specific reason for every decision and
+ * then dropped it on the floor, which made "it read your mail and scored it 62%"
+ * indistinguishable from "the cron never ran". Best-effort by design: a missing
+ * log table must never stop a reply going out.
+ */
+async function recordDecisions(rows: Decision[]): Promise<void> {
+  if (rows.length === 0) return;
+  try {
+    const db = requireSupabaseAdmin();
+    const { error } = await db.from("auto_reply_log").insert(rows);
+    if (error) console.error(`[auto-reply] decision log unavailable: ${error.message}`);
+  } catch (err) {
+    console.error(`[auto-reply] decision log failed: ${err instanceof Error ? err.message : "unknown"}`);
+  }
+}
+
+/**
+ * Heartbeat. Written on EVERY run including the ones that do nothing, because
+ * the absence of a heartbeat is the only way to see that the cron is not firing.
+ */
+async function recordRun(summary: string): Promise<void> {
+  try {
+    const db = requireSupabaseAdmin();
+    await db
+      .from("admin_settings")
+      .update({
+        auto_reply_last_run_at: new Date().toISOString(),
+        auto_reply_last_summary: summary.slice(0, 500),
+      })
+      .eq("id", "singleton");
+  } catch {
+    // Column may not exist yet; the run itself still succeeded.
+  }
+}
+
 /**
  * Cheap prefilter. Deliberately generous — it only decides what is worth
  * spending a model call on. The real personal-vs-job decision is the model's.
@@ -379,7 +428,7 @@ type AutoReplyResult = {
 /**
  * Main pipeline — called by the cron endpoint.
  */
-export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
+async function runPipeline(decisions: Decision[]): Promise<AutoReplyResult> {
   const result: AutoReplyResult = {
     scanned: 0,
     jobEmails: 0,
@@ -388,6 +437,31 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
     skippedDuplicate: 0,
     skipped: [],
     errors: [],
+  };
+
+  /**
+   * Record a skip in both places at once.
+   *
+   * Every skip site goes through this so a decision cannot be made without
+   * being written down — the whole reason "it didn't reply" was unanswerable
+   * is that the reasons existed only in a return value nobody stored.
+   */
+  const skip = (
+    msg: { id?: string; subject?: string } | null,
+    email: string,
+    reason: string,
+    extra: { category?: string; match_pct?: number } = {}
+  ) => {
+    result.skipped.push(`${email}: ${reason}`);
+    decisions.push({
+      gmail_message_id: msg?.id ?? null,
+      from_email: email,
+      subject: msg?.subject ?? null,
+      decision: "skipped",
+      reason,
+      category: extra.category ?? null,
+      match_pct: extra.match_pct ?? null,
+    });
   };
 
   // KILL SWITCH — Settings → Auto-reply. Default OFF, and an absent column
@@ -510,11 +584,11 @@ export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
       bounced: contact.bounced,
     });
     if (blocked) {
-      result.skipped.push(`${email}: ${blocked}`);
+      skip(msg, email, blocked);
       continue;
     }
     if (isUnsendable(email)) {
-      result.skipped.push(`${email}: no-reply / automated address`);
+      skip(msg, email, "no-reply / automated address");
       continue;
     }
 
@@ -564,7 +638,7 @@ ${factsBlock ? `\n${factsBlock}` : ""}${voiceBlock ? `\n${voiceBlock}` : ""}`,
     }
 
     if (verdict.category !== "job") {
-      result.skipped.push(`${email}: classified ${verdict.category} — ${verdict.why}`);
+      skip(msg, email, `classified ${verdict.category} — ${verdict.why}`, { category: verdict.category, match_pct: verdict.match });
       continue;
     }
     result.matched++;
@@ -573,12 +647,12 @@ ${factsBlock ? `\n${factsBlock}` : ""}${voiceBlock ? `\n${voiceBlock}` : ""}`,
     // cannot say which one, the classification is not solid enough to answer
     // with a resume — that shape is the "are you available?" mass blast.
     if (!verdict.role) {
-      result.skipped.push(`${email}: classified job but names no role`);
+      skip(msg, email, "classified job but names no role", { category: verdict.category, match_pct: verdict.match });
       continue;
     }
 
     if (verdict.match < MATCH_THRESHOLD) {
-      result.skipped.push(`${email}: ${verdict.match}% < ${MATCH_THRESHOLD}%`);
+      skip(msg, email, `scored ${verdict.match}%, below the ${MATCH_THRESHOLD}% bar`, { category: verdict.category, match_pct: verdict.match });
       continue;
     }
 
@@ -592,7 +666,7 @@ ${factsBlock ? `\n${factsBlock}` : ""}${voiceBlock ? `\n${voiceBlock}` : ""}`,
     const visaIssue = visaDisclosureIssue(verdict.reply, `${msg.subject ?? ""}\n${body}`);
     if (visaIssue) issues.push(visaIssue);
     if (issues.length > 0) {
-      result.skipped.push(`${email}: unsafe draft — ${issues[0]}`);
+      skip(msg, email, `unsafe draft — ${issues[0]}`, { category: verdict.category, match_pct: verdict.match });
       continue;
     }
 
@@ -659,11 +733,64 @@ ${SIGNATURE_HTML}`;
     if (send.ok) {
       await finishSend(rowId, { ok: true, body: text });
       result.sent++;
+      decisions.push({
+        gmail_message_id: msg.id,
+        from_email: email,
+        subject,
+        category: verdict.category,
+        match_pct: verdict.match,
+        decision: "sent",
+        reason: `replied — ${verdict.match}% match`,
+      });
     } else {
       await finishSend(rowId, { ok: false, error: send.error ?? "unknown" });
       result.errors.push(`Send to ${email}: ${send.error}`);
+      decisions.push({
+        gmail_message_id: msg.id,
+        from_email: email,
+        subject,
+        category: verdict.category,
+        match_pct: verdict.match,
+        decision: "failed",
+        reason: send.error ?? "unknown send error",
+      });
     }
   }
 
   return result;
+}
+
+/** One line describing the run, for the Settings card. */
+function summarize(r: AutoReplyResult): string {
+  const parts = [
+    `scanned ${r.scanned}`,
+    `${r.jobEmails} candidate(s)`,
+    `${r.matched} job`,
+    `${r.sent} sent`,
+  ];
+  if (r.errors.length) parts.push(`errors: ${r.errors[0]}`);
+  else if (r.sent === 0 && r.skipped.length) parts.push(`held: ${r.skipped[0]}`);
+  return parts.join(" · ");
+}
+
+/**
+ * Runs the pipeline and always leaves a trace.
+ *
+ * The heartbeat is written even when nothing happened, because a run that did
+ * nothing and a cron that never fired are indistinguishable otherwise — and
+ * that ambiguity is exactly what made "why didn't it reply?" unanswerable.
+ */
+export async function runAutoReplyPipeline(): Promise<AutoReplyResult> {
+  const decisions: Decision[] = [];
+  try {
+    const result = await runPipeline(decisions);
+    await recordDecisions(decisions);
+    await recordRun(summarize(result));
+    return result;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown";
+    await recordDecisions(decisions);
+    await recordRun(`crashed: ${message}`);
+    throw err;
+  }
 }

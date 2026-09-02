@@ -1,7 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FiCornerUpLeft, FiAlertTriangle } from "react-icons/fi";
+import { FiCornerUpLeft, FiAlertTriangle, FiChevronDown, FiChevronUp } from "react-icons/fi";
+
+type Decision = {
+  from_email: string | null;
+  subject: string | null;
+  category: string | null;
+  match_pct: number | null;
+  decision: string;
+  reason: string | null;
+  created_at: string;
+};
+
+type RunLog = {
+  lastRunAt: string | null;
+  lastSummary: string | null;
+  decisions: Decision[];
+  setupNeeded?: string;
+};
+
+function ago(iso: string): string {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 24 ? `${hrs}h ago` : `${Math.round(hrs / 24)}d ago`;
+}
 
 export default function AutoReplyCard({
   onSuccess,
@@ -12,10 +37,18 @@ export default function AutoReplyCard({
 }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
+  const [log, setLog] = useState<RunLog | null>(null);
+  const [showLog, setShowLog] = useState(false);
 
-  useEffect(() => {
-    void load();
-  }, []);
+  async function loadLog() {
+    try {
+      const r = await fetch("/api/admin/auto-reply/log", { cache: "no-store" });
+      if (r.ok) setLog((await r.json()) as RunLog);
+    } catch {
+      // The toggle still works without the log; leave it absent rather than
+      // showing an error for a diagnostic panel.
+    }
+  }
 
   async function load() {
     try {
@@ -26,6 +59,12 @@ export default function AutoReplyCard({
       setEnabled(false);
     }
   }
+
+  // Declared after both loaders so neither is referenced before it exists.
+  useEffect(() => {
+    void load();
+    void loadLog();
+  }, []);
 
   async function toggle() {
     if (enabled === null) return;
@@ -79,7 +118,7 @@ export default function AutoReplyCard({
             </span>
           </div>
           <p className="text-[11px] text-[var(--admin-text-muted)] mt-1">
-            When <strong className="text-[var(--admin-text)]">on</strong>, the 6-hourly agent cron reads unread inbox
+            When <strong className="text-[var(--admin-text)]">on</strong>, a 5-minute cron reads unread inbox
             mail, replies from your Gmail with your resume attached to anything it classifies as a real role pitch
             scoring <strong className="text-[var(--admin-text)]">70%+</strong> —{" "}
             <span className="text-red-400">without asking you first</span>. When{" "}
@@ -110,6 +149,73 @@ export default function AutoReplyCard({
           />
         </button>
       </div>
+
+      {/* Did it run, and what did it decide? Without this, "replied to nothing"
+          and "never fired" are the same empty inbox. */}
+      {log && (
+        <div className="mt-3 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] px-3 py-2">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[11px] text-[var(--admin-text-muted)]">
+              {log.lastRunAt ? (
+                <>
+                  Last run <strong className="text-[var(--admin-text)]">{ago(log.lastRunAt)}</strong>
+                  {log.lastSummary ? ` — ${log.lastSummary}` : ""}
+                </>
+              ) : (
+                <span className="text-amber-400">
+                  No run recorded yet — the 5-minute cron has not reported in.
+                </span>
+              )}
+            </p>
+            {log.decisions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowLog((v) => !v)}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--admin-text-muted)] hover:text-[var(--admin-text)]"
+              >
+                {showLog ? <FiChevronUp size={12} /> : <FiChevronDown size={12} />}
+                {showLog ? "Hide" : `${log.decisions.length} decisions`}
+              </button>
+            )}
+          </div>
+
+          {log.setupNeeded && (
+            <p className="mt-1 text-[11px] text-amber-400">{log.setupNeeded}</p>
+          )}
+
+          {showLog && (
+            <div className="mt-2 space-y-1 max-h-72 overflow-y-auto">
+              {log.decisions.map((d, i) => (
+                <div key={i} className="flex items-start gap-2 text-[11px] py-1 border-t border-[var(--admin-border)]">
+                  <span
+                    className={`shrink-0 px-1.5 py-0.5 rounded font-bold uppercase text-[9px] ${
+                      d.decision === "sent"
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : d.decision === "failed"
+                          ? "bg-red-500/10 text-red-400"
+                          : "bg-[var(--admin-surface-hover)] text-[var(--admin-text-muted)]"
+                    }`}
+                  >
+                    {d.decision}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[var(--admin-text)]">
+                      {d.subject || "(no subject)"}
+                      {d.match_pct !== null && (
+                        <span className="text-[var(--admin-text-muted)]"> · {d.match_pct}%</span>
+                      )}
+                    </p>
+                    <p className="truncate text-[var(--admin-text-muted)]">
+                      {d.from_email} — {d.reason}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-[var(--admin-text-muted)]">{ago(d.created_at)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {enabled && (
         <div className="mt-3 flex items-start gap-2 text-[11px] text-red-400 bg-red-500/[0.06] border border-red-500/20 rounded-lg px-3 py-2">
