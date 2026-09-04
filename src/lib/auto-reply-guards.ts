@@ -359,6 +359,42 @@ export function visaDisclosureIssue(reply: string, incomingEmailText: string): s
   return `Volunteers work-authorisation status ("${match[0]}") when the recruiter did not ask. First reply is about the role only.`;
 }
 
+/**
+ * Remove a greeting and sign-off the model added anyway.
+ *
+ * The prompt says the body must carry neither, because the pipeline wraps it in
+ * "Hi {first}," and its own signature block. The model complies most of the
+ * time; when it does not, the recruiter gets "Hi Anuja," twice, and a
+ * "Best regards," stranded above the resume link.
+ *
+ * Only a FIRST line that is purely a greeting is removed, so a real opening
+ * sentence starting with "Hi there — quick question" is never truncated.
+ */
+export function stripGreetingAndSignoff(body: string): string {
+  let text = (body ?? "").trim();
+
+  // Leading greeting: a short line, optionally naming someone, nothing else.
+  text = text.replace(/^(?:hi|hello|hey|dear|greetings)\b[^\n,]{0,40},?[ \t]*\r?\n+/i, "");
+
+  // Trailing sign-off, plus any name line the model added under it. Looped
+  // because "Best regards,\nKrishna Amarneni" is two lines to peel.
+  const signoff = /(?:best regards|kind regards|warm regards|regards|many thanks|thanks(?: again)?|thank you|sincerely|cheers|best)[,.]?$/i;
+  const nameLine = /^krishna(?:\s+amarneni)?[,.]?$/i;
+  for (let i = 0; i < 4; i++) {
+    const lines = text.split(/\r?\n/);
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    const last = lines[lines.length - 1]?.trim() ?? "";
+    if (last && (signoff.test(last) || nameLine.test(last))) {
+      lines.pop();
+      text = lines.join("\n").trimEnd();
+      continue;
+    }
+    break;
+  }
+
+  return text.trim();
+}
+
 /** Why this sender is off-limits, or null when replying is allowed. */
 export function senderBlockReason(
   email: string,

@@ -37,6 +37,7 @@ import {
   replyIssues,
   senderBlockReason,
   sendWindowBlockReason,
+  stripGreetingAndSignoff,
   untrustedBlock,
   visaDisclosureIssue,
   type ContactRelationship,
@@ -703,11 +704,15 @@ ${factsBlock ? `\n${factsBlock}` : ""}${voiceBlock ? `\n${voiceBlock}` : ""}`,
     }
 
     const firstName = name.split(" ")[0] || "there";
+    // The prompt forbids a greeting and sign-off in the body because both are
+    // added here. The model writes them anyway often enough that the recruiter
+    // got "Hi Anuja," twice, so strip them rather than asking again.
+    const bodyText = stripGreetingAndSignoff(verdict.reply);
     const html = `<p>Hi ${firstName},</p>
-<p>${verdict.reply.replace(/\n/g, "<br>")}</p>
+<p>${bodyText.replace(/\n/g, "<br>")}</p>
 <p style="margin-top:12px;font-size:14px">Resume: <a href="${resumeLink}" style="color:#ff6b00">${resumeLink}</a></p>
 ${SIGNATURE_HTML}`;
-    const text = `Hi ${firstName},\n\n${verdict.reply}\n\nResume: ${resumeLink}${SIGNATURE_TEXT}`;
+    const text = `Hi ${firstName},\n\n${bodyText}\n\nResume: ${resumeLink}${SIGNATURE_TEXT}`;
 
     // Sent through Gmail, not Resend. It goes out from Krishna's real address,
     // so there is no sending domain to verify and no shared test sender that
