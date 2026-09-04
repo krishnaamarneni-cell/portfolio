@@ -553,10 +553,10 @@ async function runPipeline(decisions: Decision[]): Promise<AutoReplyResult> {
   const resumeLink = resumeUrl.startsWith("http") ? resumeUrl : `${siteUrl}${resumeUrl}`;
 
   const own = ownIdentities();
+  // The storage host is deliberately NOT allowed. Now that the body carries no
+  // resume link, a bucket URL appearing in a draft means the model invented it,
+  // which is exactly what replyIssues should reject.
   const allowedHosts = ["krishnaamarneni.com", "linkedin.com"];
-  try {
-    allowedHosts.push(new URL(resumeLink).hostname);
-  } catch {}
 
   for (const msg of candidates) {
     if (result.sent + todayCount >= DAILY_RUNAWAY_LIMIT) {
@@ -708,11 +708,14 @@ ${factsBlock ? `\n${factsBlock}` : ""}${voiceBlock ? `\n${voiceBlock}` : ""}`,
     // added here. The model writes them anyway often enough that the recruiter
     // got "Hi Anuja," twice, so strip them rather than asking again.
     const bodyText = stripGreetingAndSignoff(verdict.reply);
+    // No resume URL in the body. The PDF is attached directly below it, so the
+    // link is redundant — and a long opaque storage-bucket URL is one of the
+    // shapes spam filters weight against. The signature already carries
+    // krishnaamarneni.com for anyone who wants the web version.
     const html = `<p>Hi ${firstName},</p>
 <p>${bodyText.replace(/\n/g, "<br>")}</p>
-<p style="margin-top:12px;font-size:14px">Resume: <a href="${resumeLink}" style="color:#ff6b00">${resumeLink}</a></p>
 ${SIGNATURE_HTML}`;
-    const text = `Hi ${firstName},\n\n${bodyText}\n\nResume: ${resumeLink}${SIGNATURE_TEXT}`;
+    const text = `Hi ${firstName},\n\n${bodyText}${SIGNATURE_TEXT}`;
 
     // Sent through Gmail, not Resend. It goes out from Krishna's real address,
     // so there is no sending domain to verify and no shared test sender that
