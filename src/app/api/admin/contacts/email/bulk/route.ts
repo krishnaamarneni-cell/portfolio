@@ -433,6 +433,14 @@ Rules:
   // close the modal instead of blocking for minutes on 400+ emails.
   after(async () => {
     const sendStartedAt = Date.now();
+
+    // A contact can be claimed when its last bulk email is older than this.
+    const claimWindowStart = new Date(Date.now() - RECENT_SEND_WINDOW_MS).toISOString();
+    // Undo a claim when the send did not happen, so the contact is not locked
+    // out for a week over an email that never went.
+    const releaseClaim = async (id: string, previous: string | null) => {
+      await db.from("recruiter_contacts").update({ emailed_at: previous }).eq("id", id);
+    };
     // Stop before the 300s function ceiling so the last records still flush.
     const TIME_BUDGET_MS = 280_000;
 
@@ -483,6 +491,21 @@ Rules:
     // while the 7-day window skips everyone this press reached.
     if (Date.now() - sendStartedAt > TIME_BUDGET_MS) break;
     const c = toSend[i];
+
+    // Claim the contact before sending. Each press only gets through part of a
+    // large selection, so pressing again is expected — and a second press made
+    // while this one is still running would build the same "not yet emailed"
+    // list and send to everyone this run has not reached yet. The conditional
+    // update succeeds for exactly one run per contact; the loser skips. Same
+    // reserve-before-send pattern as auto-reply's replied_emails rows.
+    const { data: claimed, error: claimError } = await db
+      .from("recruiter_contacts")
+      .update({ emailed_at: new Date().toISOString() })
+      .eq("id", c.id)
+      .or(`emailed_at.is.null,emailed_at.lt."${claimWindowStart}"`)
+      .select("id");
+    if (claimError || !claimed?.length) continue;
+
     try {
       const firstName = c.name?.split(" ")[0] || "";
       const greeting = firstName ? `Hi ${firstName},` : "Hi,";
@@ -545,6 +568,8 @@ ${htmlBody}
           sentRecords.length = 0;
         }
       } else {
+        // Release the claim so a later press can retry this contact.
+        await releaseClaim(c.id, c.emailed_at);
         results.push({
           id: c.id,
           email: c.email,
@@ -560,6 +585,7 @@ ${htmlBody}
         await new Promise((resolve) => setTimeout(resolve, provider === "gmail" ? 1000 : 300));
       }
     } catch (err) {
+      await releaseClaim(c.id, c.emailed_at);
       results.push({
         id: c.id,
         email: c.email,
