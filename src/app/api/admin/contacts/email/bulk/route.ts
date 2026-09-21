@@ -22,6 +22,16 @@ const SIGNATURE_HTML = `<div style="margin-top:20px;padding-top:12px;border-top:
  */
 const ID_CHUNK = 150;
 
+/**
+ * Nobody gets a second bulk email within a week of the last one. This is what
+ * makes pressing Send again safe: a large selection needs several presses to
+ * get through (the send loop stops at its time budget, and the provider has
+ * daily limits), and each press should reach only the people still waiting.
+ * Seven days rather than one because a selection that runs into a daily limit
+ * takes more than a day to finish.
+ */
+const RECENT_SEND_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** Krishna's own mailboxes and the domains he sends from. */
 const OWN_ADDRESSES = new Set(
   [process.env.GMAIL_USER, "krishna.amarneni@gmail.com", "avgk26@gmail.com"]
@@ -164,7 +174,7 @@ Rules:
     db
       .from("recruiter_contacts")
       .select(
-        "id, name, email, company, company_id, do_not_contact, excluded_from_bulk, times_contacted, bounced, bounce_reason",
+        "id, name, email, company, company_id, do_not_contact, excluded_from_bulk, times_contacted, bounced, bounce_reason, emailed_at",
       )
       .in("id", ids);
   type ContactLookupRow = NonNullable<
@@ -263,6 +273,14 @@ Rules:
         email: c.email,
         reason: c.bounce_reason ? `Dead address — ${c.bounce_reason}` : "Dead address (bounced)",
       });
+    } else if (
+      c.emailed_at &&
+      Date.now() - new Date(c.emailed_at).getTime() < RECENT_SEND_WINDOW_MS
+    ) {
+      // A single press rarely finishes a large selection inside the time
+      // budget, so pressing Send again is the normal way to complete one.
+      // Without this, everyone the first press reached would get it twice.
+      skipped.push({ id: c.id, email: c.email, reason: "Already emailed in the last 7 days" });
     } else if (c.excluded_from_bulk) {
       skipped.push({ id: c.id, email: c.email, reason: "Excluded from bulk" });
     } else if (excEmails.has(c.email.toLowerCase())) {
