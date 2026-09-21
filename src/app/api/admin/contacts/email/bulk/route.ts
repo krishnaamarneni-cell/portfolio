@@ -16,6 +16,26 @@ const SIGNATURE_HTML = `<div style="margin-top:20px;padding-top:12px;border-top:
 <a href="https://www.linkedin.com/in/krishnaamarneni/" style="color:#0a66c2;text-decoration:none">LinkedIn</a>
 </div>`;
 
+/**
+ * Ids per `.in()` request. 200 was the largest size measured to succeed; 150
+ * leaves headroom for longer select lists and for the rest of the URL.
+ */
+const ID_CHUNK = 150;
+
+/** Krishna's own mailboxes and the domains he sends from. */
+const OWN_ADDRESSES = new Set(
+  [process.env.GMAIL_USER, "krishna.amarneni@gmail.com", "avgk26@gmail.com"]
+    .filter((a): a is string => Boolean(a))
+    .map((a) => a.toLowerCase()),
+);
+const OWN_DOMAINS = new Set(["krishnaamarneni.com", "wealthclaude.com"]);
+
+function isOwnAddress(email: string): boolean {
+  const addr = (email ?? "").trim().toLowerCase();
+  const domain = addr.split("@")[1] ?? "";
+  return OWN_ADDRESSES.has(addr) || OWN_DOMAINS.has(domain);
+}
+
 type BulkBody = {
   action?: "generate-draft" | "send";
   contactIds?: string[];
@@ -134,20 +154,51 @@ Rules:
 
   const db = requireSupabaseAdmin();
 
-  const { data: contacts } = await db
-    .from("recruiter_contacts")
-    .select(
-      "id, name, email, company, company_id, do_not_contact, excluded_from_bulk, times_contacted, bounced, bounce_reason",
-    )
-    .in("id", body.contactIds);
+  // Fetched in chunks. `.in("id", ids)` puts every id into the request URL, and
+  // past roughly 200 UUIDs the URL outgrows what the API gateway accepts, so the
+  // request fails outright — measured against this table, 200 ids (7.6k chars)
+  // succeeds and 400 fails. The modal routinely sends 700+. The failure used to
+  // be invisible because the error was never read, so a broken query and an
+  // empty selection both came back as "No contacts found".
+  const fetchContactChunk = (ids: string[]) =>
+    db
+      .from("recruiter_contacts")
+      .select(
+        "id, name, email, company, company_id, do_not_contact, excluded_from_bulk, times_contacted, bounced, bounce_reason",
+      )
+      .in("id", ids);
+  type ContactLookupRow = NonNullable<
+    Awaited<ReturnType<typeof fetchContactChunk>>["data"]
+  >[number];
 
-  if (!contacts?.length)
+  const wantedIds = [...new Set(body.contactIds)];
+  const contacts: ContactLookupRow[] = [];
+  for (let i = 0; i < wantedIds.length; i += ID_CHUNK) {
+    const { data, error } = await fetchContactChunk(wantedIds.slice(i, i + ID_CHUNK));
+    if (error) {
+      return NextResponse.json(
+        { error: `Could not load the selected contacts: ${error.message}` },
+        { status: 500 },
+      );
+    }
+    contacts.push(...(data ?? []));
+  }
+
+  if (!contacts.length)
     return NextResponse.json({ error: "No contacts found" }, { status: 404 });
 
-  const { data: exclusions } = await db
+  // Fail closed. If the exclusion list cannot be read, sending anyway would
+  // email exactly the people Krishna asked never to be emailed.
+  const { data: exclusions, error: exclusionsError } = await db
     .from("crm_outreach_exclusions")
     .select("exclusion_type, exclusion_value")
     .eq("active", true);
+  if (exclusionsError) {
+    return NextResponse.json(
+      { error: `Could not read the exclusion list, so nothing was sent: ${exclusionsError.message}` },
+      { status: 500 },
+    );
+  }
 
   const excEmails = new Set(
     (exclusions ?? [])
@@ -168,13 +219,21 @@ Rules:
   const companyIds = [
     ...new Set(contacts.map((c) => c.company_id).filter(Boolean) as string[]),
   ];
+  // Same URL limit as the contact lookup, and the same fail-closed rule as the
+  // exclusion list: an unreadable company exclusion is not an empty one.
   const excludedCompanyIds = new Set<string>();
-  if (companyIds.length > 0) {
-    const { data: companies } = await db
+  for (let i = 0; i < companyIds.length; i += ID_CHUNK) {
+    const { data: companies, error } = await db
       .from("crm_companies")
       .select("id")
-      .in("id", companyIds)
+      .in("id", companyIds.slice(i, i + ID_CHUNK))
       .eq("excluded_from_bulk", true);
+    if (error) {
+      return NextResponse.json(
+        { error: `Could not check company exclusions, so nothing was sent: ${error.message}` },
+        { status: 500 },
+      );
+    }
     (companies ?? []).forEach((c) => excludedCompanyIds.add(c.id));
   }
 
@@ -186,7 +245,12 @@ Rules:
     // Hard guard: no-reply / notification addresses can never respond, so they
     // are skipped even if nothing marked them excluded yet.
     const auto = classifyAddress(c.email);
-    if (c.do_not_contact) {
+    if (isOwnAddress(c.email)) {
+      // The CRM is harvested from Krishna's own inbox, so his own addresses and
+      // his products' senders end up in it as "contacts". Three of them were in
+      // a 783-person selection.
+      skipped.push({ id: c.id, email: c.email, reason: "Your own address" });
+    } else if (c.do_not_contact) {
       skipped.push({ id: c.id, email: c.email, reason: "Do Not Contact" });
     } else if (auto.unsendable) {
       skipped.push({ id: c.id, email: c.email, reason: auto.reason ?? "No-reply address" });
