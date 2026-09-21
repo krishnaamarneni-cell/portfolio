@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
-import { hasResend, sendBulkViaResend, sendEmailUnified } from "@/lib/resend";
+import { hasResend, sendBulkViaResend } from "@/lib/resend";
 import { recordBulkSend } from "@/lib/email-tracking";
 import { classifyAddress } from "@/lib/unsendable";
 
@@ -44,6 +44,56 @@ function isOwnAddress(email: string): boolean {
   const addr = (email ?? "").trim().toLowerCase();
   const domain = addr.split("@")[1] ?? "";
   return OWN_ADDRESSES.has(addr) || OWN_DOMAINS.has(domain);
+}
+
+/**
+ * Bulk sends allowed through Gmail in a rolling 24 hours.
+ *
+ * A personal Gmail account caps at roughly 500 recipients a day and locks
+ * sending for up to a day once past it. That lock would also stop the recruiter
+ * auto-replies, which send from the same mailbox — so 400 leaves headroom for
+ * those and for Krishna's own mail.
+ */
+const GMAIL_DAILY_BUDGET = 400;
+
+/**
+ * How much of today's Gmail budget is left.
+ *
+ * Counts contacts bulk-emailed and auto-replies sent in the last 24 hours. The
+ * bulk count includes anything sent through Resend too, which over-counts —
+ * deliberately, since the cost of under-counting is a locked mailbox.
+ */
+async function gmailBudgetRemaining(
+  db: ReturnType<typeof requireSupabaseAdmin>,
+): Promise<{ remaining: number; used: number; error?: string }> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const [bulk, auto] = await Promise.all([
+    db
+      .from("recruiter_contacts")
+      .select("id", { count: "exact", head: true })
+      .gte("emailed_at", since),
+    db
+      .from("replied_emails")
+      .select("id", { count: "exact", head: true })
+      .gte("sent_at", since)
+      .neq("status", "failed"),
+  ]);
+  if (bulk.error) return { remaining: 0, used: 0, error: bulk.error.message };
+  if (auto.error) return { remaining: 0, used: 0, error: auto.error.message };
+  const used = (bulk.count ?? 0) + (auto.count ?? 0);
+  return { remaining: Math.max(0, GMAIL_DAILY_BUDGET - used), used };
+}
+
+/** Gmail only — no fallback to Resend. See the provider choice in POST. */
+async function sendGmail(mail: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const { sendEmail } = await import("@/lib/gmail");
+  return sendEmail(mail);
 }
 
 type BulkBody = {
@@ -330,12 +380,57 @@ Rules:
   const subject = body.subject;
   const message = body.message;
 
+  // The provider the user picked is the provider used. This previously read
+  // `(forceResend || hasResendKey) ? Resend : Gmail`, so the moment a Resend key
+  // existed every bulk send went through Resend whatever the modal said.
+  // Gmail also no longer falls back to Resend mid-run: a campaign that switches
+  // sender address partway through is not the one that was chosen.
+  const provider: "gmail" | "resend" = body.sendVia === "resend" ? "resend" : "gmail";
+
+  if (provider === "resend" && !hasResend()) {
+    return NextResponse.json(
+      { error: "Resend is not configured (RESEND_API_KEY missing). Choose Gmail instead." },
+      { status: 400 },
+    );
+  }
+
+  // Gmail has a daily sending limit shared with everything else that uses the
+  // mailbox, including the recruiter auto-replies. Hitting it locks sending for
+  // up to a day, so the budget is checked up front and anything over it waits
+  // for the next press rather than failing mid-run.
+  let toSend = eligible;
+  let deferred = 0;
+  if (provider === "gmail") {
+    const { getAccessToken } = await import("@/lib/gmail");
+    if (!(await getAccessToken())) {
+      return NextResponse.json(
+        { error: "Gmail is not connected. Reconnect it in Settings, or choose Resend." },
+        { status: 400 },
+      );
+    }
+    const budget = await gmailBudgetRemaining(db);
+    if (budget.error) {
+      // Fail closed: an unknown count could be one send away from the limit.
+      return NextResponse.json(
+        { error: `Could not check today's Gmail usage, so nothing was sent: ${budget.error}` },
+        { status: 500 },
+      );
+    }
+    if (budget.remaining <= 0) {
+      return NextResponse.json(
+        {
+          error: `Gmail daily budget used: ${budget.used} sent in the last 24 hours (limit ${GMAIL_DAILY_BUDGET}). Try again tomorrow — already-emailed contacts are skipped, so nobody gets it twice.`,
+        },
+        { status: 429 },
+      );
+    }
+    toSend = eligible.slice(0, budget.remaining);
+    deferred = eligible.length - toSend.length;
+  }
+
   // Fire the actual sending in the BACKGROUND. after() runs once the HTTP
   // response has been flushed, so the client gets an instant reply and can
   // close the modal instead of blocking for minutes on 400+ emails.
-  const forceResend = body.sendVia === "resend" && hasResend();
-  const hasResendKey = hasResend();
-
   after(async () => {
     const sendStartedAt = Date.now();
     // Stop before the 300s function ceiling so the last records still flush.
@@ -381,12 +476,13 @@ Rules:
 
   const sentRecords: Parameters<typeof recordBulkSend>[0] = [];
 
-  for (let i = 0; i < eligible.length; i++) {
+  for (let i = 0; i < toSend.length; i++) {
     // Ran out of time budget — stop cleanly so the flush below still records
     // everything that already went out. Remaining contacts are simply not sent
-    // this run (their emailed_at stays null, so a re-run picks them up).
+    // this run; their emailed_at stays unset, so the next press picks them up
+    // while the 7-day window skips everyone this press reached.
     if (Date.now() - sendStartedAt > TIME_BUDGET_MS) break;
-    const c = eligible[i];
+    const c = toSend[i];
     try {
       const firstName = c.name?.split(" ")[0] || "";
       const greeting = firstName ? `Hi ${firstName},` : "Hi,";
@@ -414,14 +510,14 @@ ${htmlBody}
         .replace(/<[^>]+>/g, "")
         .replace(/&nbsp;/g, " ");
 
-      const sendFn = (forceResend || hasResendKey) ? sendBulkViaResend : sendEmailUnified;
-      const r = await sendFn({
+      const mail = {
         to: c.email,
         subject,
         html,
         text: plainText,
         attachments: resumeAttachment ? [resumeAttachment] : undefined,
-      });
+      };
+      const r = provider === "resend" ? await sendBulkViaResend(mail) : await sendGmail(mail);
 
       if (r.ok) {
         await db
@@ -457,8 +553,11 @@ ${htmlBody}
         });
       }
 
-      if (i < eligible.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
+      if (i < toSend.length - 1) {
+        // Slower on Gmail. The API would accept faster, but hundreds of near-
+        // identical messages fired in quick succession from a personal account
+        // is the pattern Gmail's abuse detection acts on.
+        await new Promise((resolve) => setTimeout(resolve, provider === "gmail" ? 1000 : 300));
       }
     } catch (err) {
       results.push({
@@ -479,7 +578,10 @@ ${htmlBody}
   // closes the modal and shows progress via the Responses tab.
   return NextResponse.json({
     started: true,
-    total: eligible.length,
+    provider,
+    total: toSend.length,
+    // Over today's Gmail budget; they go on a later press.
+    deferred,
     skipped: skipped.length,
     skippedDetails: skipped,
   });

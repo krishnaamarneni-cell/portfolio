@@ -983,9 +983,13 @@ function BulkPanel({
       });
       const d = await r.json();
       if (d.started) {
-        const skipMsg = d.skipped ? ` (${d.skipped} skipped)` : "";
+        const via = d.provider === "resend" ? "Resend" : "Gmail";
+        const skipMsg = d.skipped ? `, ${d.skipped} skipped` : "";
+        const laterMsg = d.deferred
+          ? ` ${d.deferred} more are over today's Gmail limit — press Send again tomorrow; nobody gets it twice.`
+          : "";
         onSuccess(
-          `Sending to ${d.total} contact${d.total !== 1 ? "s" : ""} in the background${skipMsg}. Track progress in the Sent tab.`
+          `Sending ${d.total} via ${via} in the background${skipMsg}.${laterMsg} Track progress in the Sent tab.`
         );
       } else if (d.error) {
         onError(d.error);
@@ -1214,7 +1218,7 @@ function BulkPanel({
                   : "bg-[var(--admin-surface-hover)] border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:border-[#ff6b00]/30"
               }`}
             >
-              {v === "auto" ? "Auto (Gmail first)" : "Resend (@krishnaamarneni.com)"}
+              {v === "auto" ? "Gmail (your inbox)" : "Resend (@krishnaamarneni.com)"}
             </button>
           ))}
         </div>

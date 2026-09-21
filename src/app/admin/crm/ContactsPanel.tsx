@@ -856,9 +856,16 @@ function BulkComposeModal({
       if (d.started) {
         // Sending runs in the background now — close and let the Responses tab
         // show progress, instead of blocking the modal for minutes.
-        const skipMsg = d.skipped ? ` (${d.skipped} skipped)` : "";
+        // Say which provider actually sends and how many are held back — the
+        // old toast claimed the whole selection even when the Gmail budget or
+        // the time limit meant only part of it would go out on this press.
+        const via = d.provider === "resend" ? "Resend" : "Gmail";
+        const skipMsg = d.skipped ? `, ${d.skipped} skipped` : "";
+        const laterMsg = d.deferred
+          ? ` ${d.deferred} more are over today's Gmail limit — press Send again tomorrow; nobody gets it twice.`
+          : "";
         onSuccess(
-          `Sending to ${d.total} contact${d.total !== 1 ? "s" : ""} in the background${skipMsg}. Track replies in the Responses tab.`
+          `Sending ${d.total} via ${via} in the background${skipMsg}.${laterMsg} Track replies in the Responses tab.`
         );
         onClose();
       } else if (d.error) {
@@ -1103,7 +1110,7 @@ function BulkComposeModal({
                           : "bg-[var(--admin-surface-hover)] border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:border-[#ff6b00]/30"
                       }`}
                     >
-                      {v === "auto" ? "Auto (Gmail first)" : "Resend (@krishnaamarneni.com)"}
+                      {v === "auto" ? "Gmail (your inbox)" : "Resend (@krishnaamarneni.com)"}
                     </button>
                   ))}
                 </div>
