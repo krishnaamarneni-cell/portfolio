@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse, after } from "next/server";
 import { getSession } from "@/lib/auth";
 import { requireSupabaseAdmin } from "@/lib/supabase";
@@ -510,9 +511,14 @@ Rules:
       const firstName = c.name?.split(" ")[0] || "";
       const greeting = firstName ? `Hi ${firstName},` : "Hi,";
 
+      // Generated here, before sending, because the pixel URL has to be inside
+      // the body — and the tracking row is only written afterwards. The same id
+      // is handed to recordBulkSend so the row and the pixel agree.
+      const trackingId = randomUUID();
       const htmlBody = `<p>${greeting}</p>
 <p>${message.replace(/\n/g, "<br>")}</p>
-${SIGNATURE_HTML}`;
+${SIGNATURE_HTML}
+<img src="${siteUrl}/api/t/o/${trackingId}.gif" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0">`;
 
       let html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1f2937;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
@@ -554,6 +560,7 @@ ${htmlBody}
         results.push({ id: c.id, email: c.email, status: "sent" });
         // Recorded so the tracking agent can later attribute replies/bounces.
         sentRecords.push({
+          id: trackingId,
           contactId: c.id,
           email: c.email,
           name: c.name ?? null,

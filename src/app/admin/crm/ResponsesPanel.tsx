@@ -7,6 +7,7 @@ import {
   FiCornerUpLeft,
   FiAlertTriangle,
   FiClock,
+  FiEye,
   FiSlash,
   FiSearch,
   FiFilter,
@@ -29,6 +30,8 @@ type Recipient = {
   bounceReason: string | null;
   contactId: string | null;
   lastSentAt: string | null;
+  opens: number;
+  lastOpenedAt: string | null;
 };
 
 type Stats = {
@@ -37,6 +40,9 @@ type Stats = {
   replyRate: number;
   bounced: number;
   awaiting: number;
+  opened: number;
+  openRate: number;
+  scannerOnly: number;
   recipients: Recipient[];
   error?: string;
 };
@@ -47,11 +53,16 @@ const EMPTY_STATS: Stats = {
   replyRate: 0,
   bounced: 0,
   awaiting: 0,
+  opened: 0,
+  openRate: 0,
+  scannerOnly: 0,
   recipients: [],
 };
 
 /** Which segment the detail list is showing. "all" = every recipient. */
-type Segment = "all" | RecipientStatus;
+// "opened" is not a status — a recipient can have opened AND replied — so it
+// is a segment the row filter special-cases rather than a RecipientStatus.
+type Segment = "all" | RecipientStatus | "opened";
 
 export default function ResponsesPanel({ onSuccess, onError }: Props) {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -192,6 +203,19 @@ export default function ResponsesPanel({ onSuccess, onError }: Props) {
       ring: "border-emerald-400/50",
     },
     {
+      seg: "opened",
+      // "Opened" is the honest ceiling of what a pixel can tell us, and the
+      // hint says so rather than letting the number read as fact.
+      label: "Opened",
+      hint: stats?.scannerOnly
+        ? `images loaded · ${stats.scannerOnly} scanner-only excluded`
+        : "images loaded · approximate",
+      value: stats?.opened ?? 0,
+      icon: FiEye,
+      tone: "text-sky-400",
+      ring: "border-sky-400/50",
+    },
+    {
       seg: "awaiting",
       label: "No response",
       hint: "delivered, silent",
@@ -213,7 +237,12 @@ export default function ResponsesPanel({ onSuccess, onError }: Props) {
 
   const rows = useMemo(() => {
     const all = stats?.recipients ?? [];
-    const bySeg = segment === "all" ? all : all.filter((r) => r.status === segment);
+    const bySeg =
+      segment === "all"
+        ? all
+        : segment === "opened"
+          ? all.filter((r) => r.opens > 0)
+          : all.filter((r) => r.status === segment);
     const q = query.trim().toLowerCase();
     if (!q) return bySeg;
     return bySeg.filter(
