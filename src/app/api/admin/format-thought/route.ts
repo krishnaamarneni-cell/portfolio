@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { resolveModel } from "@/lib/groq-models";
+import { pickServableModel } from "@/lib/groq-live";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
     const { default: Groq } = await import("groq-sdk");
     const groq = new Groq({ apiKey });
     const completion = await groq.chat.completions.create({
-      model: resolveModel("writing", body.model),
+      model: await pickServableModel(apiKey, [resolveModel("writing", body.model)]),
       temperature: 0.4,
       max_tokens: 3000,
       response_format: { type: "json_object" },

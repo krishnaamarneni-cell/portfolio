@@ -10,6 +10,7 @@
 
 import type { Connector } from "@/lib/content-types";
 import { fetchConnectors } from "@/lib/content";
+import { availableModels, PREFERRED, RENAMES } from "@/lib/groq-live";
 import { resolveConnectorCall } from "@/lib/connector-url";
 import {
   looksLikeMcp,
@@ -283,52 +284,10 @@ function buildFallbackChain(requested: string): string[] {
 }
 
 /**
- * Groq retires model IDs, and a retired one 404s with "model_not_found" — which
- * is how every agent broke at once when llama-3.3-70b-versatile went away.
- * Rather than hardcode replacements that will rot the same way, ask Groq what
- * it actually serves and keep only chain entries that exist.
+ * Model availability now lives in lib/groq-live.ts so routes that call the Groq
+ * SDK directly share this cache and this rename table instead of keeping a
+ * second copy that rots separately.
  */
-let modelCache: { at: number; ids: Set<string> } | null = null;
-const MODEL_CACHE_MS = 10 * 60_000;
-
-/** Renames Groq has done. Tried when the original ID is gone. */
-const RENAMES: Record<string, string[]> = {
-  "compound-beta": ["groq/compound"],
-  "compound-beta-mini": ["groq/compound-mini"],
-};
-
-/** Preference order when nothing in the requested chain still exists. */
-const PREFERRED = [
-  "groq/compound",
-  "groq/compound-mini",
-  "llama-3.3-70b-versatile",
-  "openai/gpt-oss-120b",
-  "meta-llama/llama-4-maverick-17b-128e-instruct",
-  "meta-llama/llama-4-scout-17b-16e-instruct",
-  "openai/gpt-oss-20b",
-  "qwen/qwen3-32b",
-  "llama-3.1-8b-instant",
-];
-
-async function availableModels(apiKey: string): Promise<Set<string> | null> {
-  if (modelCache && Date.now() - modelCache.at < MODEL_CACHE_MS) return modelCache.ids;
-  try {
-    const r = await fetch("https://api.groq.com/openai/v1/models", {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!r.ok) return null;
-    const j = (await r.json()) as { data?: Array<{ id?: string }> };
-    const ids = new Set((j.data ?? []).map((m) => String(m.id)).filter(Boolean));
-    if (!ids.size) return null;
-    modelCache = { at: Date.now(), ids };
-    return ids;
-  } catch {
-    // Offline or the endpoint changed — fall through to the static chain.
-    return null;
-  }
-}
 
 async function resolveFallbackChain(apiKey: string, requested: string): Promise<string[]> {
   const chain = buildFallbackChain(requested);

@@ -6,9 +6,29 @@ import {
   type ToolOutcome,
   type ProductDescriptionRow,
 } from "@/lib/sap-product-cache";
+import { pickServableModel } from "@/lib/groq-live";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/**
+ * Preference order, not a guarantee — every one of these can be retired.
+ * pickServableModel keeps the first that Groq is actually serving.
+ */
+/** Router: classify the question and pick tools. Small, fast, JSON mode. */
+const ROUTER_MODELS = [
+  "llama-3.1-8b-instant",
+  "openai/gpt-oss-20b",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
+  "llama-3.3-70b-versatile",
+];
+/** Synthesis: turn raw SAP rows into an answer. Wants the stronger model. */
+const SYNTHESIS_MODELS = [
+  "llama-3.3-70b-versatile",
+  "openai/gpt-oss-120b",
+  "meta-llama/llama-4-maverick-17b-128e-instruct",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
+];
 
 /* ════════════════════ Types ════════════════════ */
 
@@ -1027,10 +1047,20 @@ export async function POST(request: Request) {
     const { default: Groq } = await import("groq-sdk");
     const groq = new Groq({ apiKey: groqKey });
 
+    // Resolved against what Groq serves today rather than hardcoded. This demo
+    // went down with `The model llama-3.1-8b-instant does not exist` when that
+    // id was retired — the second time a silent Groq retirement has broken
+    // something here. Both resolve from one cached model list, so this costs a
+    // single extra request every ten minutes.
+    const [routerModel, synthesisModel] = await Promise.all([
+      pickServableModel(groqKey, ROUTER_MODELS),
+      pickServableModel(groqKey, SYNTHESIS_MODELS),
+    ]);
+
     /* ── Step 1: ROUTER — decide which tools + extract material (LLM call #1) ── */
     const history = (body.history ?? []).slice(-6);
     const routerCompletion = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
+      model: routerModel,
       temperature: 0,
       max_tokens: 200,
       response_format: { type: "json_object" },
@@ -1131,7 +1161,7 @@ export async function POST(request: Request) {
         });
       }
       const synth = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
+        model: synthesisModel,
         temperature: 0.2,
         max_tokens: 400,
         messages: [
@@ -1260,7 +1290,7 @@ export async function POST(request: Request) {
       ? { resolvedMaterial: resolvedFrom, ...results }
       : results;
     const synthCompletion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: synthesisModel,
       temperature: 0.2,
       max_tokens: 400,
       messages: [

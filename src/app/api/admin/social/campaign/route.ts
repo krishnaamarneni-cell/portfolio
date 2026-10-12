@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { fetchConnector, fetchSiteContent } from "@/lib/content";
 import { createBufferPost } from "@/lib/buffer";
 import { resolveModel } from "@/lib/groq-models";
+import { pickServableModel } from "@/lib/groq-live";
 import { buildFactsContext } from "@/lib/facts";
 import {
   search,
@@ -145,7 +146,7 @@ Number of posts to write: ${dueAts.length}`;
   const { default: Groq } = await import("groq-sdk");
   const groq = new Groq({ apiKey });
   const completion = await groq.chat.completions.create({
-    model: resolveModel("writing", body.model),
+    model: await pickServableModel(apiKey, [resolveModel("writing", body.model)]),
     temperature: 0.6,
     max_tokens: 4096,
     response_format: { type: "json_object" },

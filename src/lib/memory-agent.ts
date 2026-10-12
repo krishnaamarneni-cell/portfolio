@@ -3,6 +3,7 @@ import { requireSupabaseAdmin } from "@/lib/supabase";
 import { listFacts, upsertFact } from "@/lib/facts";
 import { createNote, listNotes } from "@/lib/personal";
 import { resolveModel } from "@/lib/groq-models";
+import { pickServableModel } from "@/lib/groq-live";
 
 /**
  * Memory agent — scans recent chats + personal notes for things worth
@@ -182,7 +183,7 @@ ${notesBlock || "(none in window)"}
 
 Window start: ${windowISO}`;
 
-  const model = resolveModel("writing");
+  const model = await pickServableModel(apiKey, [resolveModel("writing")]);
 
   try {
     const { default: Groq } = await import("groq-sdk");

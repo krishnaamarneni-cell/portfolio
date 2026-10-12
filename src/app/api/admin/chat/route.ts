@@ -18,6 +18,7 @@ import {
   type McpTool,
 } from "@/lib/mcp";
 import { resolveModel } from "@/lib/groq-models";
+import { pickServableModel } from "@/lib/groq-live";
 import { buildFactsContext } from "@/lib/facts";
 import {
   appendMessage,
@@ -103,7 +104,10 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const chosenModel = resolveModel("chat", body.model);
+  // resolveModel validates what the user picked; pickServableModel then checks
+  // Groq is still serving it. Without the second step a retired default 404s
+  // every request — which is how llama-3.1-8b-instant broke the SAP assistant.
+  const chosenModel = await pickServableModel(apiKey, [resolveModel("chat", body.model)]);
   const incoming = (body.messages ?? []).filter(
     (m) => m && (m.role === "user" || m.role === "assistant") && m.content
   );
@@ -415,7 +419,7 @@ ${restBlob ? `# Connected services (snapshots)\n${restBlob}\n` : ""}${mcpBlob ? 
     }
     // Loop exhausted — ask Groq for a final answer without tools.
     const final = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: chosenModel,
       temperature: 0.3,
       max_tokens: 1500,
       messages: loop as never,

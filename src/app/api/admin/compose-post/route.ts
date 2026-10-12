@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { resolveModel } from "@/lib/groq-models";
+import { pickServableModel } from "@/lib/groq-live";
 import {
   COMPOSE_SYSTEM_PROMPT,
   extractPostJson,
@@ -78,7 +79,9 @@ export async function POST(request: Request) {
     const groq = new Groq({ apiKey });
     // Base rules plus whatever reach has actually taught this account.
     const systemPrompt = await systemPromptWithPlaybook();
-    const model = resolveModel("writing", body.model);
+    // Checked against Groq's live list, because the writing default was
+    // llama-3.1-8b-instant and that id has been retired.
+    const model = await pickServableModel(apiKey, [resolveModel("writing", body.model)]);
 
     const run = (json: boolean, extra?: string) =>
       groq.chat.completions.create({
