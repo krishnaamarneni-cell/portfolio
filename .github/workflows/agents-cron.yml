@@ -19,7 +19,7 @@ on:
 # below — but only after the per-tick CPU cost comes down, or the account
 # will be paused again.
 # ---------------------------------------------------------------------------
-#  schedule:
+  schedule:
     # Four runs a day across US working hours.
     #   EDT (UTC-4): 10:00 12:00 14:00 16:00 New York
     #   EST (UTC-5): 09:00 11:00 13:00 15:00 New York
@@ -27,7 +27,7 @@ on:
     # Auto-reply no longer runs here — it has its own 15-minute schedule in
     # auto-reply-cron.yml, because its value depends on answering quickly while
     # these agents are expensive and do not.
-#    - cron: "0 14,16,18,20 * * *"
+    - cron: "0 14,16,18,20 * * *"
   workflow_dispatch: # Allow manual trigger from GitHub UI
 
 jobs:
@@ -35,7 +35,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      # Reads the switch from Supabase, NOT from the site. This is the whole
+      # point: a job that is switched off costs zero Vercel CPU, where a flag
+      # checked inside the route would still spend a function invocation on
+      # every tick. Only an explicit false stops the run, so a missing table or
+      # an unreachable Supabase fails open and the job behaves as before.
+      - name: Check the switch
+        id: gate
+        run: |
+          OFF=""
+          if [ -n "${{ secrets.SUPABASE_URL }}" ]; then
+            BODY=$(curl -s --max-time 20 \
+              -H "apikey: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
+              "${{ secrets.SUPABASE_URL }}/rest/v1/cron_switches?select=enabled&key=eq.agents" || echo "")
+            case "$BODY" in *'"enabled":false'*) OFF=1 ;; esac
+          fi
+          if [ -n "$OFF" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::agents is switched off in Admin → Settings → Scheduled jobs. Skipping; no Vercel call made."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Trigger agent cron
+        if: steps.gate.outputs.skip != 'true'
         run: |
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \

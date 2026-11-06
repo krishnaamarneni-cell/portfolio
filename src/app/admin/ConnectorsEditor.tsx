@@ -18,6 +18,7 @@ import FaceLockCard from "./FaceLockCard";
 import LucyImportCard from "./LucyImportCard";
 import SignOutCard from "./SignOutCard";
 import AutoReplyCard from "./personal/AutoReplyCard";
+import CronJobsCard from "./personal/CronJobsCard";
 import LearnVoiceCard from "./personal/LearnVoiceCard";
 import WarmOutreachCard from "./personal/WarmOutreachCard";
 import { getToolsForDisplay } from "@/lib/mcp-tools";
@@ -205,6 +206,7 @@ export default function ConnectorsEditor({ onSuccess, onError, sessionEmail }: P
       <div className="mt-4 space-y-4">
         <LearnVoiceCard onError={onError} onSuccess={onSuccess} />
         <AutoReplyCard onError={onError} onSuccess={onSuccess} />
+        <CronJobsCard onError={onError} onSuccess={onSuccess} />
         <WarmOutreachCard onError={onError} onSuccess={onSuccess} />
       </div>
 

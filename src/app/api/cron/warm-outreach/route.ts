@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isCronEnabled } from "@/lib/cron-switches";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,6 +24,14 @@ export async function GET(request: Request) {
     if (auth !== `Bearer ${expected}` && secret !== expected) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+  }
+
+  // Second line of defence, after auth so an unauthenticated caller never
+  // reaches the database. The switch that actually saves CPU is checked by the
+  // workflow before this route is called at all; this catches a manual trigger
+  // or a workflow that skipped its pre-flight. Fails open.
+  if (!(await isCronEnabled("warm-outreach"))) {
+    return NextResponse.json({ skipped: "switched off in Settings → Scheduled jobs" });
   }
 
   try {

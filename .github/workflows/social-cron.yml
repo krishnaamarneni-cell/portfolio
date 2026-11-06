@@ -28,8 +28,8 @@ on:
 # below — but only after the per-tick CPU cost comes down, or the account
 # will be paused again.
 # ---------------------------------------------------------------------------
-#  schedule:
-#    - cron: "*/15 * * * *"
+  schedule:
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -37,7 +37,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
+      # Reads the switch from Supabase, NOT from the site. This is the whole
+      # point: a job that is switched off costs zero Vercel CPU, where a flag
+      # checked inside the route would still spend a function invocation on
+      # every tick. Only an explicit false stops the run, so a missing table or
+      # an unreachable Supabase fails open and the job behaves as before.
+      - name: Check the switch
+        id: gate
+        run: |
+          OFF=""
+          if [ -n "${{ secrets.SUPABASE_URL }}" ]; then
+            BODY=$(curl -s --max-time 20 \
+              -H "apikey: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
+              "${{ secrets.SUPABASE_URL }}/rest/v1/cron_switches?select=enabled&key=eq.social-drip" || echo "")
+            case "$BODY" in *'"enabled":false'*) OFF=1 ;; esac
+          fi
+          if [ -n "$OFF" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::social-drip is switched off in Admin → Settings → Scheduled jobs. Skipping; no Vercel call made."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run social drip and autopilot
+        if: steps.gate.outputs.skip != 'true'
         run: |
           RESPONSE=$(curl -s --max-time 120 -w "\n%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \

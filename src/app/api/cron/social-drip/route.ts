@@ -3,6 +3,7 @@ import { getDripSettings, processNextDripImage } from "@/lib/social-drip";
 import { flushDueSocialQueue } from "@/lib/social-queue";
 import { runAutopilot } from "@/lib/social-autopilot";
 import { getPlaybook } from "@/lib/social-playbook";
+import { isCronEnabled } from "@/lib/cron-switches";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,6 +36,14 @@ export async function GET(request: Request) {
   const secretOk = secret.length > 0 && (auth === `Bearer ${secret}` || token === secret);
   if (!tokenOk && !secretOk) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Second line of defence, after auth so an unauthenticated caller never
+  // reaches the database. The switch that actually saves CPU is checked by the
+  // workflow before this route is called at all; this catches a manual trigger
+  // or a workflow that skipped its pre-flight. Fails open.
+  if (!(await isCronEnabled("social-drip"))) {
+    return NextResponse.json({ skipped: "switched off in Settings → Scheduled jobs" });
   }
 
   after(async () => {
