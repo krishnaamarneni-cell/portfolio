@@ -11,8 +11,16 @@
 name: Warm Outreach Cron
 
 on:
-  schedule:
-    - cron: "0 15 * * 1-5"
+# ---------------------------------------------------------------------------
+# SCHEDULE DISABLED 2026-11-05 — Vercel Hobby paused every deployment for
+# exceeding Fluid Active CPU (6h 52m against a 4h/month allowance). These
+# workflows do no work themselves; they curl krishnaamarneni.com, so every
+# tick was spending Vercel CPU. Re-enable by uncommenting the schedule block
+# below — but only after the per-tick CPU cost comes down, or the account
+# will be paused again.
+# ---------------------------------------------------------------------------
+#  schedule:
+#    - cron: "0 15 * * 1-5"
   workflow_dispatch:
 
 # Never let two runs overlap — both would read the same "sent today" count

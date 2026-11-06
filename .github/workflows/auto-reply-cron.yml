@@ -23,14 +23,22 @@
 name: Auto-Reply Cron
 
 on:
-  schedule:
+# ---------------------------------------------------------------------------
+# SCHEDULE DISABLED 2026-11-05 — Vercel Hobby paused every deployment for
+# exceeding Fluid Active CPU (6h 52m against a 4h/month allowance). These
+# workflows do no work themselves; they curl krishnaamarneni.com, so every
+# tick was spending Vercel CPU. Re-enable by uncommenting the schedule block
+# below — but only after the per-tick CPU cost comes down, or the account
+# will be paused again.
+# ---------------------------------------------------------------------------
+#  schedule:
     # Every 5 minutes — GitHub's shortest allowed interval — but only across the
     # UTC band that contains 09:00-17:59 New York in both halves of the year:
     #   EDT (UTC-4) needs UTC 13-21
     #   EST (UTC-5) needs UTC 14-22
     # 13-23 covers all nine hours in both, verified against each. Ticking
     # overnight would just be ~180 daily no-ops on hours that can never send.
-    - cron: "*/5 13-23 * * *"
+#    - cron: "*/5 13-23 * * *"
   workflow_dispatch: # Manual trigger from the GitHub UI
 
 # A slow run must never overlap the next tick — two pipelines scanning the same

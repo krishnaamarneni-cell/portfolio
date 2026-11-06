@@ -11,7 +11,15 @@
 name: Agent Cron
 
 on:
-  schedule:
+# ---------------------------------------------------------------------------
+# SCHEDULE DISABLED 2026-11-05 — Vercel Hobby paused every deployment for
+# exceeding Fluid Active CPU (6h 52m against a 4h/month allowance). These
+# workflows do no work themselves; they curl krishnaamarneni.com, so every
+# tick was spending Vercel CPU. Re-enable by uncommenting the schedule block
+# below — but only after the per-tick CPU cost comes down, or the account
+# will be paused again.
+# ---------------------------------------------------------------------------
+#  schedule:
     # Four runs a day across US working hours.
     #   EDT (UTC-4): 10:00 12:00 14:00 16:00 New York
     #   EST (UTC-5): 09:00 11:00 13:00 15:00 New York
@@ -19,7 +27,7 @@ on:
     # Auto-reply no longer runs here — it has its own 15-minute schedule in
     # auto-reply-cron.yml, because its value depends on answering quickly while
     # these agents are expensive and do not.
-    - cron: "0 14,16,18,20 * * *"
+#    - cron: "0 14,16,18,20 * * *"
   workflow_dispatch: # Allow manual trigger from GitHub UI
 
 jobs:
