@@ -40,24 +40,37 @@ jobs:
       # Reads the switch from Supabase, NOT from the site. This is the whole
       # point: a job that is switched off costs zero Vercel CPU, where a flag
       # checked inside the route would still spend a function invocation on
-      # every tick. Only an explicit false stops the run, so a missing table or
-      # an unreachable Supabase fails open and the job behaves as before.
+      # every tick.
+      #
+      # Missing secrets stop the job; a failed query does not. Those are
+      # different situations: no secrets is a setup the account cannot afford to
+      # guess about, while a Supabase blip is transient and the route checks the
+      # switch again anyway.
       - name: Check the switch
         id: gate
         run: |
-          OFF=""
-          if [ -n "${{ secrets.SUPABASE_URL }}" ]; then
-            BODY=$(curl -s --max-time 20 \
-              -H "apikey: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
-              "${{ secrets.SUPABASE_URL }}/rest/v1/cron_switches?select=enabled&key=eq.social-drip" || echo "")
-            case "$BODY" in *'"enabled":false'*) OFF=1 ;; esac
-          fi
-          if [ -n "$OFF" ]; then
+          # No secrets means the switches cannot be read. Skip rather than run:
+          # this account was paused for exceeding its CPU allowance, so an
+          # unreadable switch must not mean "run everything at full rate".
+          if [ -z "${{ secrets.SUPABASE_URL }}" ] || [ -z "${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::social-drip is switched off in Admin → Settings → Scheduled jobs. Skipping; no Vercel call made."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY are not set as repo secrets, so the on/off switches cannot be read. Skipping to protect the Vercel CPU budget."
+            exit 0
           fi
+          # Config is present, so a failed or empty query is transient: run, and
+          # let the route's own check catch it. Only an explicit false stops us.
+          BODY=$(curl -s --max-time 20 \
+            -H "apikey: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/cron_switches?select=enabled&key=eq.social-drip" || echo "")
+          case "$BODY" in
+            *'"enabled":false'*)
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::social-drip is switched off in Admin → Settings → Scheduled jobs. Skipping; no Vercel call made."
+              ;;
+            *)
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
 
       - name: Run social drip and autopilot
         if: steps.gate.outputs.skip != 'true'
